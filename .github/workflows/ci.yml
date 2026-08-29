@@ -10,10 +10,13 @@ on:
   pull_request:
     branches: [main]
     # 預設只有 opened／synchronize／reopened。**`ready_for_review` 非加不可**：
-    # acceptance job 在 draft 上是跳過的（理由見那個 job），而「按下 Ready for review」
-    # 本身不推 commit —— 少了這個事件，CI 不會重跑，那個 job 就永遠停在 skipped，
-    # 而 skipped 對 required status check 算通過。加上它，整套檢查才會在
-    # 「draft → ready」的那一刻真的跑一次。
+    # 有三個 job 在 draft 上是跳過的（acceptance、deploy-config、e2e，各自的理由見那三個
+    # job），而「按下 Ready for review」本身不推 commit —— 少了這個事件，CI 不會重跑，
+    # 那三個就永遠停在 skipped，而 skipped 對 required status check 算通過。
+    # 加上它，那三個才會在「draft → ready」的那一刻於同一個 SHA 上真的跑一次。
+    #
+    # 其餘的 job 在這個事件上**照樣重跑**，即使 SHA 沒變。為什麼不省下那一輪，
+    # 見 api job 的註解（試過，會讓 PR 頁面說謊）。
     types: [opened, synchronize, reopened, ready_for_review]
 
   # 每週跑一次完整 CI。**這一條存在的理由只有 security job**：它查的是外部 advisory
@@ -23,8 +26,9 @@ on:
   #
   # 不另外開一支只有 security 的 workflow：那要把 setup 步驟再抄一份，
   # 而整套跑一次的邊際成本很低。
-  # publish 帶 `if: github.event_name == 'push'`、changelog 是 PR-only、
-  # pushed-via-pr 只在 push 到 main 時跑 —— 排程觸發時三者都是 skipped，不會推任何 image。
+  # **排程實際上只跑 security 一個 job**，其餘全部帶條件跳過（各 job 的註解裡都指回這裡）。
+  # 這是刻意的：相依全是釘死的 lock 檔，每週重跑 lint／build／e2e 測不到任何新東西，
+  # 而每個 job 都是逐一進位到整分鐘計費的。publish 與 pushed-via-pr 本來就只在 push 上跑。
   schedule:
     - cron: "0 3 * * 1"
 
@@ -47,6 +51,22 @@ jobs:
   api:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # 排程不跑。那條 cron 存在的理由只有 security job（見 `on:` 的註解）——
+    # 相依全是釘死的 lock 檔，每週重跑 ruff／mypy／pytest 測不到任何新東西，
+    # 這正是 e2e 當初被排除的同一個判斷，只是其餘 job 一直沒跟上。
+    #
+    # **不要再加 `github.event.action != 'ready_for_review'`。** 那看起來很划算 ——
+    # 按下 Ready 不改變 SHA，這個 job 在 draft 期間已經對同一份 tree 跑綠過了，
+    # 重跑只會產出位元組相同的答案，一個功能 PR 省 6 分鐘。**實測過，不行**：
+    # ready_for_review 那一輪會在同一個 SHA 上**再開一筆**叫 api 的 check run，
+    # 結論是 skipped，而 GitHub 取的是最新那筆 —— draft 期間那筆 success 就被蓋掉，
+    # PR 頁面顯示 `api — skipping`。
+    #
+    # 「跳過」跟「從頭到尾沒跑過」在那個畫面上完全一樣，而 skipped 對 required status
+    # check 算通過。等於在最需要看清楚的那一刻（merge 前）把訊號拿掉，
+    # 換 6 分鐘不划算。draft 期間跳過 deploy-config 與 e2e 是另一回事：
+    # 那兩個接著就會在 ready_for_review 補跑，最新那筆是真的結果。
+    if: github.event_name != 'schedule'
     defaults:
       run:
         working-directory: apps/api
@@ -131,6 +151,8 @@ jobs:
   web:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # 條件與理由同 api job。
+    if: github.event_name != 'schedule'
     defaults:
       run:
         working-directory: apps/web
@@ -174,6 +196,20 @@ jobs:
   deploy-config:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # 兩個不跑的情況：
+    #
+    #   schedule  理由同 api job。
+    #
+    #   draft     **跟 acceptance 那個 job 的理由不同** —— 那邊是「draft 上必定紅」，
+    #             這邊純粹是計費。這是整套裡最貴的 job（實測 4m42s，而 GitHub 是逐 job
+    #             進位到整分鐘的，所以算 5 分鐘），而它回答的問題「部署設定壞了沒、
+    #             image 建不建得起來」只有在準備 merge 的那一刻才需要答案 ——
+    #             draft push 又是整個流程中次數最多的事件。免費方案每月 2000 分鐘。
+    #
+    #             靠 `on:` 的 ready_for_review 在同一個 SHA 上補跑一次。**那個事件
+    #             缺一不可**，理由寫在 `on:` 那裡（skipped 對 required check 算通過）。
+    #             draft 期間要看這盞紅綠燈就自己跑 `make check-compose`。
+    if: github.event_name != 'schedule' && !github.event.pull_request.draft
     steps:
       - uses: actions/checkout@v7
 
@@ -398,7 +434,11 @@ jobs:
     timeout-minutes: 30
     # 排程觸發時不跑。那條 cron 存在的理由只有 security job（它查的是會自己變紅的外部
     # advisory 資料庫）—— e2e 的相依全部釘死，每週跑一次測不到任何新東西，只是燒時間。
-    if: github.event_name != 'schedule'
+    #
+    # draft 期間也不跑，理由同 deploy-config job：計費，而且它回答的問題只有在準備
+    # merge 那一刻才需要答案。同樣靠 `on:` 的 ready_for_review 在同一個 SHA 上補跑。
+    # draft 期間要看這盞紅綠燈就自己跑 `make e2e`。
+    if: github.event_name != 'schedule' && !github.event.pull_request.draft
     steps:
       - uses: actions/checkout@v7
 
@@ -552,6 +592,8 @@ jobs:
   api-types-up-to-date:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # 條件與理由同 api job。
+    if: github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v7
 
