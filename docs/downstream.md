@@ -23,6 +23,9 @@
 | `apps/web/app/tokens/primitives.css` | **可以加自己的調色線**，指向 vendor；不要整份換掉（見下方） |
 | `apps/web/app/tokens/semantic.css`、`app/themes/*.css` | **可以改對應，不可以改 token 的名字**（見下方） |
 | `apps/web/config/theme.ts` | 預期你會改 `DEFAULT_THEME`；自訂主題就加進 `ThemeName` |
+| `CHANGELOG.md` | **完全是你的** —— 模板不再碰這一份，所以它永遠不會衝突 |
+| `CHANGELOG.template.md` | **不要改**，那是模板的紀錄，同步時整份跟著上游走 |
+| `apps/api/app/config.py` 的 `APP_VERSION` | **改成你自己的產品版號**；同步時衝突留自己的（見下方） |
 | `AGENTS.md` | **可以**加自己專案的規則，但預期會在同步時衝突（見下一節） |
 | `README.md` | **要改寫成你自己專案的**，但先處理授權（見下方） |
 | `TEMPLATE.md` | 開案指南，**導入完成後就該刪掉**；還在的話代表流程沒走完 |
@@ -65,6 +68,18 @@ token 分層的完整規則見 [`design-system.md`](design-system.md)。
 ## 拉模板的更新
 
 ```bash
+make sync
+```
+
+它會抓上游、**把落後的條目按同步影響分成「要動手」與「其餘」兩堆印出來**、顯示
+`apps/`／`scripts/`／`infra/` 的改動範圍，確認之後才合併，合併完再提醒你跑
+`make gen-types` 與 `make check`。分堆靠的是模板每一筆條目開頭的
+`[同步:無]`／`[同步:要動手]`／`[同步:破壞性]` 標記（意思見
+[`../CHANGELOG.template.md`](../CHANGELOG.template.md) 的檔頭，模板那邊有檢查器在擋漏標記）。
+
+不想用它的話，等價的是這兩行 —— 差別只在你要自己讀完整份條目：
+
+```bash
 git fetch template
 git merge template/main
 ```
@@ -74,7 +89,7 @@ git merge template/main
 網址填模板位置）。二是你的歷史與模板**有共同祖先**，也就是開案時保留了 clone 下來的
 歷史；`make remote` 綁定時會檢查並在對不上時當場告訴你。兩者少一個，這一節都不成立。
 
-**預期會衝突的地方分兩類，解法不一樣，不要混著解。**
+**預期會衝突的地方分三類，解法不一樣，不要混著解。**
 
 一是**清單**，因為下游會在同一份清單裡加自己的模組：
 
@@ -101,6 +116,15 @@ cd apps/web && npm run check:tokens
 它會逐行列出「引用了沒有宣告過的 token」，那就是你要補的對應。反過來，
 `make gen-types` 對這類衝突沒有幫助 —— 它管的是 API 契約，不是樣式。
 
+三是 **`APP_VERSION`**（`apps/api/app/config.py` 那一行）：兩邊都在升自己的版號，
+所以每次上游發版都會撞在同一行。**留自己的** —— 那個常數在你的專案裡記的是你的產品版本，
+模板的版本改成從 [`../CHANGELOG.template.md`](../CHANGELOG.template.md) 最上面那個版號標題讀。
+`make check-version` 會自己判斷這裡是模板還是下游（判準是 `TEMPLATE.md` 還在不在），
+下游模式比對的是你自己的 [`../CHANGELOG.md`](../CHANGELOG.md)。
+
+**兩份 CHANGELOG 都不會衝突**，那正是它們分家的理由：`CHANGELOG.md` 只有你在寫，
+`CHANGELOG.template.md` 只有上游在寫。哪天真的衝突了，代表有一邊寫錯地方了。
+
 如果你在 `AGENTS.md` 加過自己專案的規則，那份也會衝突，解法一樣是兩邊都保留 ——
 上游改的是模板本身的規則，跟你加的專案規則不會是同一件事。
 
@@ -116,28 +140,44 @@ make check       # 已含 check:tokens
 
 ## 版本與變更紀錄
 
-- 模板的版本寫在 `apps/api/app/config.py` 的 `APP_VERSION`。
-- 每次對模板的實質改動都要在 [`CHANGELOG.md`](../CHANGELOG.md) 留一筆，
-  並註明**下游同步時需要做什麼**（多數是「不用做什麼」，但破壞性改動一定要寫清楚）。
-- 開發階段版號一律是 `0.x.x`，只有到「實際可上線」的第一個版本才升到 `1.0.0`；
-  下游專案自己接手後續開發時，也適用同一條規則。
+**兩份紀錄，兩個 owner，不要混用：**
 
-下游要判斷自己落後多少，比對這兩個檔案即可：
+| 檔案 | 誰在寫 | 記什麼 |
+|---|---|---|
+| [`CHANGELOG.md`](../CHANGELOG.md) | 你 | 你的專案的功能變更，版號對應你自己的 `APP_VERSION` |
+| [`CHANGELOG.template.md`](../CHANGELOG.template.md) | 上游 | 模板的改動，版號是模板版；同步時整份跟著上游走 |
+
+分家之前這是同一份檔案，於是同一個區塊有兩個 owner ——
+結果是每次同步都衝突，而「我落後多少」那份 diff 裡混著自己寫的條目，讀不出來。
+
+開發階段版號一律是 `0.x.x`，只有到「實際可上線」的第一個版本才升到 `1.0.0`；
+下游專案自己接手後續開發時，也適用同一條規則。
+
+### 判斷自己落後多少
+
+```bash
+make sync
+```
+
+不合併也可以只看清單 —— 在確認提示按 `N` 就好。想手動看的話：
 
 ```bash
 git fetch template
-git diff HEAD template/main -- CHANGELOG.md
+git diff HEAD template/main -- CHANGELOG.template.md
 ```
 
+那份檔案**只有上游在寫**，所以這個 diff 是單向的：新增行就是你還沒有的條目。
+每一筆開頭的標記直接告訴你要不要動手，`make sync` 印出來的兩堆就是照它分的。
+
 上游 CI 的 `changelog` job 會擋掉「動了 `apps/`／`scripts/`／`infra/` 卻沒留條目」的 PR，
-所以這份 diff 相當可信。**但它有一個放行方式**（PR 標題帶 `[skip changelog]`，
-給純重構用）。`APP_VERSION` 與 CHANGELOG 最上面那個版號標題是否對得上則由
-`make check-version` 守著（日常條目累積在 `## [Unreleased]`，那個標題不參與比對）。
-要百分之百確認的話請直接看程式碼：
+所以這份清單相當可信。**但它有一個放行方式**（PR 標題帶 `[skip changelog]`，
+給純重構與相依升級用）。要百分之百確認的話請直接看程式碼：
 
 ```bash
 git diff HEAD template/main --stat -- apps/ scripts/ infra/
 ```
+
+（`make sync` 也會印這一段。）
 
 ## CI/CD
 

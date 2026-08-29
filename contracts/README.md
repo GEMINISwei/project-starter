@@ -74,7 +74,7 @@ make gen-types
 - `.gitignore` 那段註解 —— 它點名這個路徑，是防止有人把它加回忽略清單的守衛
 - `docs/extending.md`、`AGENTS.md` 裡的指路
 - `apps/web/package.json` **不該**出現 `gen-types` script（那裡有一段 `//scripts` 說明為什麼）
-- `CHANGELOG.md` 已發布版本的條目**不要改**，那是當時的紀錄
+- `CHANGELOG.template.md` 已發布版本的條目**不要改**，那是當時的紀錄
 
 ## 這裡刻意**沒有**的東西
 

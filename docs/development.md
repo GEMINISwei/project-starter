@@ -7,7 +7,8 @@
 > 兩邊是同一套。在下游專案裡工作的話另外要先讀 [`downstream.md`](downstream.md)：
 > 哪些目錄不該在下游改動，以及怎麼把模板的修正拉回來。
 > 底下只有一條**只對模板本身成立**：每一次實質改動都要在
-> [`CHANGELOG.md`](../CHANGELOG.md) 留一筆（下游有自己的發布節奏）。
+> [`CHANGELOG.template.md`](../CHANGELOG.template.md) 留一筆（根目錄的
+> [`CHANGELOG.md`](../CHANGELOG.md) 屬於下游專案，模板不碰它）。
 
 ## 1. 開發環境設置
 
@@ -149,6 +150,7 @@ make dev
 | 類別 | 指令 |
 |---|---|
 | 初次設定 | `make init`（建立 `.env`）、`make remote`（綁定 git remote，選用）、`make setup`（主機端相依：`uv sync --frozen` + `npm ci`） |
+| 模板同步 | `make sync`（只有下游專案用得到，見 [`downstream.md`](downstream.md#拉模板的更新)） |
 | 環境 | `make dev`、`make prod`、`make deploy`、`make down`、`make logs` |
 | 資料庫 | `make psql`、`make migrate`、`make reset`、`make backup`、`make restore` |
 | 帳號 | `make create-superuser` |
@@ -260,7 +262,8 @@ nginx 模板、任何 `scripts/*.sh` 或任何 `.md` 之後，本機補跑一次
    升 PostgreSQL 的 major 還要多一步：資料目錄格式與 major 綁死，新版 server 直接讀舊的
    `PGDATA` 會拒絕啟動，必須 `pg_dump` →換版本→ `pg_restore`（或 `pg_upgrade`）。
    這對已部署的下游是破壞性動作，升級步驟要寫進
-   [`../CHANGELOG.md`](../CHANGELOG.md) 的那一筆條目。
+   [`../CHANGELOG.template.md`](../CHANGELOG.template.md) 的那一筆條目，
+   並帶 `[同步:破壞性]` 標記。
 4. **跨 major 的升級要自己補 CHANGELOG 條目。** dependabot 開的 PR 標題一律帶
    `[skip changelog]`（設定在 [`../.github/dependabot.yml`](../.github/dependabot.yml)，
    理由寫在那裡），所以 CI 的 `changelog` job 不會提醒你。minor/patch 本來就不需要條目，
@@ -304,10 +307,26 @@ review 時一眼看得出來，為它們多養一個工具與一份設定不划�
 
 這一節與檔頭那句「每一次實質改動都要留一筆」一樣，**只對模板本身成立**。
 
+**寫進 [`../CHANGELOG.template.md`](../CHANGELOG.template.md)，不是根目錄的
+`CHANGELOG.md`。** 那一份屬於下游專案，模板不再碰它 —— 兩份分家的理由寫在
+`CHANGELOG.template.md` 的檔頭（一句話：同一個區塊有兩個 owner 的話，每次同步都衝突，
+而那份 diff 也不再讀得出「我落後多少」）。寫錯地方由 CI 的 `changelog` job 擋。
+
+**每一筆條目開頭要帶同步影響標記**，三選一：
+
+| 標記 | 用在 |
+|---|---|
+| `[同步:無]` | 拉下來就好。**絕大多數條目是這一類** |
+| `[同步:要動手]` | 同步後要改自己的東西，條目裡要寫清楚改什麼 |
+| `[同步:破壞性]` | 不照做會壞掉（資料、部署或編譯） |
+
+`make check-version` 會擋漏標記的條目（只看最外層的 `- `，巢狀細項屬於上一筆）。
+標記存在的理由是下游的 `make sync` 靠它分堆 —— 沒有標記的話，下游得整篇讀完才知道
+哪一兩筆跟自己有關，而那個成本每次同步都要付一次。
+
 **條目只寫改了什麼與下游要做什麼。** 功能怎麼用、為什麼這樣設計，一律留在 owner 文件
 （[`../README.md`](../README.md)、`docs/`、[`../contracts/README.md`](../contracts/README.md)），
-這裡只放連結 —— 下游是用 `git diff HEAD template/main -- CHANGELOG.md` 判斷落後多少，
-條目愈短，那份 diff 愈有用。
+這裡只放連結 —— 下游是靠這些條目判斷要不要同步，條目愈短，那份清單愈有用。
 
 **日常條目寫進 `## [Unreleased]`。** 那個標題不是版號，`make check-version` 取的是它下面
 第一個版號標題 —— 所以條目可以一直累積，不必為了讓檢查器過而先決定版號。發版時把
@@ -316,7 +335,7 @@ review 時一眼看得出來，為它們多養一個工具與一份設定不划�
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)，版號採
 [語意化版本](https://semver.org/lang/zh-TW/)：模板的 MAJOR 用在「下游同步後需要手動改
-自己的程式碼」的改動。
+自己的程式碼」的改動 —— 也就是整版都是 `[同步:要動手]` 以上的那種。
 
 ### 分支保護
 
@@ -430,9 +449,10 @@ PR to `main`，以及每週一的排程上執行（排程的理由見下面的[�
   兩個 production image、備份工具能不能在 image 裡跑，以及斷言 `api` 確實等 `migrate`
   成功結束。**逐步清單看 `ci.yml` 本身**，不抄在這裡：手抄的清單一定會落後於 `ci.yml`，
   理由同下面第 5 節的第 4 條
-- **changelog**（只在 PR 上跑）：動到 `apps/`／`scripts/`／`infra/` 卻沒更新
-  `CHANGELOG.md` 就失敗。那份紀錄是下游判斷「同步要做什麼」的唯一依據，
-  沒有這個 job 就只能靠自律。純重構可在 PR 標題加 `[skip changelog]` 放行
+- **changelog**（只在 PR 上跑）：兩個方向。動到 `apps/`／`scripts/`／`infra/` 卻沒更新
+  `CHANGELOG.template.md` 就失敗 —— 那份紀錄是下游判斷「同步要做什麼」的唯一依據，
+  沒有這個 job 就只能靠自律；反過來動到根目錄的 `CHANGELOG.md`（下游的那一份）也失敗。
+  純重構或真的要改那份種子檔時，可在 PR 標題加 `[skip changelog]` 放行
 - **acceptance**（只在 PR 上跑，**draft 期間跳過**）：`make check-acceptance` 確認每條驗收條件
   都指向存在的測試；純文件等無行為變更的改動可在 PR 標題加 `[skip acceptance]`，規則見〈常用指令〉。
   draft 期間要看那盞紅綠燈就自己跑 `make check-acceptance`；跳過的理由寫在
@@ -498,7 +518,8 @@ PR to `main`，以及每週一的排程上執行（排程的理由見下面的[�
    那會讓兩份都沒人敢刪，然後各自飄。
 2. **規則可以重複一行，理由只寫一次。**「改了 schema 要跑 `make gen-types`」該出現在動作發生
    的每個位置；但「為什麼契約要進版控」只寫在 [`../contracts/README.md`](../contracts/README.md)。
-3. **不寫這個 repo 自己的演進史。**「以前是…改成…」一律只留在 [`../CHANGELOG.md`](../CHANGELOG.md)。
+3. **不寫這個 repo 自己的演進史。**「以前是…改成…」一律只留在
+   [`../CHANGELOG.template.md`](../CHANGELOG.template.md)。
    這條**不包含**「為什麼不用另一種做法」—— 那是上面那個標準，要保留。
    只清「我們變過」，不清「我們考慮過」。
 4. **可由指令取得的清單不抄進文件。** 例如 `make help` 已列出全部指令，文件只解釋

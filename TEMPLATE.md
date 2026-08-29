@@ -153,7 +153,10 @@ git rm TEMPLATE.md
 **沒有**一個叫 `template` 的遠端，因為你就是上游）：
 
 - 改動要考慮「所有未來專案都會繼承這個決定」。
-- 每次實質改動在 [`CHANGELOG.md`](CHANGELOG.md) 留一筆，並註明**下游同步時需要做什麼**。
+- 每次實質改動在 [`CHANGELOG.template.md`](CHANGELOG.template.md) 留一筆，開頭帶同步影響標記
+  （`[同步:無]`／`[同步:要動手]`／`[同步:破壞性]`）並註明**下游同步時需要做什麼**。
+  根目錄的 `CHANGELOG.md` 是留給下游專案的，模板不碰它。
 - 必要時升 `apps/api/app/config.py` 的 `APP_VERSION`。開發階段一律 `0.x.x`。
 
-**這三條沒有任何檢查器在守。**
+**只有第二條有檢查器在守**（CI 的 `changelog` job 擋漏寫與寫錯地方，`make check-version`
+擋漏標記與版號對不上）。第一條與第三條靠自律。
