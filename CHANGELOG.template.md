@@ -25,6 +25,19 @@
 
 ### 變更
 
+- **[同步:要動手]** 模板的預設立場改成「repo 是 public」。免費方案上 public 與 private
+  拿到的東西差很多（Actions 分鐘數、ruleset、secret scanning、CodeQL、environment 的
+  required reviewers 五項），原本散在各處的「這是付費功能所以不預設」全部重寫。
+  **下游同步後要做的**：照 [`TEMPLATE.md`](TEMPLATE.md) 的第 5a 步把 repo 設成 public
+  並跑那三件設定；**維持 private 的話** [`docs/downstream.md`](docs/downstream.md)
+  每一節都寫了對應的作法，照著處理。
+  - **`ruleset` 從「選配」變成「開案必做」**：`ci.yml` 讓 merge 到 `main` 那一輪不重跑測試，
+    前提就是它的 strict 政策 —— 沒匯入的話那個洞**沒有任何症狀**。
+  - `deploy-config` 與 `e2e` 在 draft 期間跳過的理由從「計費」改成「回饋速度」。
+    行為沒變，但理由變了：public 之後分鐘數無限，留著舊理由會讓人以為可以全開回去。
+  - 新增警告：**public repo 不能掛 self-hosted runner**（fork PR 可以在你的機器上
+    執行任意程式碼）。
+  - public repo 的部署主機可以匿名 `git fetch`，deploy key 那段只有 private 需要。
 - **[同步:無]** `ci.yml` 裡三個寫死的假金鑰改成每次執行時現產（`openssl rand -base64 32`）。
   值本來就是假的（解開來是 `ci-only-not-a-real-key-32bytes!!`），但泛型的 secret 掃描器
   只看熵，照樣判成外洩並寄信 —— 而那串字會被**每一個下游繼承**，等於每個 clone 出去的

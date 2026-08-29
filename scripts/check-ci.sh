@@ -15,10 +15,10 @@
 # （附帶一提，`load_env` 在沒有 `.env` 時是 no-op，所以「CI 不能呼叫 make」並不成立，
 # 平行切分才是真正的理由。）
 #
-# 第 2 件事守的是**分支保護**，而它是選配的：ruleset 與舊版 branch protection 對 private
-# repo 都要 GitHub Pro（免費方案連 API 都回 403），所以這個模板不預設它存在 ——
-# 免費私有專案靠 .githooks/pre-push 與 ci.yml 的 pushed-via-pr job 那兩層。
-# `.github/rulesets/main.json` 不在就跳過，不算失敗。
+# 第 2 件事守的是**分支保護**。模板預設 repo 是 public，那時 ruleset 免費而且該匯入
+# （ci.yml 讓 merge 那一輪不重跑測試，前提就是它的 strict 政策）。但這支仍然接受檔案不存在：
+# private repo 在免費方案上設不了 ruleset（API 回 403），那種專案靠 .githooks/pre-push
+# 與 ci.yml 的 pushed-via-pr job 那兩層。`.github/rulesets/main.json` 不在就跳過，不算失敗。
 #
 # 檔案在的時候才比對，因為那時它是一份會被匯入 GitHub 的東西，少列一個 job 等於那個 job
 # 不再擋 merge，而且沒有任何症狀。注意這支腳本只能確認 JSON 的內容對得上 ci.yml，

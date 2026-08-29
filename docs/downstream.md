@@ -233,14 +233,16 @@ workflow 照跑、吃完分鐘數，然後在上傳結果那一步 403。
 
 ### Actions 分鐘數與 dependabot
 
-**免費方案的 2000 分鐘／月是「每個帳號」的，不是每個 repo 的。** 所有 private repo
-共用同一池 —— 包括模板自己。所以「從模板長出三個下游專案」不是三份額度，
-是同一份被切成三份。
+**這一節只給 private 專案。repo 是 public 的話 Actions 分鐘數無限，整節跳過** ——
+而且 public 還順帶讓 [`main.json`](../.github/rulesets/main.json) 匯得進去（見上面那張表）
+與四個安全掃描開關免費（見下一節）。模板預設走的就是 public 這條路，
+開案步驟見 [`../TEMPLATE.md`](../TEMPLATE.md)。
 
-先看有沒有更大的槓桿：**repo 如果可以 public，Actions 分鐘數無限**，這一節就不用看了
-（順帶連 [`main.json`](../.github/rulesets/main.json) 也才匯得進去，見上面那張表）。
+還是 private 的話，先知道成本怎麼算：**免費方案的 2000 分鐘／月是「每個帳號」的，
+不是每個 repo 的。** 所有 private repo 共用同一池 —— 包括模板自己。所以「從模板長出
+三個下游專案」不是三份額度，是同一份被切成三份。
 
-private 的話，先確認兩件已經做在模板裡的事還在，它們比刪 dependabot entry 有效得多：
+接著確認兩件已經做在模板裡的事還在，它們比刪 dependabot entry 有效得多：
 
 - **merge 到 `main` 那一輪不重跑測試**（省約 12 分鐘／次），前提是匯入了 ruleset ——
   見上面那張表與 [`development.md`](development.md#4-測試)。
@@ -272,6 +274,12 @@ OS 層的 CVE 最多會延後一個月修補，期間完全沒有症狀。理由
 
 刪整組就是把那個 entry 從 `updates:` 拿掉，**沒有檢查器在守這個檔案** ——
 `make check-ci` 只看 `ci.yml` 與 ruleset。
+
+**不要為了省分鐘數改用 self-hosted runner。** 它確實不計費（GitHub 只對 hosted runner 計費），
+但那條路只在 repo 是 private 時才安全 —— **public repo 掛 self-hosted runner 等於讓任何人
+用一個 fork PR 在你的機器上執行任意程式碼**。而如果你的 repo 已經是 private 到需要省分鐘數，
+比較划算的順序是先回頭問「這個 repo 可以 public 嗎」，那一步同時解決分鐘數、分支保護與
+安全掃描三件事。真的要自架，至少用容器化或 ephemeral runner，不要裸機常駐。
 
 ### 「不啟用」與「移除」是兩件事
 

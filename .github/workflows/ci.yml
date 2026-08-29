@@ -219,11 +219,15 @@ jobs:
     #
     #   push 到 main   理由同 api job（ruleset 的 strict 政策讓那一輪成為零新資訊）。
     #
-    #   draft     **跟 acceptance 那個 job 的理由不同** —— 那邊是「draft 上必定紅」，
-    #             這邊純粹是計費。這是整套裡最貴的 job（實測 4m42s，而 GitHub 是逐 job
-    #             進位到整分鐘的，所以算 5 分鐘），而它回答的問題「部署設定壞了沒、
-    #             image 建不建得起來」只有在準備 merge 的那一刻才需要答案 ——
-    #             draft push 又是整個流程中次數最多的事件。免費方案每月 2000 分鐘。
+    #   draft     **跟 pr-checks 裡驗收條件那一步的理由不同** —— 那邊是「draft 上必定紅」，
+    #             這邊是回饋速度與噪音。這是整套裡最貴的 job（實測 4m42s），而它回答的問題
+    #             「部署設定壞了沒、image 建不建得起來」只有在準備 merge 的那一刻才需要答案，
+    #             draft push 又是整個流程中次數最多的事件 —— 每次推都等它跑完，
+    #             換到的是一個你還不會去看的答案。
+    #
+    #             **這裡原本寫的理由是計費**（免費方案每月 2000 分鐘）。repo 轉成 public
+    #             之後分鐘數無限，那個理由沒了，但行為要留著：省的是你的等待時間。
+    #             private 專案則兩個理由都成立。
     #
     #             靠 `on:` 的 ready_for_review 在同一個 SHA 上補跑一次。**那個事件
     #             缺一不可**，理由寫在 `on:` 那裡（skipped 對 required check 算通過）。
@@ -549,9 +553,11 @@ jobs:
 
   # 事後偵測「沒經過 PR 就進了 main」。
   #
-  # 這一段本來該由 GitHub 的分支保護處理，但 ruleset 與舊版 branch protection 對
-  # private repo 都是付費功能（免費方案連 API 都回 403），而這個模板不預設任何方案。
-  # 所以保護是兩層：.githooks/pre-push 在本機擋，這個 job 在事後吵。
+  # 這一段本來該由 GitHub 的分支保護處理，而 ruleset 匯入之後它確實是（見
+  # docs/development.md 的〈分支保護〉）。這個 job 是**第三層**，存在的理由是
+  # ruleset 不一定在：對 private repo 它要付費方案（免費方案連 API 都回 403），
+  # 而且「JSON 有沒有真的匯入 GitHub」repo 裡看不到，沒有任何檢查器守得到。
+  # 三層是：ruleset 在伺服器端擋，.githooks/pre-push 在本機擋，這個 job 在事後吵。
   #
   # **它擋不住任何東西** —— 走到這裡東西已經在 main 上了。它的價值是留下一筆紅燈紀錄，
   # 並涵蓋 hook 管不到的情況：沒跑過 `make setup` 的機器、`--no-verify`、
