@@ -15,9 +15,8 @@ on:
     # 那三個就永遠停在 skipped，而 skipped 對 required status check 算通過。
     # 加上它，那三個才會在「draft → ready」的那一刻於同一個 SHA 上真的跑一次。
     #
-    # 反過來，draft 期間已經跑過的 job 在這個事件上**不重跑**（api、web、
-    # api-types-up-to-date、changelog、test-edits）—— 按 Ready 不改變 SHA，
-    # 而 status check 是掛在 SHA 上的。完整論證在 api job 的註解。
+    # 其餘的 job 在這個事件上**照樣重跑**，即使 SHA 沒變。為什麼不省下那一輪，
+    # 見 api job 的註解（試過，會讓 PR 頁面說謊）。
     types: [opened, synchronize, reopened, ready_for_review]
 
   # 每週跑一次完整 CI。**這一條存在的理由只有 security job**：它查的是外部 advisory
@@ -52,30 +51,22 @@ jobs:
   api:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # 兩個不跑的情況，理由不同：
+    # 排程不跑。那條 cron 存在的理由只有 security job（見 `on:` 的註解）——
+    # 相依全是釘死的 lock 檔，每週重跑 ruff／mypy／pytest 測不到任何新東西，
+    # 這正是 e2e 當初被排除的同一個判斷，只是其餘 job 一直沒跟上。
     #
-    #   schedule          那條 cron 存在的理由只有 security job（見 `on:` 的註解）。
-    #                     相依全是釘死的 lock 檔，每週重跑 ruff／mypy／pytest 測不到任何
-    #                     新東西 —— 這正是 e2e 當初被排除的同一個判斷，只是其餘 job
-    #                     一直沒跟上。
+    # **不要再加 `github.event.action != 'ready_for_review'`。** 那看起來很划算 ——
+    # 按下 Ready 不改變 SHA，這個 job 在 draft 期間已經對同一份 tree 跑綠過了，
+    # 重跑只會產出位元組相同的答案，一個功能 PR 省 6 分鐘。**實測過，不行**：
+    # ready_for_review 那一輪會在同一個 SHA 上**再開一筆**叫 api 的 check run，
+    # 結論是 skipped，而 GitHub 取的是最新那筆 —— draft 期間那筆 success 就被蓋掉，
+    # PR 頁面顯示 `api — skipping`。
     #
-    #   ready_for_review  status check 是掛在 **commit SHA** 上的，而按下 Ready
-    #                     **不改變 SHA** —— draft 期間最後一次跑出來的那筆結果還在同一個
-    #                     SHA 上，重跑只會產出位元組相同的答案。這個事件的用途是讓
-    #                     draft 期間跳過的 job（acceptance、deploy-config、e2e）補跑一次，
-    #                     已經跑過的不在此列。
-    #
-    #                     **security 刻意不比照**：它查的是外部 advisory 資料庫，是唯一
-    #                     一個「tree 沒變、答案卻可能變」的 job，所以它照跑。
-    #
-    # 沒有針對「開 draft PR 的那一次」加條件（那時 tree 跟 main 相同，確實沒東西可驗），
-    # 因為那會跟上面的 ready_for_review 條件交出一條沒人驗過的路徑：從一個已經有 commit
-    # 的分支開 draft PR、中途不推任何東西、直接按 Ready。那條路徑上 api 一次都不會跑，
-    # 而分支保護在免費方案是關的（見 scripts/check-ci.sh），缺少的 check 不會擋 merge。
-    # 空 commit 那一次改用 commit message 的 `[skip ci]` 處理 —— 搞錯時是多花錢而不是
-    # 少驗東西，而且「這個 tree 是空的」本來就只有推 commit 的人知道。
-    # 流程見 docs/development.md 的〈先寫規格，再寫程式〉。
-    if: github.event_name != 'schedule' && github.event.action != 'ready_for_review'
+    # 「跳過」跟「從頭到尾沒跑過」在那個畫面上完全一樣，而 skipped 對 required status
+    # check 算通過。等於在最需要看清楚的那一刻（merge 前）把訊號拿掉，
+    # 換 6 分鐘不划算。draft 期間跳過 deploy-config 與 e2e 是另一回事：
+    # 那兩個接著就會在 ready_for_review 補跑，最新那筆是真的結果。
+    if: github.event_name != 'schedule'
     defaults:
       run:
         working-directory: apps/api
@@ -161,7 +152,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # 條件與理由同 api job。
-    if: github.event_name != 'schedule' && github.event.action != 'ready_for_review'
+    if: github.event_name != 'schedule'
     defaults:
       run:
         working-directory: apps/web
@@ -339,10 +330,7 @@ jobs:
   changelog:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # ready_for_review 不重跑，理由同 api job（結果掛在同一個 SHA 上）。
-    # **draft 期間照跑** —— 這一個只要 ~25 秒，而早一點看到「CHANGELOG 漏了」有價值；
-    # 跳過它省下的是計費進位的那一分鐘，不是真的運算量。
-    if: github.event_name == 'pull_request' && github.event.action != 'ready_for_review'
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v7
         with:
@@ -423,8 +411,7 @@ jobs:
   test-edits:
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    # 條件與理由同上面的 changelog job。
-    if: github.event_name == 'pull_request' && github.event.action != 'ready_for_review'
+    if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v7
         with:
@@ -606,7 +593,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # 條件與理由同 api job。
-    if: github.event_name != 'schedule' && github.event.action != 'ready_for_review'
+    if: github.event_name != 'schedule'
     steps:
       - uses: actions/checkout@v7
 

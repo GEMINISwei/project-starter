@@ -408,18 +408,21 @@ PR to `main`，以及每週一的排程上執行（排程的理由見下面的[�
 | --- | --- |
 | 開 draft PR（空 commit） | 什麼都不跑 —— commit message 帶 `[skip ci]`，見〈[先寫規格，再寫程式](#落點要在動手之前存在)〉 |
 | draft 期間的每次 push | 除了 `deploy-config`、`e2e`、`acceptance` 以外全部 |
-| 按下 Ready for review | 只補跑上面那三個，加上 `security` |
-| Ready 之後再 push | 全部（新的 commit 什麼都還沒驗過） |
+| 按下 Ready for review | 全部 —— `deploy-config`、`e2e`、`acceptance` 是第一次跑，其餘是重跑 |
+| Ready 之後再 push | 全部 |
 | merge 到 `main` | 全部，加上 `publish` |
 | 每週一排程 | 只有 `security` |
 
-「按下 Ready 不重跑」的依據是 **status check 掛在 commit SHA 上**，而按 Ready 不改變
-SHA —— draft 期間跑出來的綠燈還在同一個 SHA 上。唯一的例外是 `security`：
-它查外部 advisory 資料庫，是唯一一個「tree 沒變、答案卻可能變」的 job。
-逐 job 的條件與完整論證在 [`ci.yml`](../.github/workflows/ci.yml) 的 `api` job 註解上。
+**按下 Ready 時其餘 job 照樣重跑，即使 SHA 沒變。** 這看起來很浪費（同一份 tree
+必得同一個答案），但試過不行：被跳過的 job **仍然會產生一筆 `skipped` 的 check run**，
+而 GitHub 取同名 check 的最新那筆 —— draft 期間那筆 `success` 會被蓋掉，PR 頁面顯示
+`api — skipping`，跟「這個 PR 從頭到尾沒跑過 api」長得一模一樣。完整論證與實測結果在
+[`ci.yml`](../.github/workflows/ci.yml) 的 `api` job 註解上。
 
-- **api**（**排程與 Ready for review 不跑**）：ruff → mypy → pytest
-  （會起一個 PostgreSQL 跑整合測試）
+`deploy-config` 與 `e2e` 在 draft 期間跳過則沒有這個問題：它們接著就會在
+`ready_for_review` 補跑，最新那筆是真的結果。
+
+- **api**（**排程不跑**）：ruff → mypy → pytest（會起一個 PostgreSQL 跑整合測試）
 - **web**（同 `api`）：eslint → tsc → vitest → next build
 - **deploy-config**（**排程與 draft 期間不跑**）：`make check` 只涵蓋原始碼，
   所以部署設定與文件壞掉時前面那些 job
@@ -427,22 +430,19 @@ SHA —— draft 期間跑出來的綠燈還在同一個 SHA 上。唯一的例�
   兩個 production image、備份工具能不能在 image 裡跑，以及斷言 `api` 確實等 `migrate`
   成功結束。**逐步清單看 `ci.yml` 本身**，不抄在這裡：手抄的清單一定會落後於 `ci.yml`，
   理由同下面第 5 節的第 4 條
-- **changelog**（只在 PR 上跑，**Ready for review 不重跑**）：動到
-  `apps/`／`scripts/`／`infra/` 卻沒更新
+- **changelog**（只在 PR 上跑）：動到 `apps/`／`scripts/`／`infra/` 卻沒更新
   `CHANGELOG.md` 就失敗。那份紀錄是下游判斷「同步要做什麼」的唯一依據，
   沒有這個 job 就只能靠自律。純重構可在 PR 標題加 `[skip changelog]` 放行
 - **acceptance**（只在 PR 上跑，**draft 期間跳過**）：`make check-acceptance` 確認每條驗收條件
   都指向存在的測試；純文件等無行為變更的改動可在 PR 標題加 `[skip acceptance]`，規則見〈常用指令〉。
   draft 期間要看那盞紅綠燈就自己跑 `make check-acceptance`；跳過的理由寫在
   [`ci.yml`](../.github/workflows/ci.yml) 那個 job 的註解上
-- **test-edits**（只在 PR 上跑，**Ready for review 不重跑**）：`make check-test-edits`
-  要求刪改既有測試時附上說明，
+- **test-edits**（只在 PR 上跑）：`make check-test-edits` 要求刪改既有測試時附上說明，
   規則見〈改到既有測試要說明〉
 - **e2e**（push 與 PR 上跑，**排程與 draft 期間不跑**）：`make e2e` 對隔離的 stack
   驗證跨層接縫，
   範圍與操作見〈e2e 的範圍〉
-- **security**（**每個階段都跑**，包括排程與 Ready for review —— 理由見上面那段）：
-  `make audit`
+- **security**（**每個階段都跑**，包括排程 —— 它是那條 cron 唯一的存在理由）：`make audit`
 - **api-types-up-to-date**（同 `api`）：重新產生型別並比對 `git diff`，
   擋下「改了後端 schema 卻忘記跑
   `make gen-types`」
@@ -478,8 +478,6 @@ SHA —— draft 期間跑出來的綠燈還在同一個 SHA 上。唯一的例�
 還有一條每週一的 `schedule`。少了它，一個上線後穩定、幾週沒有 PR 的專案就是幾週沒掃過，
 而 dependabot 只在**有更新時**才開 PR，補不上沒有更新的那幾週。
 **排程只跑 `security` 一個 job**，其餘全部帶條件跳過（所以不會推任何 image）。
-反過來說，`security` 也是唯一一個在按下 Ready for review 時**照樣重跑**的 job ——
-其他 job 同一個 SHA 必得同一個答案，只有它的答案會因為外面公布了新漏洞而改變。
 
 ## 5. 寫文件與註解的慣例
 

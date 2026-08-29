@@ -16,9 +16,9 @@
   但值得知道紅綠燈出現的時機變了：
   - `deploy-config` 與 `e2e` 在 draft 期間不跑，按下 Ready for review 時補跑。
     draft 期間要看這兩盞燈就自己跑 `make check-compose` 與 `make e2e`。
-  - `api`／`web`／`api-types-up-to-date`／`changelog`／`test-edits` 在
-    Ready for review 時**不重跑**（status check 掛在 commit SHA 上，按 Ready 不改變
-    SHA）。`security` 是唯一的例外，它查的是會自己變紅的外部 advisory 資料庫。
+  - 按下 Ready 時其餘 job 照樣重跑。**試過不重跑，會讓 PR 頁面說謊** ——
+    被跳過的 job 仍然會產生一筆 `skipped` 的 check run 蓋掉 draft 期間那筆 `success`，
+    而 `skipped` 對必要檢查算通過。實測結果寫在 `ci.yml` 的 `api` job 註解上。
   - 每週一的排程只跑 `security` —— 那本來就是那條 cron 唯一的存在理由。
   - 開 draft PR 的空 commit 建議帶 `[skip ci]`，見
     [`docs/development.md`](docs/development.md#落點要在動手之前存在)。
