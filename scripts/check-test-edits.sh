@@ -21,7 +21,7 @@ source "$(dirname "$0")/lib/pr.sh"
 readonly HEADING="## 改動到既有測試"
 readonly TEST_DIRS=("apps/api/tests" "apps/web/tests")
 
-# CI 用 base ref 而不是寫死 main，日後開 release 分支時這支不必跟著改（同 changelog job）。
+# CI 用 base ref 而不是寫死 main，日後開 release 分支時這支不必跟著改（同 pr-checks 的 CHANGELOG 那一步）。
 base="${BASE_REF:-main}"
 if git rev-parse --verify --quiet "origin/${base}" > /dev/null; then
     base="origin/${base}"

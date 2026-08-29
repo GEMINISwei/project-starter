@@ -158,5 +158,5 @@ git rm TEMPLATE.md
   根目錄的 `CHANGELOG.md` 是留給下游專案的，模板不碰它。
 - 必要時升 `apps/api/app/config.py` 的 `APP_VERSION`。開發階段一律 `0.x.x`。
 
-**只有第二條有檢查器在守**（CI 的 `changelog` job 擋漏寫與寫錯地方，`make check-version`
+**只有第二條有檢查器在守**（CI 的 `pr-checks` 擋漏寫與寫錯地方，`make check-version`
 擋漏標記與版號對不上）。第一條與第三條靠自律。

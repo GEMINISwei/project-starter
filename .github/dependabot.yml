@@ -16,10 +16,10 @@ updates:
     directory: "/apps/api"
     schedule:
       interval: "weekly"
-    # PR 標題帶 [skip changelog]，走 ci.yml 的 changelog job 既有的放行機制。
+    # PR 標題帶 [skip changelog]，走 ci.yml 的 pr-checks 既有的放行機制。
     #
     # 沒有它的話這五個 entry 開的每一個 PR 都是紅的：manifest 就住在 apps/ 與 infra/
-    # 底下（躲不掉），而 changelog job 拿「動了 apps|scripts|infra」當「實質改動」的
+    # 底下（躲不掉），而那一步拿「動了 apps|scripts|infra」當「實質改動」的
     # 代理指標 —— 相依升級剛好落在那個指標失準的交集上。每週固定紅一次的下場是沒有人
     # 再看它，而那個 job 的價值全部建立在「紅了就是真的有事」上面。
     #
@@ -31,7 +31,7 @@ updates:
     # CHANGELOG —— 見 docs/development.md 的「相依升級紀律」。
     #
     # 最底下的 github-actions entry 刻意沒有這一段：它只動 .github/，本來就不會觸發
-    # changelog job，加了只是讓 CI 改動的 commit message 帶一句誤導的放行宣告。
+    # CHANGELOG 那一步，加了只是讓 CI 改動的 commit message 帶一句誤導的放行宣告。
     commit-message:
       prefix: "chore(deps) [skip changelog] [skip acceptance]"
     open-pull-requests-limit: 5
@@ -117,15 +117,17 @@ updates:
   #
   # 三個 directory 是三份獨立的 manifest：兩個 Dockerfile 加上 compose 檔那一組。
   #
-  # **這三個是 monthly，上面那三個（uv、兩個 npm）是 weekly**，理由是計費而不是重要性。
-  # 免費方案每月 2000 分鐘，而一個 dependabot PR 走的是最貴的路徑（開 PR + merge 兩輪
-  # 完整 CI，實測約 35 分鐘）—— 那個成本跟「這次有沒有東西可更新」無關，只跟開了幾個 PR
-  # 有關。base image 的實際更新頻率遠低於每週，weekly 輪詢絕大多數是空轉；
-  # npm／uv 那三個才是 advisory 真的會動的地方，所以它們留在 weekly。
+  # **這三個是 weekly，跟 uv 與兩個 npm 一樣。** 它們一度被改成 monthly，理由是計費：
+  # 一個 dependabot PR 當時走的是最貴的路徑（開 PR + merge 兩輪完整 CI，實測約 35 分鐘）。
+  # 那個理由現在不成立了，兩件事各拿掉一半：repo 轉成 public（標準 runner 免費），
+  # 而且 push 到 main 那一輪不再重跑測試（見 ci.yml 的 api job 註解）。
   #
-  # **代價要記著**：上面那句「沒有任何檢查會提醒」在改成 monthly 之後更重要了 ——
-  # OS 層的修補最多會延後一個月，而且期間不會有任何紅燈。哪天覺得這個延遲不能接受
-  # （例如服務開始對外），把這三個改回 weekly 是一行的事，先去看還剩多少分鐘額度。
+  # **不成立就改回來，而不是留著省** —— 上面那句「沒有任何檢查會提醒」是這一段的重點：
+  # 基底映像沒有 make audit、沒有紅燈，monthly 的代價是 OS 層的 CVE 最多延後一個月修補，
+  # 而且期間完全沒有症狀。那個代價只有在真的換到分鐘數的時候才值得付。
+  #
+  # 下游如果是 private 而且分鐘數吃緊，這三個改回 monthly 是一行的事 ——
+  # 判斷方式與其他省法見 docs/downstream.md 的〈Actions 分鐘數與 dependabot〉。
   #
   # **compose 那組的 ecosystem 是 `docker-compose`，不是 `docker`**。`docker` 只認
   # Dockerfile，指到一個沒有 Dockerfile 的目錄時 dependabot 會直接報錯
@@ -134,8 +136,8 @@ updates:
   - package-ecosystem: "docker"
     directory: "/apps/api"
     schedule:
-      # monthly 的理由見上面那一段。
-      interval: "monthly"
+      # weekly 的理由見上面那一段。
+      interval: "weekly"
     commit-message:
       # 理由見最上面 uv 那一段。
       prefix: "chore(deps) [skip changelog] [skip acceptance]"
@@ -153,16 +155,16 @@ updates:
   - package-ecosystem: "docker"
     directory: "/apps/web"
     schedule:
-      # monthly 的理由見上面那一段。
-      interval: "monthly"
+      # weekly 的理由見上面那一段。
+      interval: "weekly"
     commit-message:
       # 理由見最上面 uv 那一段。
       prefix: "chore(deps) [skip changelog] [skip acceptance]"
   - package-ecosystem: "docker-compose"
     directory: "/infra/docker"
     schedule:
-      # monthly 的理由見上面那一段。
-      interval: "monthly"
+      # weekly 的理由見上面那一段。
+      interval: "weekly"
     commit-message:
       # 理由見最上面 uv 那一段。
       prefix: "chore(deps) [skip changelog] [skip acceptance]"
@@ -193,7 +195,7 @@ updates:
       interval: "monthly"
     commit-message:
       # 這一段原本沒設，於是標題是預設的 `build(deps): …`，兩個放行標記都沒有。
-      # changelog job 一直是綠的只是**巧合** —— 它只在動到 apps/、scripts/、infra/ 時
+      # CHANGELOG 那一步一直是綠的只是**巧合** —— 它只在動到 apps/、scripts/、infra/ 時
       # 才要求條目，而 action 升級通常只碰 .github/。哪天有個 action 順帶動到那三個
       # 目錄，它就會紅，而原因完全看不出來。
       prefix: "chore(deps) [skip changelog] [skip acceptance]"

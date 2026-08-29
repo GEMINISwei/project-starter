@@ -97,7 +97,7 @@
   （新增一支卻沒寫進文件，那支檢查器就沒有人知道它在）。
 - **模板的 CHANGELOG 條目寫進 [`CHANGELOG.template.md`](CHANGELOG.template.md) 的
   `## [Unreleased]`，不是根目錄的 `CHANGELOG.md`**（那一份屬於下游專案，模板不碰它，
-  CI 的 `changelog` job 兩個方向都擋）。**每一筆條目開頭要帶同步影響標記**
+  CI 的 `pr-checks` 兩個方向都擋）。**每一筆條目開頭要帶同步影響標記**
   （`[同步:無]`／`[同步:要動手]`／`[同步:破壞性]`，意思見那份檔頭），`make check-version`
   會擋漏標記的。升 `APP_VERSION` 時把 `## [Unreleased]` 改名成該版號，發版的 git tag 則是
   `v<APP_VERSION>`；三者同樣由 `make check-version` 守（在 `deploy-config` job 裡）。

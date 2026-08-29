@@ -7,7 +7,7 @@
 # 各寫一份的話「本機跑過」就不代表 CI 會過 —— 而這兩支的判斷完全建立在這兩個字串上。
 #
 # **CI 一律經 env 傳，不可內插進 run 的腳本字串**：PR 標題與描述是任何人都能編輯的內容，
-# 內插等於讓 PR 作者在 runner 上執行任意指令。ci.yml 的 changelog job 同理。
+# 內插等於讓 PR 作者在 runner 上執行任意指令。ci.yml 的 pr-checks 同理。
 #
 # 被 source，所以刻意不設 `set -euo pipefail` —— 那是呼叫端的決定，同 common.sh。
 
@@ -36,7 +36,7 @@ pr_context() {
 }
 
 # PR 標題帶著某個放行標記就回傳 0。放行一律要**明講**，不靠某個條件預設放行 ——
-# 比照 ci.yml 的 changelog job 的 [skip changelog]。
+# 比照 ci.yml 的 pr-checks 裡 CHANGELOG 那一步的 [skip changelog]。
 pr_skipped() {
     case "$PR_TITLE" in
         *"[$1]"*) return 0 ;;

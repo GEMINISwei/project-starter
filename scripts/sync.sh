@@ -107,7 +107,7 @@ fi
 
 echo
 echo "── 會影響到的範圍 ───────────────────────────────────────────────"
-# 只看這三個目錄：CI 的 changelog job 用的也是它們，所以「有條目卻沒有檔案改動」
+# 只看這三個目錄：CI 的 pr-checks 用的也是它們，所以「有條目卻沒有檔案改動」
 # 或反過來，都是值得看一眼的訊號。
 stat="$(git diff --stat "HEAD..$BRANCH" -- apps/ scripts/ infra/)"
 if [ -n "$stat" ]; then

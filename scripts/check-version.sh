@@ -4,7 +4,7 @@
 # 並確認模板的每一筆條目都帶同步影響標記。
 #
 # 這支存在的理由：`APP_VERSION` 與變更紀錄是下游判斷「落後多少、同步要做什麼」的依據
-# （見 docs/downstream.md），而三者對不上是**沒有症狀**的：CI 的 changelog job
+# （見 docs/downstream.md），而三者對不上是**沒有症狀**的：CI 的 pr-checks
 # 只擋「有沒有寫條目」，擋不到「條目的版號跟程式裡的版號對不起來」。
 #
 # registry 模式讓這件事從紀律問題變成正確性問題：image tag 由 git tag 決定，

@@ -19,7 +19,7 @@
 #
 # **測試還不存在時它是紅的**：流程是先開 draft PR 寫驗收條件、再寫測試，所以這支就是
 # 功能級的紅綠燈，紅到測試進版控為止。**在本機跑它是刻意的用法** —— 它讀得到當前分支的
-# PR，而 CI 上的 acceptance job 在 draft 期間跳過（理由見 ci.yml 那個 job 的註解）。
+# PR，而 CI 上 pr-checks 的驗收條件那一步在 draft 期間跳過（理由見 ci.yml 那一步的註解）。
 set -euo pipefail
 
 # shellcheck source=scripts/lib/pr.sh

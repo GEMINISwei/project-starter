@@ -33,9 +33,7 @@
           { "context": "deploy-config" },
           { "context": "security" },
           { "context": "api-types-up-to-date" },
-          { "context": "changelog" },
-          { "context": "acceptance" },
-          { "context": "test-edits" },
+          { "context": "pr-checks" },
           { "context": "e2e" }
         ]
       }
