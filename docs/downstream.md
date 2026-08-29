@@ -200,6 +200,25 @@ git diff HEAD template/main --stat -- apps/ scripts/ infra/
 分支保護的三個層次與各自擋得住什麼，見
 [`development.md`](development.md#分支保護) —— 那一節是這個主題的 owner。
 
+### repo 設定裡的安全掃描：模板的設定不會跟著複製過來
+
+secret scanning、push protection、Dependabot security updates 與 code scanning（CodeQL）
+**都是 GitHub 那一側的 repo 設定，版控裡沒有它們**，所以 clone 出來的專案一個都不會繼承 ——
+要自己開一次。四個開關與建議的組合見
+[`development.md`](development.md#repo-設定裡的安全掃描)，那一節是 owner。
+
+**但那一節的建議是以 public repo 為前提的**，下游是 private 的話差別很大：
+
+| | public | private |
+|---|---|---|
+| Secret scanning + push protection | 免費 | 要 GitHub Advanced Security（付費） |
+| Code scanning（CodeQL） | 免費 | 同上 |
+| Dependabot security updates | 免費 | 免費 |
+
+也就是說 private 下游能白拿的只有最後一項（而它剛好也是最省事的一項，見上一節的折衷）。
+**不要因為模板開著就照抄** —— 沒有 GHAS 的 private repo 開 code scanning 的下場是
+workflow 照跑、吃完分鐘數，然後在上傳結果那一步 403。
+
 `make check-ci` 守著 ruleset 的 job 名單與 `ci.yml` 一致，所以**動 job 就要同時動 ruleset**
 （沒有那個檔案就跳過，不會紅）。整套 GitHub Actions 都不用時把 `.github/` 刪掉即可，
 `check-ci` 一樣會自己跳過。

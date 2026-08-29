@@ -384,6 +384,45 @@ GitHub」** —— 那是 repo 設定，repo 裡沒有東西看得到，而且�
 
 `required_approving_review_count` 是 `0`，因為模板要能被一個人開起來用。多人專案請自己調高。
 
+### repo 設定裡的安全掃描
+
+這一節與上面的分支保護是同一類東西：**設定在 GitHub 那一側，版控裡看不到，
+所以只能靠文件記得它們存在**。四個開關，都在 Settings 的安全那一頁
+（頁名被改過幾次，早期叫 Code security and analysis）：
+
+| 開關 | 掃什麼 | 建議 |
+|---|---|---|
+| Secret scanning | 已推上去的內容裡有沒有金鑰 | 開 |
+| └ Push protection | **推的當下就擋**，金鑰進不了歷史 | 開，而且這才是重點 |
+| Dependabot security updates | 有 advisory 命中 lockfile 時自動開 PR | 開 |
+| Code scanning（CodeQL） | **你自己寫的程式碼**的漏洞模式 | 開，用 default setup |
+
+**push protection 是這四個裡唯一防得住不可逆事故的。** 其餘三個都是事後通知，
+而金鑰一旦進了 git 歷史就永遠在裡面 —— 後面的 commit 刪掉它沒有用，repo 是 public 的話
+幾秒內就被爬走了。它是 Secret scanning 底下的子開關，所以要先開上面那個。
+
+介面名稱會動，所以指令比路徑可靠：
+
+```bash
+gh api --method PATCH repos/{owner}/{repo} -f 'security_and_analysis[secret_scanning][status]=enabled' -f 'security_and_analysis[secret_scanning_push_protection][status]=enabled'
+```
+
+**Code scanning 選 default setup，不要 advanced setup。** 後者會產生一份
+`.github/workflows/codeql.yml` 進版控，看起來比較符合這個 repo 的紀律，但對**模板**是負債：
+那份 workflow 會被每個下游繼承，而 code scanning 對 private repo 要 GitHub Advanced Security
+（付費）—— 沒有的話它會照跑、吃完分鐘數，然後在上傳結果那一步 403 失敗。
+等於送給每個 private 下游一個固定紅的 job。default setup 不進版控，什麼都不會被繼承。
+順帶一提，它的 CodeQL 版本由 GitHub 自己維護，不會變成 dependabot 要盯的第七組 manifest。
+
+query suite 選 **Default** 而不是 Extended／`security-and-quality`：後兩者多出來的查詢信心較低，
+第一次開就吃一堆 false positive，而那的下場是大家學會按 dismiss，等於這個掃描沒開。
+
+**CodeQL 的紅綠燈不要加進 [`../.github/rulesets/main.json`](../.github/rulesets/main.json)。**
+兩個理由：`make check-ci` 要求 ruleset 的必要檢查恰好等於 `ci.yml` 裡會在 PR 上跑的 job，
+而 CodeQL 的 job 不在那個檔案裡（default setup 根本沒有檔案），加了會紅；
+而且用一個會有 false positive 的掃描擋 merge，通常換來的是「大家學會按 dismiss」。
+它的定位是提示，不是閘門。
+
 ### 取消 draft 之前：自己讀一次 diff
 
 上面那句「沒有任何東西讓它變成強制」有一個直接的後果：**整條流程裡唯一的人類檢查點，
