@@ -25,6 +25,13 @@
 
 ### 變更
 
+- **[同步:無]** 文件補上 repo 設定裡的四個安全掃描開關（secret scanning、push protection、
+  Dependabot security updates、code scanning）：模板該開哪些見
+  [`docs/development.md`](docs/development.md#repo-設定裡的安全掃描)，
+  **下游是 private 時哪些要付費**見
+  [`docs/downstream.md`](docs/downstream.md#repo-設定裡的安全掃描模板的設定不會跟著複製過來)。
+  這些設定不在版控裡，所以 clone 出來的專案一個都不會繼承。
+
 - **[同步:要動手]** CI 重新分配各階段跑哪些 job。以「一次 draft push + Ready + merge」計，
   帳單從約 34 分鐘降到約 19 分鐘（實測值，不含 `publish`）：
   - **merge 到 `main` 只跑 `pushed-via-pr` 與 `publish`**，測試那六個 job 全部跳過。
