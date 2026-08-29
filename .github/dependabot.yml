@@ -117,6 +117,16 @@ updates:
   #
   # 三個 directory 是三份獨立的 manifest：兩個 Dockerfile 加上 compose 檔那一組。
   #
+  # **這三個是 monthly，上面那三個（uv、兩個 npm）是 weekly**，理由是計費而不是重要性。
+  # 免費方案每月 2000 分鐘，而一個 dependabot PR 走的是最貴的路徑（開 PR + merge 兩輪
+  # 完整 CI，實測約 35 分鐘）—— 那個成本跟「這次有沒有東西可更新」無關，只跟開了幾個 PR
+  # 有關。base image 的實際更新頻率遠低於每週，weekly 輪詢絕大多數是空轉；
+  # npm／uv 那三個才是 advisory 真的會動的地方，所以它們留在 weekly。
+  #
+  # **代價要記著**：上面那句「沒有任何檢查會提醒」在改成 monthly 之後更重要了 ——
+  # OS 層的修補最多會延後一個月，而且期間不會有任何紅燈。哪天覺得這個延遲不能接受
+  # （例如服務開始對外），把這三個改回 weekly 是一行的事，先去看還剩多少分鐘額度。
+  #
   # **compose 那組的 ecosystem 是 `docker-compose`，不是 `docker`**。`docker` 只認
   # Dockerfile，指到一個沒有 Dockerfile 的目錄時 dependabot 會直接報錯
   # （"Dependabot couldn't find a Dockerfile ... at the path: /infra/docker/Dockerfile"），
@@ -124,7 +134,8 @@ updates:
   - package-ecosystem: "docker"
     directory: "/apps/api"
     schedule:
-      interval: "weekly"
+      # monthly 的理由見上面那一段。
+      interval: "monthly"
     commit-message:
       # 理由見最上面 uv 那一段。
       prefix: "chore(deps) [skip changelog] [skip acceptance]"
@@ -142,14 +153,16 @@ updates:
   - package-ecosystem: "docker"
     directory: "/apps/web"
     schedule:
-      interval: "weekly"
+      # monthly 的理由見上面那一段。
+      interval: "monthly"
     commit-message:
       # 理由見最上面 uv 那一段。
       prefix: "chore(deps) [skip changelog] [skip acceptance]"
   - package-ecosystem: "docker-compose"
     directory: "/infra/docker"
     schedule:
-      interval: "weekly"
+      # monthly 的理由見上面那一段。
+      interval: "monthly"
     commit-message:
       # 理由見最上面 uv 那一段。
       prefix: "chore(deps) [skip changelog] [skip acceptance]"

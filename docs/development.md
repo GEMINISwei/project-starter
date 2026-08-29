@@ -399,28 +399,52 @@ cd apps/web && npm test                   # 前端
 本機沒有時會自動 skip，也可以用 `uv run pytest -m "not integration"` 明確略過。CI 上會真的跑。
 
 CI（[設定來源](../.github/workflows/ci.yml)）在 push 到 `main`、push `v*` tag、
-PR to `main`，以及每週一的排程上執行（排程的理由見下面的[安全 advisory](#安全-advisory)）：
+PR to `main`，以及每週一的排程上執行（排程的理由見下面的[安全 advisory](#安全-advisory)）。
 
-- **api**：ruff → mypy → pytest（會起一個 PostgreSQL 跑整合測試）
-- **web**：eslint → tsc → vitest → next build
-- **deploy-config**：`make check` 只涵蓋原始碼，所以部署設定與文件壞掉時前面那些 job
+**不是每個階段都跑全部。** 免費方案每月 2000 分鐘，而 GitHub 是**逐 job 進位到整分鐘**
+計費的，所以階段分工是照「這個階段真的需要哪個答案」切的：
+
+| 階段 | 跑什麼 |
+| --- | --- |
+| 開 draft PR（空 commit） | 什麼都不跑 —— commit message 帶 `[skip ci]`，見〈[先寫規格，再寫程式](#落點要在動手之前存在)〉 |
+| draft 期間的每次 push | 除了 `deploy-config`、`e2e`、`acceptance` 以外全部 |
+| 按下 Ready for review | 只補跑上面那三個，加上 `security` |
+| Ready 之後再 push | 全部（新的 commit 什麼都還沒驗過） |
+| merge 到 `main` | 全部，加上 `publish` |
+| 每週一排程 | 只有 `security` |
+
+「按下 Ready 不重跑」的依據是 **status check 掛在 commit SHA 上**，而按 Ready 不改變
+SHA —— draft 期間跑出來的綠燈還在同一個 SHA 上。唯一的例外是 `security`：
+它查外部 advisory 資料庫，是唯一一個「tree 沒變、答案卻可能變」的 job。
+逐 job 的條件與完整論證在 [`ci.yml`](../.github/workflows/ci.yml) 的 `api` job 註解上。
+
+- **api**（**排程與 Ready for review 不跑**）：ruff → mypy → pytest
+  （會起一個 PostgreSQL 跑整合測試）
+- **web**（同 `api`）：eslint → tsc → vitest → next build
+- **deploy-config**（**排程與 draft 期間不跑**）：`make check` 只涵蓋原始碼，
+  所以部署設定與文件壞掉時前面那些 job
   會全部照樣綠燈。這個 job 補的就是那一塊 —— 那排 `check-*`、兩份 compose 設定、
   兩個 production image、備份工具能不能在 image 裡跑，以及斷言 `api` 確實等 `migrate`
   成功結束。**逐步清單看 `ci.yml` 本身**，不抄在這裡：手抄的清單一定會落後於 `ci.yml`，
   理由同下面第 5 節的第 4 條
-- **changelog**（只在 PR 上跑）：動到 `apps/`／`scripts/`／`infra/` 卻沒更新
+- **changelog**（只在 PR 上跑，**Ready for review 不重跑**）：動到
+  `apps/`／`scripts/`／`infra/` 卻沒更新
   `CHANGELOG.md` 就失敗。那份紀錄是下游判斷「同步要做什麼」的唯一依據，
   沒有這個 job 就只能靠自律。純重構可在 PR 標題加 `[skip changelog]` 放行
 - **acceptance**（只在 PR 上跑，**draft 期間跳過**）：`make check-acceptance` 確認每條驗收條件
   都指向存在的測試；純文件等無行為變更的改動可在 PR 標題加 `[skip acceptance]`，規則見〈常用指令〉。
   draft 期間要看那盞紅綠燈就自己跑 `make check-acceptance`；跳過的理由寫在
   [`ci.yml`](../.github/workflows/ci.yml) 那個 job 的註解上
-- **test-edits**（只在 PR 上跑）：`make check-test-edits` 要求刪改既有測試時附上說明，
+- **test-edits**（只在 PR 上跑，**Ready for review 不重跑**）：`make check-test-edits`
+  要求刪改既有測試時附上說明，
   規則見〈改到既有測試要說明〉
-- **e2e**（push 與 PR 上跑，排程不跑）：`make e2e` 對隔離的 stack 驗證跨層接縫，
+- **e2e**（push 與 PR 上跑，**排程與 draft 期間不跑**）：`make e2e` 對隔離的 stack
+  驗證跨層接縫，
   範圍與操作見〈e2e 的範圍〉
-- **security**：`make audit`
-- **api-types-up-to-date**：重新產生型別並比對 `git diff`，擋下「改了後端 schema 卻忘記跑
+- **security**（**每個階段都跑**，包括排程與 Ready for review —— 理由見上面那段）：
+  `make audit`
+- **api-types-up-to-date**（同 `api`）：重新產生型別並比對 `git diff`，
+  擋下「改了後端 schema 卻忘記跑
   `make gen-types`」
 - **publish**（只在 push 上跑，PR 不跑）：`ci.yml` 中 `needs` 指定的檢查全綠後，
   才把兩個 image 推上 GHCR；其中包含 `e2e`，不包含 PR-only job。
@@ -453,7 +477,9 @@ PR to `main`，以及每週一的排程上執行（排程的理由見下面的[�
 新漏洞」而變紅 —— 那跟有沒有人送 PR 無關。所以 `ci.yml` 除了 push 與 pull_request，
 還有一條每週一的 `schedule`。少了它，一個上線後穩定、幾週沒有 PR 的專案就是幾週沒掃過，
 而 dependabot 只在**有更新時**才開 PR，補不上沒有更新的那幾週。
-排程觸發時，PR-only job、`e2e`、`publish` 與 `pushed-via-pr` 都會跳過，不會推任何 image。
+**排程只跑 `security` 一個 job**，其餘全部帶條件跳過（所以不會推任何 image）。
+反過來說，`security` 也是唯一一個在按下 Ready for review 時**照樣重跑**的 job ——
+其他 job 同一個 SHA 必得同一個答案，只有它的答案會因為外面公布了新漏洞而改變。
 
 ## 5. 寫文件與註解的慣例
 
@@ -521,8 +547,34 @@ Gherkin；換來的 step definition 層則是純粹的維護成本 —— 每個
 所以順序是**先開 draft PR，再寫程式**：
 
 1. 開分支（`<type>/<kebab-case 描述>`，見〈分支與提交規範〉）
-2. 推一個空 commit（`git commit --allow-empty`），開 draft PR，
-   只填「這個 PR 做什麼」與「驗收條件」兩段
+2. 推一個空 commit，開 draft PR，只填「這個 PR 做什麼」與「驗收條件」兩段。
+   **commit message 帶 `[skip ci]`**：
+
+   ```bash
+   git commit --allow-empty -m "chore: 開 PR [skip ci]"
+   ```
+
+   那一刻的 tree 跟 `main` 位元組相同，而 `main` 那份剛剛才被 merge 的 CI 驗過 ——
+   跑一輪的資訊量是零，卻要花掉整整一輪的分鐘數。
+
+   **為什麼是 commit message 而不是 `ci.yml` 的條件**：workflow 只看得到事件型別，
+   要它自動跳過就得寫成「`opened` 且是 draft 就不跑」，而那條規則會跟
+   「Ready for review 不重跑」交出一條沒人驗過的路徑（從一個已經有 commit 的分支開
+   draft PR、中途不推東西、直接按 Ready）。差別在**搞錯時往哪邊倒**：`[skip ci]` 忘了寫
+   是多花八分鐘，自動條件判斷錯是該驗的沒驗 —— 而分支保護在免費方案是關的，
+   缺少的 check 不會擋 merge，那個洞是靜默的。
+   而且「這個 tree 是空的」本來就只有推 commit 的人知道。
+
+   同一招也適用第 4 步「看它紅」的那一次 commit（CI 必紅，而你本機已經知道了）。
+   **只用在那一次** —— 後面一定還會有 push 或按 Ready 把檢查補回來。
+
+   > **要在 commit message 裡「提到」這個標記時，不要寫出它的字面值。**
+   > GitHub 掃的是整段 commit message，不是只有第一行 —— 一個內文在解釋
+   > 「為什麼用這個標記」的 commit 會把自己也跳過，而症狀是 PR 上
+   > **一個 check 都沒有**（不是紅燈，是空的），看起來像 Actions 壞了。
+   > 要在 commit 裡提它就寫成「skip ci 標記」這種不帶方括號的形式。
+   > 同一組關鍵字還有 `[ci skip]`、`[no ci]`、`[skip actions]`、`[actions skip]`。
+   > 文件與 PR 描述不受影響，只有 commit message 會被掃
 3. **動手之前**把驗收條件裡模糊的地方問掉，答案改寫回驗收條件 —— 不是留在對話裡
 4. 寫測試 → 看它紅 → 寫實作 → 綠
 5. 取消 draft —— 之前先自己讀一次 diff，見〈[取消 draft 之前：自己讀一次 diff](#取消-draft-之前自己讀一次-diff)〉
