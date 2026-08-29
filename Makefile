@@ -7,7 +7,7 @@
 # 新增指令 = 加一支 scripts/<name>.sh（記得 chmod +x）並把 <name> 加進 TARGETS。
 # 共用的 compose 旗標、.env 載入、確認提示在 scripts/lib/。
 
-TARGETS = init remote setup dev prod deploy down logs psql \
+TARGETS = init remote sync setup dev prod deploy down logs psql \
           reset backup restore migrate create-superuser \
           gen-types lint typecheck test build check e2e \
           check-acceptance check-ci check-compose check-contracts check-docs \

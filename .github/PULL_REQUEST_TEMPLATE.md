@@ -52,7 +52,7 @@ Given/When/Then），**每一條後面接一行「→ 測試名稱」，名稱�
 - [ ] `WsEventType`
 - [ ] `Language`
 - [ ] `ENABLED_MODULES`（前端 `config/routes.ts`、後端 `app/registry.py`，**兩邊都要**）
-- [ ] `APP_VERSION` 與 `CHANGELOG.md` 最上面那個版號標題
+- [ ] `APP_VERSION` 與 `CHANGELOG.template.md` 最上面那個版號標題
 
 ## 取消 draft 前
 

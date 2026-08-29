@@ -7,12 +7,15 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # `make init` 以 `openssl rand -hex 32` 產生，長度為 64。設下限避免有人手動填入弱金鑰。
 MIN_JWT_SECRET_LENGTH = 32
 
-# 顯示在 OpenAPI 上的 API 版本，同時是**模板的版本**（見 CHANGELOG.md）。刻意是常數而不是環境
-# 變數：沒有任何部署流程會設它，掛在 AppEnv 上只會讓人以為改 .env 有用。
+# 顯示在 OpenAPI 上的 API 版本。在模板裡它是**模板的版本**（見 CHANGELOG.template.md），
+# 在下游專案裡它是**那個專案自己的產品版本**（見 CHANGELOG.md）—— 所以同步時這一行的衝突
+# 一律留自己的，理由見 docs/downstream.md。刻意是常數而不是環境變數：沒有任何部署流程會設它，
+# 掛在 AppEnv 上只會讓人以為改 .env 有用。
 #
 # **升版時只改這一份**，不要去對齊 `package.json` 與 `pyproject.toml` 的 `version`（那是套件
-# 欄位，兩個套件都 private，與這裡無關）。要一起改的是 `CHANGELOG.md` 最新條目的版號，以及
-# 發版的 git tag（必須是 `v<這個值>`）—— 三者由 `make check-version` 守著。
+# 欄位，兩個套件都 private，與這裡無關）。要一起改的是「這個 repo 自己那份 CHANGELOG」最新條目
+# 的版號，以及發版的 git tag（必須是 `v<這個值>`）—— 三者由 `make check-version` 守著
+# （那支會自己判斷這裡是模板還是下游）。
 APP_VERSION = "0.0.1"
 
 

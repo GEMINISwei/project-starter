@@ -317,11 +317,15 @@ jobs:
           cache-from: type=gha,scope=web-check
           cache-to: type=gha,scope=web-check,mode=max
 
-  # CHANGELOG 的守衛。
+  # CHANGELOG 的守衛，兩個方向。
   #
-  # `CHANGELOG.md` 與 `APP_VERSION` 是下游判斷「落後多少、同步要做什麼」的唯一依據
-  # （見 docs/downstream.md）。沒有這個 job，漏寫不會有任何提示，
+  # 一是**漏寫**：`CHANGELOG.template.md` 與 `APP_VERSION` 是下游判斷「落後多少、
+  # 同步要做什麼」的唯一依據（見 docs/downstream.md）。沒有這個 job，漏寫不會有任何提示，
   # 而下游要到合併衝突時才發現。
+  #
+  # 二是**寫錯地方**：根目錄的 `CHANGELOG.md` 從分家之後就屬於下游，模板不再碰它。
+  # 那個承諾如果只靠自律，某天一定會有人順手往那份加一筆 —— 而症狀是所有下游在下一次
+  # 同步時同時撞到衝突，且看不出是上游違規。所以這裡直接擋。
   #
   # 只在 pull_request 觸發：push 到 main 沒有可比較的基準。
   #
@@ -337,7 +341,7 @@ jobs:
           # 要跟 base 分支比對，所以需要完整歷史 —— 預設的淺 clone 找不到 merge-base。
           fetch-depth: 0
 
-      - name: 確認實質改動有留下 CHANGELOG 條目
+      - name: 確認實質改動有留下 CHANGELOG 條目、且沒有寫錯地方
         env:
           # 用 base ref 而不是寫死 main：日後開 release 分支時這個 job 不必跟著改。
           BASE_REF: ${{ github.base_ref }}
@@ -345,6 +349,10 @@ jobs:
         run: |
           # 放行方式：PR 標題帶 [skip changelog]。純重構、CI 調整這類不影響下游的改動
           # 不該被卡住 —— 但要**明講**，而不是預設放行。
+          #
+          # 底下兩條檢查共用這一個逃生門，不另開第二個：兩條守的是同一份紀律的兩面，
+          # 而「這個 PR 為什麼綠燈」的答案愈少愈好。真的要改那份種子檔（例如改它的說明）
+          # 就帶這個標記，理由寫在 PR 描述裡。
           case "$PR_TITLE" in
             *"[skip changelog]"*)
               echo "PR 標題帶 [skip changelog]，略過檢查"
@@ -355,19 +363,29 @@ jobs:
           base="origin/$BASE_REF"
           changed=$(git diff --name-only "$(git merge-base "$base" HEAD)" HEAD)
 
+          # 先擋寫錯地方。順序不能反 —— 反過來的話「條目寫進 CHANGELOG.md」會先被
+          # 判成「有寫條目」而放行，那正是要擋的情況。
+          if echo "$changed" | grep -qx 'CHANGELOG.md'; then
+            echo "::error::這個 PR 動到 CHANGELOG.md，但那份從分家之後屬於下游專案。"
+            echo "::error::模板自己的條目寫進 CHANGELOG.template.md（理由見那份的檔頭）。"
+            echo "::error::真的要改那份種子檔時，在 PR 標題加上 [skip changelog]。"
+            exit 1
+          fi
+
           # 只看會影響下游的三個目錄。文件與 .github/ 自己的改動不需要條目。
           if ! echo "$changed" | grep -qE '^(apps|scripts|infra)/'; then
             echo "沒有動到 apps/、scripts/ 或 infra/，不需要 CHANGELOG 條目"
             exit 0
           fi
 
-          if echo "$changed" | grep -qx 'CHANGELOG.md'; then
+          if echo "$changed" | grep -qx 'CHANGELOG.template.md'; then
             echo "OK: 實質改動已附上 CHANGELOG 條目"
             exit 0
           fi
 
-          echo "::error::這個 PR 動到 apps/、scripts/ 或 infra/，但沒有更新 CHANGELOG.md。"
-          echo "::error::請補一筆條目並寫明**下游同步時需要做什麼**（見 docs/downstream.md）。"
+          echo "::error::這個 PR 動到 apps/、scripts/ 或 infra/，但沒有更新 CHANGELOG.template.md。"
+          echo "::error::請補一筆條目，開頭帶同步影響標記並寫明**下游同步時需要做什麼**"
+          echo "::error::（標記的意思見 CHANGELOG.template.md 檔頭，make check-version 會擋）。"
           echo "::error::純重構或不影響下游時，在 PR 標題加上 [skip changelog]。"
           exit 1
 
@@ -509,7 +527,7 @@ jobs:
   # 以及直接在 GitHub 網頁上編輯檔案。
   #
   # 順帶救回 changelog job：那一個只在 pull_request 上跑，繞過 PR 等於繞過它，
-  # 而 CHANGELOG 是下游判斷同步事項的唯一依據。
+  # 而 CHANGELOG.template.md 是下游判斷同步事項的唯一依據。
   #
   # 只在 push 到 main 時跑，所以**不能列進 .github/rulesets/main.json 的必要檢查** ——
   # PR 上它根本不存在，列進去每個 PR 都會卡在等一個不會來的檢查（同 publish）。
