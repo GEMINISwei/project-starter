@@ -1,6 +1,9 @@
 name: CI
 
 on:
+  # **push 到 main 只跑 pushed-via-pr 與 publish**，測試那六個 job 全部跳過。
+  # 前提是 ruleset 已經匯入（strict：分支必須是最新才能 merge），完整理由與「沒匯入
+  # 該怎麼辦」寫在 api job 的註解上。tag push 不受這條影響，照跑全套。
   push:
     branches: [main]
     # 發版走 tag。tag push 也要跑完整套 CI —— publish job 會把 image 推上 registry，
@@ -10,10 +13,12 @@ on:
   pull_request:
     branches: [main]
     # 預設只有 opened／synchronize／reopened。**`ready_for_review` 非加不可**：
-    # 有三個 job 在 draft 上是跳過的（acceptance、deploy-config、e2e，各自的理由見那三個
+    # 有三個 job 在 draft 上是跳過的（deploy-config、e2e、security，各自的理由見那三個
     # job），而「按下 Ready for review」本身不推 commit —— 少了這個事件，CI 不會重跑，
     # 那三個就永遠停在 skipped，而 skipped 對 required status check 算通過。
     # 加上它，那三個才會在「draft → ready」的那一刻於同一個 SHA 上真的跑一次。
+    # （pr-checks 裡的驗收條件那一步也靠這個事件補跑，但它是 step 層的跳過，
+    # 不會蓋掉 job 的結論 —— 差別寫在那一步的註解上。）
     #
     # 其餘的 job 在這個事件上**照樣重跑**，即使 SHA 沒變。為什麼不省下那一輪，
     # 見 api job 的註解（試過，會讓 PR 頁面說謊）。
@@ -51,9 +56,21 @@ jobs:
   api:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # 排程不跑。那條 cron 存在的理由只有 security job（見 `on:` 的註解）——
-    # 相依全是釘死的 lock 檔，每週重跑 ruff／mypy／pytest 測不到任何新東西，
-    # 這正是 e2e 當初被排除的同一個判斷，只是其餘 job 一直沒跟上。
+    # **只在 PR 與 tag 上跑。** 三種不跑的情況，理由各不相同：
+    #
+    #   schedule       那條 cron 存在的理由只有 security job（見 `on:` 的註解）——
+    #                  相依全是釘死的 lock 檔，每週重跑 ruff／mypy／pytest 測不到任何
+    #                  新東西。這正是 e2e 當初被排除的同一個判斷。
+    #
+    #   push 到 main   **前提是 ruleset 已經匯入**：它的 strict 政策要求「分支必須是最新的
+    #                  才能 merge」，所以 PR head 的 tree 就等於 merge 之後的 tree ——
+    #                  這一輪重跑的是同一棵樹，零新資訊，而實測要 12 分鐘。
+    #                  沒有匯入 ruleset 的話這個推論不成立（main 可能在 PR 開著的時候
+    #                  前進），那時候請把這裡改回 `github.event_name != 'schedule'`。
+    #                  匯入與否 repo 裡看不到，`make check-ci` 也守不到，見
+    #                  docs/development.md 的〈分支保護〉。
+    #
+    #   draft          **不跳過**，理由見下一段。
     #
     # **不要再加 `github.event.action != 'ready_for_review'`。** 那看起來很划算 ——
     # 按下 Ready 不改變 SHA，這個 job 在 draft 期間已經對同一份 tree 跑綠過了，
@@ -64,9 +81,9 @@ jobs:
     #
     # 「跳過」跟「從頭到尾沒跑過」在那個畫面上完全一樣，而 skipped 對 required status
     # check 算通過。等於在最需要看清楚的那一刻（merge 前）把訊號拿掉，
-    # 換 6 分鐘不划算。draft 期間跳過 deploy-config 與 e2e 是另一回事：
-    # 那兩個接著就會在 ready_for_review 補跑，最新那筆是真的結果。
-    if: github.event_name != 'schedule'
+    # 換 6 分鐘不划算。draft 期間跳過 deploy-config、e2e 與 security 是另一回事：
+    # 那三個接著就會在 ready_for_review 補跑，最新那筆是真的結果。
+    if: github.event_name == 'pull_request' || github.ref_type == 'tag'
     defaults:
       run:
         working-directory: apps/api
@@ -152,7 +169,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # 條件與理由同 api job。
-    if: github.event_name != 'schedule'
+    if: github.event_name == 'pull_request' || github.ref_type == 'tag'
     defaults:
       run:
         working-directory: apps/web
@@ -196,9 +213,11 @@ jobs:
   deploy-config:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # 兩個不跑的情況：
+    # 三個不跑的情況：
     #
-    #   schedule  理由同 api job。
+    #   schedule       理由同 api job。
+    #
+    #   push 到 main   理由同 api job（ruleset 的 strict 政策讓那一輪成為零新資訊）。
     #
     #   draft     **跟 acceptance 那個 job 的理由不同** —— 那邊是「draft 上必定紅」，
     #             這邊純粹是計費。這是整套裡最貴的 job（實測 4m42s，而 GitHub 是逐 job
@@ -209,7 +228,9 @@ jobs:
     #             靠 `on:` 的 ready_for_review 在同一個 SHA 上補跑一次。**那個事件
     #             缺一不可**，理由寫在 `on:` 那裡（skipped 對 required check 算通過）。
     #             draft 期間要看這盞紅綠燈就自己跑 `make check-compose`。
-    if: github.event_name != 'schedule' && !github.event.pull_request.draft
+    if: >-
+      (github.event_name == 'pull_request' && !github.event.pull_request.draft)
+      || github.ref_type == 'tag'
     steps:
       - uses: actions/checkout@v7
 
@@ -317,34 +338,48 @@ jobs:
           cache-from: type=gha,scope=web-check
           cache-to: type=gha,scope=web-check,mode=max
 
-  # CHANGELOG 的守衛，兩個方向。
+  # 三件 PR-only 的紀律檢查，合在同一個 job 裡。
   #
-  # 一是**漏寫**：`CHANGELOG.template.md` 與 `APP_VERSION` 是下游判斷「落後多少、
-  # 同步要做什麼」的唯一依據（見 docs/downstream.md）。沒有這個 job，漏寫不會有任何提示，
-  # 而下游要到合併衝突時才發現。
+  # **為什麼合併**：三個各自只跑 4～6 秒，而 GitHub 是**逐 job 進位到整分鐘**計費的 ——
+  # 拆開的帳單是 3 分鐘，合起來是 1 分鐘，而多付的三分之二買到的是 job 的啟動，
+  # 不是任何檢查。一輪 PR 的實測是 7 分鐘的工作、14 分鐘的帳單，這三支就佔了其中 3 分。
   #
-  # 二是**寫錯地方**：根目錄的 `CHANGELOG.md` 從分家之後就屬於下游，模板不再碰它。
-  # 那個承諾如果只靠自律，某天一定會有人順手往那份加一筆 —— 而症狀是所有下游在下一次
-  # 同步時同時撞到衝突，且看不出是上游違規。所以這裡直接擋。
+  # **這推翻了原本「不跟 changelog 併成一個 job」的決定。** 那段理由是「兩者的放行條件
+  # 不同，併起來之後『這個 PR 為什麼綠燈』會取決於兩組規則的交互」—— 顧慮本身成立，
+  # 但當初沒把計費算進去。折衷是**三個檢查各自一個 step**，各自保留自己的逃生門與訊息：
+  # PR 頁面上只剩一盞燈，但點進去是哪一步紅的一目了然，交互也還是三條各自獨立的規則。
   #
-  # 只在 pull_request 觸發：push 到 main 沒有可比較的基準。
-  #
-  # **下游專案可以整個刪掉這個 job。** 它守的是模板自己的發布紀律；下游有自己的
-  # CHANGELOG 節奏，不該被上游的規則綁住。
-  changelog:
+  # 只在 pull_request 觸發：三個都要讀 PR 描述或跟 base 比對，push 上兩者都沒有。
+  # checkout 只做一次，`fetch-depth: 0` 是 changelog 與 test-edits 共同的需求
+  # （淺 clone 找不到 merge-base，而 test-edits 找不到時是**跳過**不是失敗 ——
+  # 那會讓它靜靜地什麼都沒驗）。
+  pr-checks:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     if: github.event_name == 'pull_request'
     steps:
       - uses: actions/checkout@v7
         with:
-          # 要跟 base 分支比對，所以需要完整歷史 —— 預設的淺 clone 找不到 merge-base。
           fetch-depth: 0
 
-      - name: 確認實質改動有留下 CHANGELOG 條目、且沒有寫錯地方
+      # CHANGELOG 的守衛，兩個方向。
+      #
+      # 一是**漏寫**：`CHANGELOG.template.md` 與 `APP_VERSION` 是下游判斷「落後多少、
+      # 同步要做什麼」的唯一依據（見 docs/downstream.md）。沒有它，漏寫不會有任何提示，
+      # 而下游要到合併衝突時才發現。
+      #
+      # 二是**寫錯地方**：根目錄的 `CHANGELOG.md` 從分家之後就屬於下游，模板不再碰它。
+      # 那個承諾如果只靠自律，某天一定會有人順手往那份加一筆 —— 而症狀是所有下游在下一次
+      # 同步時同時撞到衝突，且看不出是上游違規。
+      #
+      # **下游專案可以把這一步刪掉。** 它守的是模板自己的發布紀律；下游有自己的
+      # CHANGELOG 節奏，不該被上游的規則綁住。
+      - name: CHANGELOG 條目沒有漏寫、也沒有寫錯地方
         env:
           # 用 base ref 而不是寫死 main：日後開 release 分支時這個 job 不必跟著改。
           BASE_REF: ${{ github.base_ref }}
+          # 一律經由 env 傳入，**不要內插進 run 的腳本字串**：標題與描述是任何人都能
+          # 編輯的內容，內插等於讓 PR 作者在 runner 上執行任意指令。底下兩步同理。
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           # 放行方式：PR 標題帶 [skip changelog]。純重構、CI 調整這類不影響下游的改動
@@ -389,53 +424,27 @@ jobs:
           echo "::error::純重構或不影響下游時，在 PR 標題加上 [skip changelog]。"
           exit 1
 
-  # 功能級規格那一層的檢查器（見 docs/development.md 的「規格與測試的三層」）。
-  #
-  # **只在 PR 上跑**：它讀的是 PR 描述，push 與 schedule 上沒有那個東西 ——
-  # 所以它進不了 deploy-config job，只能自己一個，同 changelog。
-  #
-  # 不跟 changelog 併成一個 job：兩者的放行條件不同（changelog 看改了哪些目錄、
-  # acceptance 看標題），併起來之後「這個 PR 為什麼綠燈」會取決於兩組規則的交互，
-  # 而那正是要有人一眼看懂的東西。
-  #
-  # **draft 上不跑。** 流程是先開 draft PR 寫驗收條件、再寫測試，所以它在 draft 期間
-  # 必定是紅的 —— 而 draft PR 本來就 merge 不進去，那個紅燈擋不到任何東西，只會讓
-  # checks 清單上「預期中的紅」與「真的壞了」長得一模一樣。這是整套 CI 裡唯一一處
-  # 紅燈不代表有事的地方，所以拿掉。代價是驗收條件的紅綠燈要自己跑 `make check-acceptance`
-  # （它讀得到當前分支的 PR），換來的是 PR 頁面上的紅一律代表有事。
-  #
-  # 跳過而不是失敗，配合上面 `on:` 的 `ready_for_review` —— 兩者缺一就會開洞，
-  # 理由寫在那裡。
-  acceptance:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: 確認每條驗收條件都指得出一個存在的測試
+      # 功能級規格那一層的檢查器（見 docs/development.md 的「規格與測試的三層」）。
+      #
+      # **draft 上不跑。** 流程是先開 draft PR 寫驗收條件、再寫測試，所以它在 draft 期間
+      # 必定是紅的 —— 而 draft PR 本來就 merge 不進去，那個紅燈擋不到任何東西，只會讓
+      # checks 清單上「預期中的紅」與「真的壞了」長得一模一樣。這是整套 CI 裡唯一一處
+      # 紅燈不代表有事的地方，所以拿掉。代價是驗收條件的紅綠燈要自己跑
+      # `make check-acceptance`（它讀得到當前分支的 PR），換來的是 PR 頁面上的紅一律代表有事。
+      #
+      # **這裡是 step 層的 if，跟 job 層的跳過不是同一件事**：這一步被跳過時整個
+      # pr-checks 仍然是 success，所以不會出現「skipped 蓋掉 success」的問題
+      # （那個問題與實測見 api job 的註解）。job 層則靠 `on:` 的 ready_for_review
+      # 讓整支在按下 Ready 的那一刻於同一個 SHA 上重跑一次。
+      - name: 每條驗收條件都指得出一個存在的測試
+        if: '!github.event.pull_request.draft'
         env:
-          # 一律經由 env 傳入，**不要內插進 run 的腳本字串**：標題與描述是任何人都能
-          # 編輯的內容，內插等於讓 PR 作者在 runner 上執行任意指令。上面的 changelog
-          # job 同理。
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: make check-acceptance
 
-  # 實作級規格的防線：改動或刪掉既有測試時，要求 PR 描述說明為什麼。
-  #
-  # 同樣是 PR-only（要讀 PR 描述），而且**要完整歷史** —— 它跟 base 的 merge-base 比對，
-  # 淺 clone 找不到共同祖先，那時它會跳過而不是失敗，於是這個 job 靜靜地什麼都沒驗。
-  test-edits:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: 確認改動到既有測試時有說明
+      # 實作級規格的防線：改動或刪掉既有測試時，要求 PR 描述說明為什麼。
+      - name: 改動到既有測試時有說明
         env:
           BASE_REF: ${{ github.base_ref }}
           PR_TITLE: ${{ github.event.pull_request.title }}
@@ -456,7 +465,11 @@ jobs:
     # draft 期間也不跑，理由同 deploy-config job：計費，而且它回答的問題只有在準備
     # merge 那一刻才需要答案。同樣靠 `on:` 的 ready_for_review 在同一個 SHA 上補跑。
     # draft 期間要看這盞紅綠燈就自己跑 `make e2e`。
-    if: github.event_name != 'schedule' && !github.event.pull_request.draft
+    #
+    # push 到 main 也不跑，理由同 api job。**tag 照跑** —— 那份 image 要上線。
+    if: >-
+      (github.event_name == 'pull_request' && !github.event.pull_request.draft)
+      || github.ref_type == 'tag'
     steps:
       - uses: actions/checkout@v7
 
@@ -526,7 +539,7 @@ jobs:
   # 並涵蓋 hook 管不到的情況：沒跑過 `make setup` 的機器、`--no-verify`、
   # 以及直接在 GitHub 網頁上編輯檔案。
   #
-  # 順帶救回 changelog job：那一個只在 pull_request 上跑，繞過 PR 等於繞過它，
+  # 順帶救回 pr-checks：那一個只在 pull_request 上跑，繞過 PR 等於繞過它，
   # 而 CHANGELOG.template.md 是下游判斷同步事項的唯一依據。
   #
   # 只在 push 到 main 時跑，所以**不能列進 .github/rulesets/main.json 的必要檢查** ——
@@ -569,7 +582,7 @@ jobs:
           fi
 
           echo "::error::commit $GITHUB_SHA 直接進了 main，沒有經過 PR。"
-          echo "::error::CI 的 changelog job 只在 PR 上跑，這次等於繞過了它。"
+          echo "::error::CI 的 pr-checks 只在 PR 上跑，這次等於繞過了它。"
           echo "::error::本機的 .githooks/pre-push 會擋這件事；沒被擋下來代表那台機器"
           echo "::error::沒跑過 make setup，或用了 --no-verify，或是在網頁上直接編輯。"
           exit 1
@@ -578,9 +591,20 @@ jobs:
   #   1. 它查的是外部 advisory 資料庫，會因為「今天有人公布了新漏洞」而變紅 —— 那跟這個 PR
   #      改了什麼無關，混在程式碼的 job 裡會讓人分不清是自己弄壞的還是外面變了。
   #   2. 它需要網路，而 `make check` 刻意保持可離線執行（見 scripts/audit.sh 的檔頭註解）。
+  #
+  # **draft 上不跑**：它查的資料庫一天最多變一次，而 draft push 是整個流程裡次數最多的
+  # 事件 —— 每次推都問一次同一個外部資料庫，得到的是同一個答案。按下 Ready 時補跑一次，
+  # 每週一的 cron 再跑一次，這兩個才是它真正的落點。
+  #
+  # push 到 main 也不跑，理由同 api job。**schedule 與 tag 都要跑**：前者是這個 job
+  # 存在的理由，後者是要上線的東西。
   security:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    if: >-
+      github.event_name == 'schedule'
+      || (github.event_name == 'pull_request' && !github.event.pull_request.draft)
+      || github.ref_type == 'tag'
     steps:
       - uses: actions/checkout@v7
 
@@ -611,7 +635,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # 條件與理由同 api job。
-    if: github.event_name != 'schedule'
+    if: github.event_name == 'pull_request' || github.ref_type == 'tag'
     steps:
       - uses: actions/checkout@v7
 
@@ -656,15 +680,28 @@ jobs:
   publish:
     needs: [api, web, deploy-config, security, api-types-up-to-date, e2e]
     # PR 不推 image：fork 來的 PR 拿不到 packages: write，而且未經審查的分支
-    # 本來就不該產出可部署的產物。changelog job 刻意不列進 needs —— 它是 PR-only，
-    # 在 push 上是 skipped，而 needs 一個 skipped 的 job 會讓這裡也跟著 skip
-    # （acceptance 與 test-edits 同理，兩者也都是 PR-only）。
+    # 本來就不該產出可部署的產物。pr-checks 刻意不列進 needs —— 它是 PR-only，
+    # 在 push 上是 skipped。
     #
-    # **e2e 要列進來**：它在 push 上會跑（只排除了 schedule，而這裡本來就 `if: push`），
-    # 所以不會有 skip 傳染的問題。少了它的話，e2e 紅燈時 image 照樣會帶著 `main` 與
-    # `sha-xxx` 兩個 tag 推上 registry —— 部署那一關雖然還是擋得住（deploy.yml 看的是
-    # 整個 CI run 的 conclusion），但 registry 裡多一份明知有問題的產物本身就不對。
-    if: github.event_name == 'push'
+    # **`always()` 非有不可，而且它是這個 job 最容易寫錯的地方。** needs 裡那六個現在
+    # 只在 tag 上跑（見它們各自的註解），push 到 main 時全部是 skipped ——
+    # 而 needs 一個 skipped 的 job，預設會讓這裡也跟著 skip，`if` 根本不會被求值。
+    # `always()` 讓 if 照樣求值，後面兩條 contains 再把「真的失敗或被取消」擋掉。
+    # 少了 always()，症狀是 main 上永遠不再推 image，而且 publish 顯示 skipped，
+    # 看起來像設定正確。
+    #
+    # 兩種觸發路徑因此有不同的保證，要分清楚：
+    #
+    #   tag    六個 job 都真的在這個 commit 上跑過，全綠才走到這裡。那份 image 要上線。
+    #
+    #   main   六個都是 skipped。這份 image 的證據來自「同一棵 tree 在 PR 上綠過」，
+    #          而那個等式由 ruleset 的 strict 政策撐住（分支必須是最新才能 merge）。
+    #          **這是推論，不是在這個 commit 上的觀測** —— 換來的是每次 merge 少 12 分鐘。
+    #          不接受這個推論的話，把 needs 那六個的 `if` 改回 `!= 'schedule'` 即可。
+    if: >-
+      always() && github.event_name == 'push'
+      && !contains(needs.*.result, 'failure')
+      && !contains(needs.*.result, 'cancelled')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:

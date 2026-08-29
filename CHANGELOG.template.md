@@ -25,6 +25,23 @@
 
 ### 變更
 
+- **[同步:要動手]** CI 重新分配各階段跑哪些 job。以「一次 draft push + Ready + merge」計，
+  帳單從約 34 分鐘降到約 19 分鐘（實測值，不含 `publish`）：
+  - **merge 到 `main` 只跑 `pushed-via-pr` 與 `publish`**，測試那六個 job 全部跳過。
+    **這一條的前提是匯入 `.github/rulesets/main.json`**（strict：分支必須是最新才能
+    merge，PR head 的 tree 才等於 merge 後的 tree）。**下游同步後要做的就是這件事** ——
+    沒有匯入 ruleset 的話，把那六個 job 的 `if` 改回 `github.event_name != 'schedule'`。
+  - `changelog`、`acceptance`、`test-edits` 三個 job 合併成 `pr-checks`（三個 step）。
+    GitHub 逐 job 進位到整分鐘計費，三支各跑 4～6 秒卻各收一分鐘。
+    **ruleset 的 required check 也跟著換成 `pr-checks`**，`make check-ci` 在守。
+  - `security` 在 draft 期間不跑：它查的外部資料庫一天最多變一次，
+    而 Ready 與每週一的 cron 已經是兩個落點。
+  - tag build 完全不受影響，照跑全套 —— 那份 image 就是要上線的東西。
+- **[同步:無]** dependabot 的三個基底映像 entry 從 monthly 改回 weekly。
+  當初改 monthly 的理由是計費，而那個理由已經被上面那條與「repo 轉 public」拿掉了。
+  下游是 private 而且分鐘數吃緊的話，改回 monthly 是一行的事，見
+  [`docs/downstream.md`](docs/downstream.md#actions-分鐘數與-dependabot)。
+
 - **[同步:要動手]** 模板與下游的變更紀錄分家：模板的搬到
   `CHANGELOG.template.md`，根目錄的 [`CHANGELOG.md`](CHANGELOG.md) 從此**屬於下游**。
   已經在用的下游同步這一筆時：把 `CHANGELOG.md` 裡自己寫的條目留著（合併衝突時選自己那邊），

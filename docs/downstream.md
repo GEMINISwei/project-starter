@@ -169,7 +169,7 @@ git diff HEAD template/main -- CHANGELOG.template.md
 那份檔案**只有上游在寫**，所以這個 diff 是單向的：新增行就是你還沒有的條目。
 每一筆開頭的標記直接告訴你要不要動手，`make sync` 印出來的兩堆就是照它分的。
 
-上游 CI 的 `changelog` job 會擋掉「動了 `apps/`／`scripts/`／`infra/` 卻沒留條目」的 PR，
+上游 CI 的 `pr-checks` 會擋掉「動了 `apps/`／`scripts/`／`infra/` 卻沒留條目」的 PR，
 所以這份清單相當可信。**但它有一個放行方式**（PR 標題帶 `[skip changelog]`，
 給純重構與相依升級用）。要百分之百確認的話請直接看程式碼：
 
@@ -186,12 +186,11 @@ git diff HEAD template/main --stat -- apps/ scripts/ infra/
 | 檔案／job | 下游要做什麼 |
 |---|---|
 | `ci.yml` 的 `api`／`web`／`deploy-config`／`security`／`api-types-up-to-date` | 直接用 |
-| `ci.yml` 的 `acceptance`／`test-edits` | **看你怎麼開發。** PR 驗收條件與既有測試改動的要求，見 [`development.md`](development.md#規格與測試的三層)。兩支的價值來自跟 AI agent 協作時「規格與測試需要一個機器守得住的落點」—— 純人力團隊的 review 讀得到那種 diff，那就可以刪 |
+| `ci.yml` 的 `pr-checks` | **三個 step 各自決定，job 本身留著。** 「CHANGELOG」那一步守的是模板的發布紀律，下游有自己的節奏，**可以刪掉那一步**；「驗收條件」與「改到既有測試」兩步**看你怎麼開發**（要求見 [`development.md`](development.md#規格與測試的三層)），它們的價值來自跟 AI agent 協作時「規格與測試需要一個機器守得住的落點」—— 純人力團隊的 review 讀得到那種 diff，那就可以刪。三步全刪的話整個 job 拿掉，ruleset 也要跟著拿掉 `pr-checks` 這個 context，不然 `make check-ci` 會紅 |
 | `ci.yml` 的 `e2e` | 直接用。操作與範圍見 [`development.md`](development.md#e2e-的範圍)；移除範例模組時同步清掉對應測試，見 [`architecture.md`](architecture.md#移除-module) |
 | `ci.yml` 的 `pushed-via-pr` | 直接用。它在「沒經過 PR 就進了 `main`」時紅燈，是分支保護的第二層 |
 | `.githooks/pre-push` | 直接用，`make setup` 會掛上。第一層，擋直接 push 與 force push |
-| `.github/rulesets/main.json` | **選配**。repo 是 public 或付費方案時匯入一次，就有真正的伺服器端強制；private + 免費方案設不了（403），留著那個檔案也無妨 |
-| `ci.yml` 的 `changelog` | **可以刪。** 它守的是模板自己的發布紀律，下游有自己的節奏。刪的話 ruleset（若你有匯入）也要拿掉 `changelog` 那個 context，不然 `make check-ci` 會紅 |
+| `.github/rulesets/main.json` | **強烈建議匯入，而且它不只是分支保護。** repo 是 public 或付費方案時匯入一次（private + 免費方案設不了，403）。`ci.yml` 讓 merge 到 `main` 那一輪不重跑測試，**前提就是它的 strict 政策**（分支必須是最新才能 merge）—— 沒匯入的話那個推論不成立，要照 [`development.md`](development.md#4-測試) 說的把六個 job 的 `if` 改回去 |
 | `ci.yml` 的 `publish`、`deploy.yml` | 要用 registry 部署才留，不用就照下面的清單刪掉 |
 
 若自訂過 `.github/PULL_REQUEST_TEMPLATE.md`，同步時保留「驗收條件」與「改動到既有測試」
@@ -222,9 +221,16 @@ git diff HEAD template/main --stat -- apps/ scripts/ infra/
 先看有沒有更大的槓桿：**repo 如果可以 public，Actions 分鐘數無限**，這一節就不用看了
 （順帶連 [`main.json`](../.github/rulesets/main.json) 也才匯得進去，見上面那張表）。
 
-private 的話，最大的一筆固定開銷是 dependabot —— 不是因為它慢，是因為**每個 PR 都要
-跑兩輪完整 CI**（開 PR 一輪、merge 一輪，模板實測各 12～18 分鐘），而那個成本跟
-「這次有沒有東西可更新」無關，只跟開了幾個 PR 有關。
+private 的話，先確認兩件已經做在模板裡的事還在，它們比刪 dependabot entry 有效得多：
+
+- **merge 到 `main` 那一輪不重跑測試**（省約 12 分鐘／次），前提是匯入了 ruleset ——
+  見上面那張表與 [`development.md`](development.md#4-測試)。
+- **秒級的檢查合併成一個 `pr-checks`**。GitHub 是逐 job 進位到整分鐘計費的，
+  所以新增 job 的下限成本是一分鐘，跟它跑多久無關。
+
+做完這兩件之後，dependabot 的成本已經從「每個 PR 兩輪完整 CI」降到「一輪」。
+那一輪仍然是它最主要的開銷，而且跟「這次有沒有東西可更新」無關，只跟開了幾個 PR 有關 ——
+所以下面這張表仍然有用，只是沒有原本那麼急。
 
 [`.github/dependabot.yml`](../.github/dependabot.yml) 會**原封不動跟著模板複製過來**，
 所以下游預設是照跑六組的。要省的話按「這份 manifest 是誰擁有的」切：
@@ -233,6 +239,11 @@ private 的話，最大的一筆固定開銷是 dependabot —— 不是因為�
 |---|---|---|
 | `docker` ×2、`docker-compose`、`github-actions` | **刪掉** | `Dockerfile`、compose 與 `.github/` 都是模板擁有的，升版會隨著[拉模板的更新](#拉模板的更新)一起帶過來 —— 而且是一個 PR 帶全部，不是四組各開各的 |
 | `uv`、`npm` ×2 | **不能全刪** | 下游會裝自己的相依，而模板對那些一無所知。只靠同步的話它們永遠不會被更新，那正是 `make audit` 掃得到、模板卻補不了的一層 |
+
+三個基底映像的 entry 如果留著，可以把它們的 `schedule.interval` 從 `weekly` 改成
+`monthly`（模板出廠是 weekly）。**代價**：基底映像沒有 `make audit` 也沒有任何紅燈在守，
+OS 層的 CVE 最多會延後一個月修補，期間完全沒有症狀。理由寫在
+[`.github/dependabot.yml`](../.github/dependabot.yml) 的基底映像那一段。
 
 `uv`／`npm` 那三組如果還是太貴，有個折衷：把它們也刪掉，改在 repo 的
 **Settings → Code security** 開 Dependabot security updates。那是獨立於這個檔案的開關，

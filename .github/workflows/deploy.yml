@@ -84,6 +84,12 @@ jobs:
         # 賽跑 —— 輸的那一方是「pull 不到 tag」，看起來像 registry 壞掉，
         # 實際上只是 publish 還沒推完。所以照樣等。
         #
+        # **這個綠燈在兩條路徑上的意義不同，不要誤讀。** 部署一個 tag 時，那次 run
+        # 真的跑過全套測試；部署 `main` 上的某個 commit 時，那次 run 只有
+        # `pushed-via-pr` 與 `publish`（見 ci.yml 的 api job 註解）——
+        # 測試的證據在該 PR 的 run 上，靠 ruleset 的 strict 政策保證是同一棵 tree。
+        # 也就是說這一步在 main 路徑上驗到的是「image 建得出來、而且這個 commit 經過 PR」。
+        #
         # **要篩 event == push，不能只取最新一筆。** publish job 帶 `if: push`，
         # 所以 pull_request 那次 run 是「綠燈但沒有推任何 image」。一個只進過 PR、
         # 從沒合進 main 也沒被 tag 的 commit，CI 看起來是成功的，而 image 不存在 ——

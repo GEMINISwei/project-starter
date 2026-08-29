@@ -170,8 +170,8 @@ make dev
 那排 `check-*` 也都不在 `make check` 裡，因為 `check` 涵蓋的是**原始碼**，而它們守的是
 設定、產出物、文件與 shell 腳本 —— 那類東西壞掉時，lint／typecheck／test／build
 全部照樣綠燈。它們各自掛在該掛的地方：`check-contracts` 由 `gen-types` 跑完自動叫一次，
-`check-acceptance` 與 `check-test-edits` 要讀 PR 描述，所以在 CI 各有自己的 PR-only job
-（比照 `changelog`），其餘全部在 CI 的 `deploy-config` job。
+`check-acceptance` 與 `check-test-edits` 要讀 PR 描述，所以跟 CHANGELOG 的守衛一起
+收在 CI 的 PR-only job `pr-checks` 裡（各一個 step），其餘全部在 CI 的 `deploy-config` job。
 改過 `.env.example`、`scripts/init.sh`、compose 檔、
 nginx 模板、任何 `scripts/*.sh` 或任何 `.md` 之後，本機補跑一次對應的那支最快。
 
@@ -215,7 +215,7 @@ nginx 模板、任何 `scripts/*.sh` 或任何 `.md` 之後，本機補跑一次
 三件操作上要先知道的事。**測試還沒寫時它是紅的**，那是刻意的 —— 流程是先開 draft PR
 寫驗收條件、再寫測試，所以它就是功能級的紅綠燈（見〈落點要在動手之前存在〉）。
 **還沒有 PR 時它直接跳過**，所以本機在開 draft PR 之前跑它不會失敗。**逃生門是 PR 標題的
-`[skip acceptance]`**，比照 `changelog` job 的 `[skip changelog]`：純文件、CI 調整、相依升級
+`[skip acceptance]`**，比照 `pr-checks` 裡 CHANGELOG 那一步的 `[skip changelog]`：純文件、CI 調整、相依升級
 那類沒有行為變更的改動用它 —— 但要明講，而不是讓某個條件預設放行。
 
 它順帶擋掉一件覆蓋率門檻擋不到的事：**驗收條件指名的測試被刪掉**。門檻是防退步的地板、
@@ -266,7 +266,7 @@ nginx 模板、任何 `scripts/*.sh` 或任何 `.md` 之後，本機補跑一次
    並帶 `[同步:破壞性]` 標記。
 4. **跨 major 的升級要自己補 CHANGELOG 條目。** dependabot 開的 PR 標題一律帶
    `[skip changelog]`（設定在 [`../.github/dependabot.yml`](../.github/dependabot.yml)，
-   理由寫在那裡），所以 CI 的 `changelog` job 不會提醒你。minor/patch 本來就不需要條目，
+   理由寫在那裡），所以 CI 的 `pr-checks` 不會提醒你。minor/patch 本來就不需要條目，
    但跨 major 對下游是有事要做的 —— 往 dependabot 的分支上推一個 commit 補進去。
    這不算額外負擔：規則 3 已經要求跨 major 升完要另外驗部署那一層，人本來就得停下來。
 
@@ -310,7 +310,7 @@ review 時一眼看得出來，為它們多養一個工具與一份設定不划�
 **寫進 [`../CHANGELOG.template.md`](../CHANGELOG.template.md)，不是根目錄的
 `CHANGELOG.md`。** 那一份屬於下游專案，模板不再碰它 —— 兩份分家的理由寫在
 `CHANGELOG.template.md` 的檔頭（一句話：同一個區塊有兩個 owner 的話，每次同步都衝突，
-而那份 diff 也不再讀得出「我落後多少」）。寫錯地方由 CI 的 `changelog` job 擋。
+而那份 diff 也不再讀得出「我落後多少」）。寫錯地方由 CI 的 `pr-checks` 擋。
 
 **每一筆條目開頭要帶同步影響標記**，三選一：
 
@@ -362,7 +362,7 @@ review 時一眼看得出來，為它們多養一個工具與一份設定不划�
 
 三件事裡 **force push 是唯一嚴重的**：這個 repo 被當成模板時，下游是靠
 `git merge template/main` 同步的，`main` 一旦被改寫，所有下游的共同祖先就消失，
-而那要每個下游各自處理。另外兩件的代價是「繞過 `changelog` job」，可以補救。
+而那要每個下游各自處理。另外兩件的代價是「繞過 `pr-checks`」，可以補救。
 
 #### 可選：repo 是 public 或付費方案的話
 
@@ -420,17 +420,31 @@ cd apps/web && npm test                   # 前端
 CI（[設定來源](../.github/workflows/ci.yml)）在 push 到 `main`、push `v*` tag、
 PR to `main`，以及每週一的排程上執行（排程的理由見下面的[安全 advisory](#安全-advisory)）。
 
-**不是每個階段都跑全部。** 免費方案每月 2000 分鐘，而 GitHub 是**逐 job 進位到整分鐘**
-計費的，所以階段分工是照「這個階段真的需要哪個答案」切的：
+**不是每個階段都跑全部**，因為每個階段需要的答案不同：
 
-| 階段 | 跑什麼 |
-| --- | --- |
-| 開 draft PR（空 commit） | 什麼都不跑 —— commit message 帶 `[skip ci]`，見〈[先寫規格，再寫程式](#落點要在動手之前存在)〉 |
-| draft 期間的每次 push | 除了 `deploy-config`、`e2e`、`acceptance` 以外全部 |
-| 按下 Ready for review | 全部 —— `deploy-config`、`e2e`、`acceptance` 是第一次跑，其餘是重跑 |
-| Ready 之後再 push | 全部 |
-| merge 到 `main` | 全部，加上 `publish` |
-| 每週一排程 | 只有 `security` |
+| 階段 | 跑什麼 | 帳單 |
+| --- | --- | --- |
+| 開 draft PR（空 commit） | 什麼都不跑 —— commit message 帶 `[skip ci]`，見〈[先寫規格，再寫程式](#落點要在動手之前存在)〉 | 0 |
+| draft 期間的每次 push | `api`、`web`、`api-types-up-to-date`、`pr-checks`（驗收條件那一步跳過） | 約 6 分 |
+| 按下 Ready for review | 全部 —— `deploy-config`、`e2e`、`security` 是第一次跑，其餘是重跑 | 約 12 分 |
+| Ready 之後再 push | 全部 | 約 12 分 |
+| merge 到 `main` | **只有 `pushed-via-pr` 與 `publish`** | 1 分加 `publish` |
+| push `v*` tag | 全部，加上 `publish` | |
+| 每週一排程 | 只有 `security` | 1 分 |
+
+**merge 那一輪不重跑測試，前提是 ruleset 已經匯入。** 它的
+`strict_required_status_checks_policy` 要求「分支必須是最新的才能 merge」，所以 PR head
+的 tree 就等於 merge 之後的 tree —— 那一輪重跑的是同一棵樹，零新資訊，實測 12 分鐘。
+**沒有匯入 ruleset 的話這個推論不成立**（`main` 可能在 PR 開著的時候前進），那時候要把
+`ci.yml` 裡那六個 job 的 `if` 改回 `github.event_name != 'schedule'`。匯入與否 repo 裡
+看不到、`make check-ci` 也守不到，見〈[分支保護](#分支保護)〉。
+tag build 不受這條影響，照跑全套 —— 那份 image 就是要上線的東西。
+
+**切 job 的成本不是零。** GitHub 是**逐 job 進位到整分鐘**計費的：一輪完整 PR 實測是
+7 分鐘的工作、14 分鐘的帳單，差額全部是那些只跑幾秒的 job 各自被收滿一分鐘。所以
+`changelog`、`acceptance`、`test-edits` 三支（各 4～6 秒）合併成一個 `pr-checks`，
+三個 step 各自保留自己的逃生門。**要新增 job 之前先問「這盞燈值得一分鐘嗎」** ——
+值得的理由通常是「需要獨立的紅綠燈」或「可以跟別的 job 平行」，不是「這件事跟那件事不一樣」。
 
 **按下 Ready 時其餘 job 照樣重跑，即使 SHA 沒變。** 這看起來很浪費（同一份 tree
 必得同一個答案），但試過不行：被跳過的 job **仍然會產生一筆 `skipped` 的 check run**，
@@ -438,36 +452,41 @@ PR to `main`，以及每週一的排程上執行（排程的理由見下面的[�
 `api — skipping`，跟「這個 PR 從頭到尾沒跑過 api」長得一模一樣。完整論證與實測結果在
 [`ci.yml`](../.github/workflows/ci.yml) 的 `api` job 註解上。
 
-`deploy-config` 與 `e2e` 在 draft 期間跳過則沒有這個問題：它們接著就會在
-`ready_for_review` 補跑，最新那筆是真的結果。
+`deploy-config`、`e2e` 與 `security` 在 draft 期間跳過則沒有這個問題：它們接著就會在
+`ready_for_review` 補跑，最新那筆是真的結果。`pr-checks` 裡的驗收條件那一步是
+**step 層**的跳過，跳過時整個 job 仍然是 `success`，所以連這個問題都不會碰到。
 
-- **api**（**排程不跑**）：ruff → mypy → pytest（會起一個 PostgreSQL 跑整合測試）
+- **api**（**只在 PR 與 tag 上跑**）：ruff → mypy → pytest（會起一個 PostgreSQL 跑整合測試）
 - **web**（同 `api`）：eslint → tsc → vitest → next build
-- **deploy-config**（**排程與 draft 期間不跑**）：`make check` 只涵蓋原始碼，
+- **deploy-config**（**只在非 draft 的 PR 與 tag 上跑**）：`make check` 只涵蓋原始碼，
   所以部署設定與文件壞掉時前面那些 job
   會全部照樣綠燈。這個 job 補的就是那一塊 —— 那排 `check-*`、兩份 compose 設定、
   兩個 production image、備份工具能不能在 image 裡跑，以及斷言 `api` 確實等 `migrate`
   成功結束。**逐步清單看 `ci.yml` 本身**，不抄在這裡：手抄的清單一定會落後於 `ci.yml`，
   理由同下面第 5 節的第 4 條
-- **changelog**（只在 PR 上跑）：兩個方向。動到 `apps/`／`scripts/`／`infra/` 卻沒更新
-  `CHANGELOG.template.md` 就失敗 —— 那份紀錄是下游判斷「同步要做什麼」的唯一依據，
-  沒有這個 job 就只能靠自律；反過來動到根目錄的 `CHANGELOG.md`（下游的那一份）也失敗。
-  純重構或真的要改那份種子檔時，可在 PR 標題加 `[skip changelog]` 放行
-- **acceptance**（只在 PR 上跑，**draft 期間跳過**）：`make check-acceptance` 確認每條驗收條件
-  都指向存在的測試；純文件等無行為變更的改動可在 PR 標題加 `[skip acceptance]`，規則見〈常用指令〉。
-  draft 期間要看那盞紅綠燈就自己跑 `make check-acceptance`；跳過的理由寫在
-  [`ci.yml`](../.github/workflows/ci.yml) 那個 job 的註解上
-- **test-edits**（只在 PR 上跑）：`make check-test-edits` 要求刪改既有測試時附上說明，
-  規則見〈改到既有測試要說明〉
-- **e2e**（push 與 PR 上跑，**排程與 draft 期間不跑**）：`make e2e` 對隔離的 stack
+- **pr-checks**（只在 PR 上跑）：三件 PR-only 的紀律檢查，三個 step：
+  - **CHANGELOG**：兩個方向。動到 `apps/`／`scripts/`／`infra/` 卻沒更新
+    `CHANGELOG.template.md` 就失敗 —— 那份紀錄是下游判斷「同步要做什麼」的唯一依據；
+    反過來動到根目錄的 `CHANGELOG.md`（下游的那一份）也失敗。
+    純重構或真的要改那份種子檔時，可在 PR 標題加 `[skip changelog]` 放行
+  - **驗收條件**（**draft 期間跳過**）：`make check-acceptance` 確認每條驗收條件
+    都指向存在的測試；純文件等無行為變更的改動可在 PR 標題加 `[skip acceptance]`，
+    規則見〈常用指令〉。draft 期間要看那盞紅綠燈就自己跑 `make check-acceptance`
+  - **改到既有測試**：`make check-test-edits` 要求刪改既有測試時附上說明，
+    規則見〈改到既有測試要說明〉
+- **e2e**（**只在非 draft 的 PR 與 tag 上跑**）：`make e2e` 對隔離的 stack
   驗證跨層接縫，
   範圍與操作見〈e2e 的範圍〉
-- **security**（**每個階段都跑**，包括排程 —— 它是那條 cron 唯一的存在理由）：`make audit`
+- **security**（**非 draft 的 PR、tag 與排程上跑**；draft 不跑，因為它查的外部資料庫
+  一天最多變一次，而排程與 Ready 那兩個落點已經涵蓋）：`make audit`
 - **api-types-up-to-date**（同 `api`）：重新產生型別並比對 `git diff`，
   擋下「改了後端 schema 卻忘記跑
   `make gen-types`」
-- **publish**（只在 push 上跑，PR 不跑）：`ci.yml` 中 `needs` 指定的檢查全綠後，
-  才把兩個 image 推上 GHCR；其中包含 `e2e`，不包含 PR-only job。
+- **publish**（只在 push 上跑，PR 不跑）：把兩個 image 推上 GHCR。
+  **兩條路徑的保證不同**：tag build 上 `needs` 那六個真的在同一個 commit 上跑過、全綠才發布；
+  push 到 `main` 時那六個都是 skipped，image 的證據來自「同一棵 tree 在 PR 上綠過」
+  （靠 ruleset 的 strict 政策撐住）。`if` 因此帶 `always()`，少了它 `main` 上會永遠不再推
+  image 而且顯示 skipped —— 理由寫在那個 job 的註解上。
   它需要 repository secret `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`，**沒設就紅燈** ——
   而那支 secret 只有 registry 部署需要，所以不走那條路的專案要把這個 job 刪掉，
   不是放著不管。設定見 [`operations.md`](operations.md#registry-模式build-once-deploy-anywhere)，
