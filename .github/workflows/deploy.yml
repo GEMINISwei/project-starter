@@ -1,0 +1,219 @@
+# 部署到自架主機。CI 的 publish job 把 image 推上 GHCR 之後，由這裡送上線。
+#
+# 分工：ci.yml 決定「這份 image 值不值得存在」，這一份決定「哪一份 image 現在在線上」。
+# 兩件事分開的實際好處是回滾 —— 回滾不需要重跑 CI，只是拿一個舊 commit 再跑一次這個
+# workflow。
+#
+# **只能手動觸發，這是刻意的，而且它就是這條 CD 的核可閘門。** 不用 environment 的
+# required reviewers，是因為那對 private repo 是 GitHub 的付費功能（連 API 都回 403）——
+# 完整理由見 docs/operations.md 的「發版與回滾」，那一節是這個主題的 owner。
+# 發版因此是兩段：打 tag → CI 建好 image；要上線 → 手動跑這一份。
+#
+# **下游沒有要用 registry 部署的話可以整個刪掉這個檔案**，`make prod` 不依賴它。
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "要部署的 commit（SHA、tag 或 branch 都可以，例如 abc1234、v1.2.3、main）"
+        required: true
+        type: string
+
+# 部署不併行。同時跑兩次會讓兩個 compose up 互相搶同一組容器，
+# 而最後留下哪一版取決於誰先跑完 —— 不取消而是排隊，因為被取消的那一次
+# 可能已經動過線上狀態了。
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # 上限，不是預期值。必須大於底下「等 CI」那步自己的 60×30 秒 = 30 分鐘 ——
+    # 訂得比它小的話，job 會在還沒 ssh 到主機、工作樹與容器都還沒被動過的時候被砍掉，
+    # 看起來像部署失敗，其實什麼都沒發生。
+    timeout-minutes: 60
+    # 這個 environment 現在只負責 secret 隔離（`DEPLOY_SSH_*` 放這裡，不是 repository 層）。
+    # 第一次用要在 repo 的 Settings → Environments 建一個叫 production 的。
+    #
+    # **核可不靠它**，理由見檔頭：deployment protection rules 對 private repo 是付費功能。
+    # public repo 或付費方案的話，在這個 environment 上加 required reviewers 是免費的加強，
+    # 但這條 CD 不預設它存在。
+    environment: production
+    permissions:
+      contents: read
+      # 底下「等 CI」那步的 gh run list 打的是 GET /repos/{owner}/{repo}/actions/runs，
+      # 那支要 actions: read。寫了 permissions 區塊之後沒列到的權限就是 none，
+      # 而 private repo 會回 403 —— run: 預設是 bash -e，賦值那行會讓步驟當場失敗。
+      actions: read
+    steps:
+      - name: 決定要部署的 commit 與 image tag
+        id: target
+        # **一次部署的身分是 commit，image tag 由它推導。** 反過來（由 tag 反推 commit）
+        # 是個部分函數：latest 與 main 這種浮動 tag 沒有對應的 git ref，字串反推只會
+        # 得到 vlatest／vmain 這種不存在的東西。從 commit 推則不會少拿到任何 image ——
+        # publish job 的 type=sha 不受 event 限制，所以同一個 commit 的 1.2.3、latest
+        # 與 sha-abc1234 必定同時存在，而且是同一份 digest。
+        #
+        # 工作樹對齊到同一個 commit。主機的原始碼不是裝飾：compose 檔與 nginx 模板是
+        # 從它 bind mount 進容器的。只換 image 會讓「舊 image 配新設定」上線，而那個
+        # 組合沒有人驗過 —— 需要回滾的時候，通常正是設定也動過的時候。
+        #
+        # **不能用 GITHUB_SHA。** 在 workflow_dispatch 裡它是「Run workflow 時所選 ref 的
+        # SHA」（預設 default branch 的 HEAD），跟 inputs.ref 無關 —— 用它的話，
+        # 填 v1.0.0 卻部署到 main 的 HEAD，而且兩者都存在、都跑得起來，不會有錯誤訊息。
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_REF: ${{ inputs.ref }}
+        run: |
+          # 這支端點對 commit SHA、tag 與 branch 都解得開，所以填哪一種都行。
+          # 用 env 傳 INPUT_REF 而不是內插：輸入值是任意字串，內插會把它拼進指令。
+          sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$INPUT_REF" --jq .sha)" || {
+            echo "::error::在這個 repo 解不開 ref $INPUT_REF"; exit 1
+          }
+          # 前 7 碼要跟 publish job 推出來的 `sha-<short>` 一致。那一側是明確釘住的
+          # （ci.yml 的 publish job `env: DOCKER_METADATA_SHORT_SHA_LENGTH: 7`，
+          # 理由寫在那裡），不是靠 metadata-action 的預設值 —— 兩邊要改就一起改。
+          echo "ref=$sha" >> "$GITHUB_OUTPUT"
+          echo "tag=sha-$(printf '%.7s' "$sha")" >> "$GITHUB_OUTPUT"
+          echo "部署 commit $sha，image tag sha-$(printf '%.7s' "$sha")"
+
+      - name: 等 CI 對這個 commit 的結論
+        # 手動觸發時 CI 通常早就跑完了，但「剛推完 tag 就馬上按 Run workflow」會跟建置
+        # 賽跑 —— 輸的那一方是「pull 不到 tag」，看起來像 registry 壞掉，
+        # 實際上只是 publish 還沒推完。所以照樣等。
+        #
+        # **要篩 event == push，不能只取最新一筆。** publish job 帶 `if: push`，
+        # 所以 pull_request 那次 run 是「綠燈但沒有推任何 image」。一個只進過 PR、
+        # 從沒合進 main 也沒被 tag 的 commit，CI 看起來是成功的，而 image 不存在 ——
+        # 不篩的話這一步會放行，然後在主機上 pull 一個沒有人建過的 tag。
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.target.outputs.ref }}
+        run: |
+          for _ in $(seq 1 60); do
+            # 空陣列與「跑到一半」都會讓 .conclusion 是 null，但兩者要分開講：
+            # 前者多半是填錯 ref（那個 commit 沒進過 main），乾等 30 分鐘沒有意義。
+            conclusion="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow CI \
+              --commit "$SHA" --limit 20 --json conclusion,event \
+              --jq '[.[] | select(.event == "push")] as $runs
+                    | if ($runs | length) == 0 then "none"
+                      else ($runs[0].conclusion // "pending") end')"
+            case "$conclusion" in
+              success) echo "CI 綠燈"; exit 0 ;;
+              failure|cancelled|timed_out)
+                echo "::error::CI 結論為 $conclusion，中止部署"; exit 1 ;;
+              none) echo "還沒看到這個 commit 的 push CI run" ;;
+              *)    echo "CI 還在跑" ;;
+            esac
+            sleep 30
+          done
+          echo "::error::等待 CI 超時（30 分鐘）。commit $SHA 若從未合進 main、也未被 tag，"
+          echo "::error::就不會有 push 事件的 CI run，publish 也沒有替它建過 image。"
+          exit 1
+
+      - name: 準備 SSH
+        # 不用第三方 SSH action：這一步是整條鏈裡權限最高的地方（拿到的是能動線上的
+        # 私鑰），而它做的事只有寫兩個檔案。known_hosts 走 secret 而不是
+        # StrictHostKeyChecking=no —— 後者等於接受任何冒充成部署主機的東西。
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: 讀出目前線上的版本（回滾標的）
+        id: current
+        # **讀紀錄，不要探測。** `scripts/deploy.sh` 在健康檢查通過之後才寫 `.deployed`，
+        # 所以那個檔案裡的必定是「真的服務過的版本」。改成問 `git rev-parse HEAD` 的話
+        # 回答的是「工作樹 checkout 到哪」—— 一次失敗且沒回滾成功的部署會把 HEAD 留在
+        # 壞掉的那一版，之後的「回滾」就會退到它。
+        #
+        # 連不上主機是**錯誤**，不是警告。它跟「主機上還沒部署過」是完全不同的兩件事，
+        # 混成同一個結果的話，一次暫時性的連線失敗會安靜地讓這次部署失去安全網 ——
+        # 而那正是最需要它的時候。所以先單獨探一次連線。
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "$DEPLOY_USER@$DEPLOY_HOST" true \
+            || { echo "::error::連不上部署主機，中止部署"; exit 1; }
+
+          # 用 sed 挑出指定前綴的行，而不是整包當成值：主機的 login banner 或 profile
+          # 裡的 echo 會混進 stdout，整包採用的話 tag 會變成 banner 的前 7 個字。
+          record="$(ssh -i ~/.ssh/id_deploy "$DEPLOY_USER@$DEPLOY_HOST" \
+            "cat '$DEPLOY_PATH/.deployed' 2>/dev/null" || true)"
+          prev_commit="$(printf '%s\n' "$record" | sed -n 's/^DEPLOYED_COMMIT=//p' | tail -n1)"
+          prev_tag="$(printf '%s\n' "$record" | sed -n 's/^DEPLOYED_TAG=//p' | tail -n1)"
+
+          # 形狀不對就當成沒有。垃圾值比空值危險 —— 空值只是跳過回滾，
+          # 垃圾值會讓回滾拿著一個不存在的 ref 去 checkout，然後在最糟的時機失敗。
+          if [ -n "$prev_tag" ] && printf '%s' "$prev_commit" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo "ref=$prev_commit" >> "$GITHUB_OUTPUT"
+            echo "tag=$prev_tag"    >> "$GITHUB_OUTPUT"
+            echo "目前線上是 $prev_commit（$prev_tag），回滾時退回這一版"
+          else
+            echo "ref=" >> "$GITHUB_OUTPUT"
+            echo "::warning::主機上沒有有效的部署紀錄（第一次部署？），這次失敗時不會自動回滾"
+          fi
+
+      - name: 部署
+        id: deploy
+        # 主機上仍然要有原始碼：compose 檔與 nginx 模板是 bind mount 進容器的
+        # （見 infra/docker/docker-compose.yml），只有 api/web 兩個 image 來自 registry。
+        # 所以先把工作樹對齊到這次要部署的 commit，再讓 deploy.sh 拉 image。
+        #
+        # 走 scripts/deploy.sh 而不是 make deploy：make 的 target 傳不了參數，
+        # 而「部署哪一個 tag」必須由這裡決定，不能取決於主機那份 .env 的殘值。
+        # 腳本本來就設計成可以不經 make 直接執行（見 Makefile 的檔頭）。
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          TAG: ${{ steps.target.outputs.tag }}
+          REF: ${{ steps.target.outputs.ref }}
+        run: |
+          ssh -i ~/.ssh/id_deploy "$DEPLOY_USER@$DEPLOY_HOST" \
+            "set -euo pipefail
+             cd '$DEPLOY_PATH'
+             git fetch --tags --prune origin
+             git rev-parse --verify --quiet '$REF^{commit}' >/dev/null \
+               || { echo '::error::主機 fetch 不到 commit ${REF}（它在 GitHub 上存在，但不在 origin 的任何 branch/tag 上 —— 例如已被 force push 蓋掉，或只存在於未合併的 PR）'; exit 1; }
+             git checkout --detach '$REF'
+             bash scripts/deploy.sh '$TAG'"
+
+      - name: 部署失敗，回滾到上一版
+        # 只在「部署那步真的跑過而且失敗」時觸發。等 CI 那步失敗時不進來 ——
+        # 那時工作樹與容器都還沒被動過，退版只會多一次沒必要的重啟。
+        #
+        # deploy.sh 現在自己等 healthcheck，所以走到這裡代表：image 拉不到、
+        # compose 起不來，或新版起來了但撐不到 healthy。前兩種舊容器可能還活著，
+        # 第三種一定已經被換掉了 —— 三種都用同一條路退回去最省事。
+        #
+        # **回滾走跟正常部署完全相同的路徑**（工作樹 + image 一起退），只是 commit 換成
+        # 部署前記下的那一個。不另外寫一套「把舊容器叫回來」的機制：回滾如果有自己的
+        # 專屬路徑，那條路徑就會是永遠沒被演練過的那一條。
+        #
+        # 這一步成功不會把 job 變綠 —— job 仍然是失敗的，那是要的：線上被救回來了，
+        # 但這次發版沒有成功，不該看起來像成功。
+        if: failure() && steps.deploy.outcome == 'failure' && steps.current.outputs.ref != ''
+        env:
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          PREV_REF: ${{ steps.current.outputs.ref }}
+          PREV_TAG: ${{ steps.current.outputs.tag }}
+        run: |
+          echo "::warning::部署失敗，正在回滾到 $PREV_REF"
+          ssh -i ~/.ssh/id_deploy "$DEPLOY_USER@$DEPLOY_HOST" \
+            "set -euo pipefail
+             cd '$DEPLOY_PATH'
+             git checkout --detach '$PREV_REF'
+             bash scripts/deploy.sh '$PREV_TAG'"
+          echo "::warning::已回滾到 $PREV_REF（本次發版仍算失敗）"

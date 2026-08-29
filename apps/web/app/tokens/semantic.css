@@ -1,0 +1,156 @@
+/* 語意層（不隨主題變的部分）—— 「這個值用在哪」。
+ *
+ * 這一層是 **repo 的領土**：Design System 換一批原始值時，要重新對照的只有這裡的右手邊，
+ * 各 CSS module 的呼叫點一行都不用動。所以左手邊的名字要照**用途**取，不要照長相取
+ * （`--fs-base` 而不是 `--fs-15`）—— 名字一旦帶了值的資訊，換值時就會連名字一起要改，
+ * 這一層的意義就沒了。
+ *
+ * 顏色不在這裡，在 `themes/*.css`：它是唯一會隨主題變動的類別。 */
+
+/* 這個模板是**單一深色色調**，所以 `color-scheme` 固定成 dark，沒有切換。
+   它不能省：原生表單控制項與捲軸只認這個屬性 —— 少了它，深色底上的 <select>
+   與捲軸會維持亮色，那是最容易被漏掉的一半。 */
+:root { color-scheme: dark; }
+
+:root {
+  /* ---- 狀態色 ----
+     **不隨主題變**（成功就是綠的），所以住在這裡而不是 themes/。
+     -600 是文字與圖示，-100 是它的底：深色底上直接用原本的淺色底會刺眼，
+     所以由 -600 那階和頁面底色混出來，而不是另外挑一個值 —— 換色票時它會自己跟上。 */
+  --success-600: color-mix(in srgb, var(--ds-green-600) 55%, var(--ds-white));
+  --success-100: color-mix(in srgb, var(--ds-green-600) 22%, var(--ds-gray-950));
+  --warning-600: color-mix(in srgb, var(--ds-amber-600) 55%, var(--ds-white));
+  --warning-100: color-mix(in srgb, var(--ds-amber-600) 22%, var(--ds-gray-950));
+  --danger-600:  color-mix(in srgb, var(--ds-red-600) 55%, var(--ds-white));
+  --danger-100:  color-mix(in srgb, var(--ds-red-600) 22%, var(--ds-gray-950));
+  --info-600:    color-mix(in srgb, var(--ds-slate-600) 55%, var(--ds-white));
+  --info-100:    color-mix(in srgb, var(--ds-slate-600) 22%, var(--ds-gray-950));
+
+  /* ---- 間距 ----
+     階號與 `shared/ui` 的 `spacing()` 是同一組數字：`spacing(4)` 會產生
+     `var(--space-4)`。要調整整體疏密請改 primitives 的 --ds-space-*，不要改這裡的對應。 */
+  --space-1:  var(--ds-space-1);
+  --space-2:  var(--ds-space-2);
+  --space-3:  var(--ds-space-3);
+  --space-4:  var(--ds-space-4);
+  --space-5:  var(--ds-space-5);
+  --space-6:  var(--ds-space-6);
+  --space-8:  var(--ds-space-8);
+  --space-10: var(--ds-space-10);
+  --space-12: var(--ds-space-12);
+
+  /* ---- 字體與字級 ---- */
+  --font-serif: var(--ds-family-serif);
+  --font-sans:  var(--ds-family-sans);
+
+  --fs-h1:   var(--ds-font-size-7);
+  --fs-h2:   var(--ds-font-size-6);
+  --fs-h3:   var(--ds-font-size-5);
+  --fs-lg:   var(--ds-font-size-4);
+  --fs-base: var(--ds-font-size-3);
+  --fs-sm:   var(--ds-font-size-2);
+  --fs-xs:   var(--ds-font-size-1);
+
+  --fw-regular:  var(--ds-font-weight-regular);
+  --fw-medium:   var(--ds-font-weight-medium);
+  --fw-semibold: var(--ds-font-weight-semibold);
+  --fw-bold:     var(--ds-font-weight-bold);
+
+  --lh-tight:  var(--ds-line-height-1);
+  --lh-snug:   var(--ds-line-height-2);
+  --lh-normal: var(--ds-line-height-3);
+
+  --ls-heading: var(--ds-letter-spacing-2);
+  --ls-body:    var(--ds-letter-spacing-1);
+  --ls-label:   var(--ds-letter-spacing-3);
+
+  /* ---- 版面寬度 ----
+     `Container` 的 sm／md／lg 用的是 content／wide 兩階；narrow 給整頁訊息（404、錯誤），
+     form 給單欄表單頁。四個值目前都不同，但 form(720) 與 content(760) 只差 40px ——
+     那多半是各自長出來的，不是設計上的區分。 */
+  /* 浮層提示（Notify、推播）的寬度上限。兩者本來一個 420 一個 480。 */
+  --container-toast:   var(--ds-container-0);
+  --container-narrow:  var(--ds-container-1);
+  --container-form:    var(--ds-container-2);
+  --container-content: var(--ds-container-3);
+  --container-wide:    var(--ds-container-4);
+
+  /* 底部導覽的高度。放在語意層而不是 shell.module.css：notify viewport 是 portal
+     到 body 的，看不到宣告在 .shell 上的自訂屬性，只有 :root 兩邊都拿得到。 */
+  --layout-bottom-nav-height: var(--ds-bottom-nav-height);
+
+  /* 側欄的寬度。同樣放語意層而不是 shell.module.css：`PageHeader`（在 shared/ui）
+     要用它算滿版寬度，而 UI kit 不可以依賴組裝層宣告的變數 —— 宣告在 .shell 上時，
+     kit 在 shell 之外渲染會讓 calc() 解不出來，整條宣告被瀏覽器丟掉且沒有任何訊號。
+     斷點上的覆寫仍留在 .shell（那是 shell 自己的行為），這裡只定基礎值。 */
+  --layout-sidebar-width:      var(--ds-sidebar-width);
+  --layout-sidebar-width-rail: var(--ds-sidebar-width-rail);
+
+  /* 鍵盤焦點的外環，整條 box-shadow 當一個 token 用。
+     只給顏色不夠 —— 那樣粗細會在每個 :focus-visible 呼叫點各寫一次，
+     改粗細要逐一改，而漏掉的那處不會有任何訊號。 */
+  --focus-ring: 0 0 0 var(--ds-focus-ring-width) var(--color-focus-ring);
+
+  /* ---- 邊框寬度 ----
+     accent 是 Notify 左緣那條色帶與 focus ring 的粗細，不是一般邊框。 */
+  --border-width-hairline: var(--ds-border-width-1);
+  --border-width-thick:    var(--ds-border-width-2);
+  --border-width-accent:   var(--ds-border-width-3);
+
+  /* ---- 圓角 ---- */
+  --radius-xs:    var(--ds-radius-1);
+  --radius-sm:    var(--ds-radius-2);
+  --radius-md:    var(--ds-radius-3);
+  --radius-lg:    var(--ds-radius-4);
+  --radius-xl:    var(--ds-radius-5);
+  --radius-pill:  var(--ds-radius-full);
+  --radius-round: 50%;
+
+  /* ---- 陰影 ---- */
+  --shadow-xs: var(--ds-shadow-1);
+  --shadow-sm: var(--ds-shadow-2);
+  --shadow-md: var(--ds-shadow-3);
+  --shadow-lg: var(--ds-shadow-4);
+  /* 底部導覽是唯一往上打的陰影，方向與上面那組相反，所以單獨一個。 */
+  --shadow-nav: var(--ds-shadow-up);
+
+  /* ---- 動態 ---- */
+  --ease-standard: var(--ds-ease-standard);
+  --ease-out:      var(--ds-ease-out);
+  --dur-fast:      var(--ds-duration-1);
+  --dur-base:      var(--ds-duration-2);
+
+  /* ---- 控制項高度 ----
+     md 是預設，也是觸控目標的下限（44px）。`Button` 的 `size="small"` 靠這組
+     才做得出差異 —— 少了它，.buttonSmall 與 .button 的宣告會完全相同。 */
+  --control-height-sm: var(--ds-control-height-1);
+  --control-height-md: var(--ds-control-height-2);
+  --control-height-lg: var(--ds-control-height-3);
+
+  /* ---- 不透明度 ----
+     `disabled` 一律用同一階。不集中的話，按鈕、送出鈕、輸入框會各自挑一個接近的值 ——
+     同樣是「不能操作」卻有三種淡法，那是漂移不是設計。 */
+  --opacity-disabled: var(--ds-opacity-2);
+  --opacity-muted:    var(--ds-opacity-3);
+  --opacity-subtle:   var(--ds-opacity-1);
+
+  /* ---- 圖示與頭像 ----
+     圖示三階、頭像兩階。點擊區用 --control-height-*，那是另一回事 ——
+     `ActionMenu` 的觸發鈕看起來像圖示，但它要滿足觸控目標的下限。 */
+  --size-icon-sm: var(--ds-size-icon-1);
+  --size-icon-md: var(--ds-size-icon-2);
+  --size-icon-lg: var(--ds-size-icon-3);
+  --size-avatar-sm: var(--ds-size-avatar-1);
+  --size-avatar-md: var(--ds-size-avatar-2);
+
+  /* ---- 疊層順序 ----
+     一律從這裡取，不要就地寫數字。散落的 z-index 沒辦法一眼看出誰該蓋過誰，
+     而且會撞號 —— toast 與 modal 遮罩各自挑「夠大的數字」時很容易都落在 1000，
+     疊起來的順序就變成 DOM 順序說了算。 */
+  --z-raised:   1;
+  --z-dropdown: 200;
+  --z-sticky:   800;
+  --z-nav:      900;
+  --z-overlay:  1000;
+  --z-toast:    1100;
+}

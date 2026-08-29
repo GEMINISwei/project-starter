@@ -1,0 +1,19 @@
+{
+  "//": [
+    "e2e 有自己的 tsconfig，不吃 apps/web 那份：那裡有 jsx、next 外掛與 @/ 路徑別名，",
+    "全部與 playwright 無關。這份只求編輯器與 playwright 的行為一致。",
+    "注意 `make typecheck` 不涵蓋這裡 —— e2e 的型別錯誤要跑到 `make e2e` 才會出現。"
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "types": ["node"]
+  },
+  "include": ["**/*.ts"]
+}

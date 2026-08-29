@@ -1,0 +1,34 @@
+/* 全站 reset 與元素預設值。
+   token 不住在這裡 —— 原始值在 `tokens/primitives.css`，語意在 `tokens/semantic.css`
+   與 `themes/*.css`。這個檔案只負責「沒有 class 的元素長什麼樣」。 */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  font-weight: var(--fw-regular);
+  line-height: var(--lh-normal);
+  color: var(--color-text-body);
+  background-color: var(--color-bg-app);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-serif);
+  color: var(--color-text-heading);
+  font-weight: var(--fw-medium);
+  letter-spacing: var(--ls-heading);
+  line-height: var(--lh-tight);
+  margin: 0;
+}
+
+p { margin: 0; }
+a { color: var(--color-primary); text-decoration: none; }
+a:hover { color: var(--color-primary-hover); }
+
+::placeholder { color: var(--color-text-muted); }
+:focus-visible { outline: none; box-shadow: var(--focus-ring); }

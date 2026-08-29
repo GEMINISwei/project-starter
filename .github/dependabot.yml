@@ -1,0 +1,186 @@
+# 為什麼需要這個檔案
+#
+# 一次性的相依升級只能解決「今天」的漏洞。這是一個會被複製去長出新專案的模版，
+# 沒有自動更新的話，相依會從被 clone 的那一刻開始腐爛 —— 而使用者通常不會去看
+# 一個「跑得起來」的模版的 advisory。CI 的 security job 負責在變紅時擋下來，
+# 這個檔案負責讓它有機會變綠。
+#
+# 五類生態系分開設定，因為 uv、npm、docker、docker-compose 與 GitHub Actions 的
+# manifest 各自獨立（docker 有兩個 entry，前後端各一）。
+
+version: 2
+
+updates:
+  # 後端（uv 讀 pyproject.toml + uv.lock）
+  - package-ecosystem: "uv"
+    directory: "/apps/api"
+    schedule:
+      interval: "weekly"
+    # PR 標題帶 [skip changelog]，走 ci.yml 的 changelog job 既有的放行機制。
+    #
+    # 沒有它的話這五個 entry 開的每一個 PR 都是紅的：manifest 就住在 apps/ 與 infra/
+    # 底下（躲不掉），而 changelog job 拿「動了 apps|scripts|infra」當「實質改動」的
+    # 代理指標 —— 相依升級剛好落在那個指標失準的交集上。每週固定紅一次的下場是沒有人
+    # 再看它，而那個 job 的價值全部建立在「紅了就是真的有事」上面。
+    #
+    # 選 prefix 而不是在 job 上加 `github.actor != 'dependabot[bot]'`：job 的註解定調
+    # 「要明講，而不是預設放行」，prefix 把理由印在 PR 標題上，actor 判斷則是在 PR
+    # 頁面上看不出來為什麼綠。而且這條用的是既有的逃生門，不是第二個。
+    #
+    # **代價**：跨 major 那種真正值得一筆條目的升級也會被一併放行，所以那種要自己補
+    # CHANGELOG —— 見 docs/development.md 的「相依升級紀律」。
+    #
+    # 最底下的 github-actions entry 刻意沒有這一段：它只動 .github/，本來就不會觸發
+    # changelog job，加了只是讓 CI 改動的 commit message 帶一句誤導的放行宣告。
+    commit-message:
+      prefix: "chore(deps) [skip changelog] [skip acceptance]"
+    open-pull-requests-limit: 5
+    groups:
+      # patch/minor 合成一個 PR：這類升級絕大多數不需要人看，分開只會製造噪音。
+      # major 維持一個一個來，因為那才是真的要讀 changelog 的。
+      backend-minor-patch:
+        update-types: ["minor", "patch"]
+
+  # e2e（playwright）。**這一筆非有不可**：npm 生態系是逐 directory 宣告的，
+  # 少了它 e2e/package.json 就是一個沒有人會更新的死角 —— 而且完全沒有症狀，
+  # 那裡的 @playwright/test 會一直停在當初寫下的版本。
+  - package-ecosystem: "npm"
+    directory: "/e2e"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      # 理由見最上面 uv 那一段。
+      prefix: "chore(deps) [skip changelog] [skip acceptance]"
+    open-pull-requests-limit: 3
+    groups:
+      e2e-minor-patch:
+        update-types: ["minor", "patch"]
+    # **這兩個要跟 apps/web 同一個版本線**，理由與移除條件寫在那邊（下面指路），
+    # 這裡只負責不要每週重開一次注定關掉的 PR。比照下面 apps/web 那一段的慣例。
+    #
+    # 兩者被擋的**理由不同**，不要合成一條看：
+    ignore:
+      # typescript：分家不會造成假綠燈（e2e 的 tsc 只編 e2e/ 底下那幾個檔，
+      # 從來不碰 app 的原始碼 —— spec 是透過瀏覽器互動的，不是透過型別）。
+      # 擋它是為了「同一個 repo 裡只有一個 TypeScript 版本要推理」。
+      # apps/web 被 openapi-typescript 與 typescript-eslint 兩個硬 peer 卡在 5.x，
+      # 見 apps/web/package.json 的 `//devDependencies` —— 那邊鬆綁時這裡跟著動。
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      # @types/node：這一條**會造成假綠燈**，所以更要擋。它跟著**執行期**的 Node major
+      # 走（e2e 跑在 host 的 Node，版本線見 apps/web/.nvmrc）——
+      # 裝 26 的型別只會讓編譯期看得到執行期沒有的東西，spec 用到就是編譯過、跑起來炸。
+      # 同 apps/web/package.json 的 `//devDependencies`。
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
+  # 前端（npm 讀 package.json + package-lock.json）
+  - package-ecosystem: "npm"
+    directory: "/apps/web"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      # 理由見最上面 uv 那一段。
+      prefix: "chore(deps) [skip changelog] [skip acceptance]"
+    open-pull-requests-limit: 5
+    groups:
+      frontend-minor-patch:
+        update-types: ["minor", "patch"]
+    # 這三個的 major 目前都有已知的阻擋，PR 開了也只能關。**理由與移除條件不寫在這裡** ——
+    # 它們寫在各自的 manifest（下面指路），下一個要升級的人看的是那裡，抄一份到這裡
+    # 只會多一份會各自飄的說明。這一段只負責一件事：不要每週重開一次注定關掉的 PR。
+    #
+    # 這不只是噪音問題。上面的 open-pull-requests-limit 是 5，三個永遠合不了的 PR
+    # 佔掉 3 格，真正的安全更新就可能開不出來。
+    #
+    # 只擋 major：minor 與 patch 照常進來（typescript 5.9.4、eslint 9.40 這類仍然要）。
+    ignore:
+      # 卡 openapi-typescript 與 typescript-eslint 兩個硬 peer 的交集。
+      # 見 apps/web/package.json 的 `//devDependencies`。
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      # 卡 eslint-config-next 帶進來的 eslint-plugin-react（peer 只到 ^9.7）。
+      # 見 apps/web/eslint.config.mjs 的註解。
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      # 跟著**執行期**的 Node major 走，不是跟著 npm 的 latest。
+      # 見 apps/web/package.json 的 `//devDependencies`；要升的話
+      # apps/web/.nvmrc、engines 與 apps/web/Dockerfile 的 NODE_VERSION 要先一起升。
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
+
+  # 基底映像（Dockerfile 的 FROM／COPY --from 與 compose 的 image:）。
+  #
+  # 這一段最容易被漏掉，而它腐爛得最安靜：npm 與 uv 的相依有 `make audit` 在掃，
+  # 基底映像沒有任何檢查會提醒 —— 服務照常啟動，只是跑在一個累積了幾十個未修補
+  # CVE 的 OS 上。
+  #
+  # 三個 directory 是三份獨立的 manifest：兩個 Dockerfile 加上 compose 檔那一組。
+  #
+  # **compose 那組的 ecosystem 是 `docker-compose`，不是 `docker`**。`docker` 只認
+  # Dockerfile，指到一個沒有 Dockerfile 的目錄時 dependabot 會直接報錯
+  # （"Dependabot couldn't find a Dockerfile ... at the path: /infra/docker/Dockerfile"），
+  # 而且錯誤只出現在 repo 的 Dependabot 記錄裡，PR 與 CI 都不會有任何跡象。
+  - package-ecosystem: "docker"
+    directory: "/apps/api"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      # 理由見最上面 uv 那一段。
+      prefix: "chore(deps) [skip changelog] [skip acceptance]"
+    ignore:
+      # base image 的 python 必須跟 pyproject.toml 的 requires-python 一致，而那裡停在
+      # `<3.15`。見 apps/api/pyproject.toml 的檔頭。
+      #
+      # 只改這裡的 FROM 而不動 pyproject.toml 的話 **CI 會綠** —— uv 看 requires-python
+      # 自己抓 3.14，image 照樣建得起來。所以這一條擋的是「半套改動悄悄合進來」。
+      #
+      # 用 versions 而不是 update-types：docker tag 的 3.14 → 3.15 算 semver-minor，
+      # 擋 major 是擋不到的。
+      - dependency-name: "python"
+        versions: [">=3.15"]
+  - package-ecosystem: "docker"
+    directory: "/apps/web"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      # 理由見最上面 uv 那一段。
+      prefix: "chore(deps) [skip changelog] [skip acceptance]"
+  - package-ecosystem: "docker-compose"
+    directory: "/infra/docker"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      # 理由見最上面 uv 那一段。
+      prefix: "chore(deps) [skip changelog] [skip acceptance]"
+    ignore:
+      # PostgreSQL 的 major 升級是破壞性的：資料目錄格式與 major 綁死，新版 server
+      # 直接讀舊的 PGDATA 會拒絕啟動，必須 pg_dump → 換版本 → pg_restore。
+      # 理由與升級步驟見 infra/docker/docker-compose.yml 的 postgres 服務。
+      # 用 versions 而不是 update-types：docker tag 的 17 → 18 算 semver-major，
+      # 但 `postgres:17.7-alpine` 這種帶 suffix 的 tag 判定不一定準，寫死區間最保險。
+      # 移除條件：願意排一次停機做 major 升級，並把 apps/api/Dockerfile 的
+      # postgresql-client 一起帶上（ci.yml 不用管，它從 compose 讀）。
+      - dependency-name: "postgres"
+        versions: [">=18"]
+
+  # CI 自己用的 action 版本也要更新 —— 它們一樣會有漏洞，而且常被忘記。
+  #
+  # 這個生態系只認 `uses:`，不認 `run:` 裡的東西。所以 `ci.yml` 的「啟動 PostgreSQL」
+  # 那步刻意**不寫死** image，而是從 compose grep 出來 —— 上面的 docker-compose 生態系
+  # 更新 compose 就夠了，dependabot 的 PR 自己就會綠。寫死的話每個 postgres 升版 PR 都會
+  # 被 `make check-compose` 判成兩處不一致而紅燈，還要有人手動補 commit；
+  # 那個檢查器就是在擋「ci.yml 出現寫死的 image」。
+  #
+  # 掃不到的只剩 apps/api/Dockerfile 的 `postgresql-client-<major>`（它不是 image 也不是
+  # 套件版本）—— 升 postgres major 時要自己帶上，`make check-compose` 會擋。
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    commit-message:
+      # 這一段原本沒設，於是標題是預設的 `build(deps): …`，兩個放行標記都沒有。
+      # changelog job 一直是綠的只是**巧合** —— 它只在動到 apps/、scripts/、infra/ 時
+      # 才要求條目，而 action 升級通常只碰 .github/。哪天有個 action 順帶動到那三個
+      # 目錄，它就會紅，而原因完全看不出來。
+      prefix: "chore(deps) [skip changelog] [skip acceptance]"

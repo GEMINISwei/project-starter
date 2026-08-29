@@ -1,0 +1,198 @@
+services:
+  api:
+    container_name: ${COMPOSE_PROJECT_NAME:?}-api
+    # image 名稱走一層變數，讓同一份 compose 同時支援兩種部署模式：
+    # 預設值展開後就是本機建置那條路（`make prod`）；`scripts/deploy.sh` 會匯出
+    # API_IMAGE/WEB_IMAGE/IMAGE_PULL_POLICY 指向 registry 的 tag（`make deploy`）。
+    # 兩個變數刻意不進 .env —— 它們是部署當下的參數，不是專案設定。
+    image: ${API_IMAGE:-${COMPOSE_PROJECT_NAME:?}-api:latest}
+    pull_policy: ${IMAGE_PULL_POLICY:-build}
+    build:
+      context: ../../apps/api
+      target: base
+    environment:
+      PROJECT_NAME: ${COMPOSE_PROJECT_NAME:?}
+      MODE: ${MODE:?}
+      # 必須是 asyncpg 的 driver URL（見 apps/api/app/config.py 的 postgres_url）。
+      POSTGRES_URL: postgresql+asyncpg://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?}
+      EXPIRE_HOURS: ${EXPIRE_HOURS:?}
+      TOKEN_VERSION: ${TOKEN_VERSION:-1}
+      # 用 `:-` 而不是 `:?`：空值是**有意義的設定**，代表完全停用 bootstrap
+      # （見 app/config.py 的 register_key）。
+      REGISTER_KEY: ${REGISTER_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:?}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:?}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:?}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # migration 完成後 api 才能啟動，避免新程式碼服務舊資料結構。
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    restart: always
+    expose:
+      - "8000"
+
+  # 一次性的 migration runner。跑完就退出，api 以 service_completed_successfully
+  # 等它 —— migration 失敗時 api 不會啟動，web 與 nginx 也因為鏈式依賴
+  # api healthy 而不會進入可服務狀態。這是「不可能出現新程式配舊資料」的機制。
+  #
+  # 沿用 api 的 image（Dockerfile 已 `COPY scripts/ /app/scripts/`），
+  # 所以不需要第二份建置設定，也保證跑 migration 的程式碼與跑服務的完全同一份。
+  migrate:
+    container_name: ${COMPOSE_PROJECT_NAME:?}-migrate
+    # 必須與 api 完全同一個 image（不是「同樣的內容」，是同一個字串）。
+    # scripts/check-compose.sh 在守這件事 —— 上面那層變數讓它第一次有機會飄掉。
+    image: ${API_IMAGE:-${COMPOSE_PROJECT_NAME:?}-api:latest}
+    pull_policy: ${IMAGE_PULL_POLICY:-build}
+    build:
+      context: ../../apps/api
+      target: base
+    environment:
+      PROJECT_NAME: ${COMPOSE_PROJECT_NAME:?}
+      MODE: ${MODE:?}
+      POSTGRES_URL: postgresql+asyncpg://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
+    working_dir: /app
+    command: ["python", "scripts/db.py", "migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # 一次性工作**不能**繼承 api 的 `restart: always`：那會讓失敗的 migration
+    # 無限重跑，而且 compose 永遠等不到「成功結束」，整個部署就卡在這裡。
+    restart: "no"
+
+  postgres:
+    container_name: ${COMPOSE_PROJECT_NAME:?}-postgres
+    # 釘 17 這條線（目前的穩定版）。PostgreSQL 每個大版本支援 5 年，模板要的是
+    # 「開一個專案之後幾年內不用被迫動它」。
+    #
+    # **跨 major 升級不是純換版本號**：PostgreSQL 的資料目錄格式與 major 版本綁死，
+    # 新版的 server 直接讀舊的 PGDATA 會拒絕啟動（訊息是 "database files are
+    # incompatible with server"）。要升級必須 `pg_dump` → 換版本 → `pg_restore`，
+    # 或用 `pg_upgrade`。對已部署的下游是破壞性動作，要做的時候請當成一次獨立的改動，
+    # 並在 CHANGELOG.md 寫清楚升級步驟。
+    # 這個版本號在三處出現（這裡、apps/api/Dockerfile 的 postgres-client、
+    # .github/workflows/ci.yml 的「啟動 PostgreSQL」那步），要一起動 ——
+    # 這一條由 `make check-compose` 擋，漏掉哪一處它會直接指出來。
+    image: postgres:17.11-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: ${POSTGRES_DB:?}
+      # 讓 initdb 建出來的資料庫用 UTF-8 與 C collation。不指定的話會跟著 image 的
+      # locale 走，而排序規則一旦定了就寫進索引裡 —— 之後想改必須重建整個資料庫。
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      # 掛在 `/var/lib/postgresql/data` 底下的子目錄而不是它本身：那個目錄在
+      # alpine image 裡本來就存在且屬於 postgres，直接蓋掉會讓 initdb 抱怨目錄非空。
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # `-h 127.0.0.1` 是必要的：不帶主機時 pg_isready 走 unix socket，而 initdb
+      # 期間那個 socket 就已經在了 —— healthcheck 會在資料庫還沒真正就緒時提早轉綠，
+      # 然後 migrate 撞上「the database system is starting up」。
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      start_period: 20s
+      retries: 10
+    restart: always
+
+  web:
+    container_name: ${COMPOSE_PROJECT_NAME:?}-web
+    # image 名稱走一層變數，讓同一份 compose 同時支援兩種部署模式：
+    # 預設值展開後就是本機建置那條路（`make prod`）；`scripts/deploy.sh` 會匯出
+    # API_IMAGE/WEB_IMAGE/IMAGE_PULL_POLICY 指向 registry 的 tag（`make deploy`）。
+    # 兩個變數刻意不進 .env —— 它們是部署當下的參數，不是專案設定。
+    image: ${WEB_IMAGE:-${COMPOSE_PROJECT_NAME:?}-web:latest}
+    pull_policy: ${IMAGE_PULL_POLICY:-build}
+    build:
+      context: ../../apps/web
+      target: prod
+      args:
+        # build 期只剩這一個設定，其餘都改成下面的 `environment:`（執行期注入）。
+        # 理由見 apps/web/shared/runtime/config.ts：烤進 image 的設定會讓
+        # 「image 建一次到處部署」不成立，而且主機 .env 與 image 不一致時沒有症狀。
+        # 這一個移不掉（Next 把它序列化進 required-server-files.json），
+        # 所以另外由 apps/web/instrumentation.ts 在開機時比對。
+        UPLOAD_SIZE_LIMIT: ${UPLOAD_SIZE_LIMIT:?}
+      # Server Action id 的 hash salt。刻意走 build secret 而不是 build arg 或
+      # environment：
+      #   - 它是 SWC 的 hash salt，必須在 `next build` 執行時就存在，所以不能只給執行期
+      #     （那會變成 id 來自 build 期的隨機 salt、執行期卻用另一把 key，兩邊對不起來）。
+      #   - 走 build arg 則會把金鑰留在 `docker history` 裡，且每次 build 都噴
+      #     SecretsUsedInArgOrEnv 警告。
+      # 消費端在 apps/web/Dockerfile 的 builder stage（required=true）。
+      secrets:
+        - next_actions_key
+    environment:
+      # 執行期（而非 build 期）提供：這個位址只有 Next.js 的伺服器端會用到，
+      # 放進 build 參數會被內嵌進 client bundle，等於公開內部拓撲。
+      API_URL: http://api:8000
+      # 以下三個由 shared/runtime/config.server.ts 讀，經 root layout 的 provider
+      # 傳給 client component。VAPID_PUBLIC_KEY 用 `:?`（與 api 一致），
+      # SYSTEM_NAME／EXPIRE_HOURS 同理 —— 缺了要在啟動當下失敗，不是畫面默默變成預設值。
+      SYSTEM_NAME: ${SYSTEM_NAME:?}
+      EXPIRE_HOURS: ${EXPIRE_HOURS:?}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:?}
+      # 這一個是拿來跟 image 裡烤的值比對的，不是拿來生效的：真正生效的是 build 期
+      # 烤進去的那份，不一致時 web 會直接結束行程（見 apps/web/instrumentation.ts）。
+      UPLOAD_SIZE_LIMIT: ${UPLOAD_SIZE_LIMIT:?}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      # 探 `/healthz`（apps/web/app/healthz/route.ts）而不是任何真實頁面：頁面會
+      # server-render 並打後端，等於每 10 秒多一次 API + 資料庫查詢，也會讓 web 的健康
+      # 狀態跟著 api 一起紅 —— 而 api 自己已經有 healthcheck 了。
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+    restart: always
+    expose:
+      - "3000"
+
+  nginx:
+    container_name: ${COMPOSE_PROJECT_NAME:?}-nginx
+    image: nginx:1.31.4-alpine
+    # 目前兩份模板都沒有用到這兩個變數，**但不要因此刪掉它們**。它們是模板的 envsubst
+    # 代換面：nginx 的 entrypoint 只會換「環境裡有的」變數，而 scripts/check-nginx.sh 的
+    # `envsubst '${COMPOSE_PROJECT_NAME} ${MODE}'` 清單必須跟這裡一致。
+    # 那份清單也不能改成空的 —— 空的 SHELL-FORMAT 會讓 envsubst 代換**所有**環境變數，
+    # 把 nginx 自己的 $$host、$$remote_addr 吃掉，然後拿一份壞掉的設定去驗（假綠燈）。
+    # 兩邊對不上的症狀是：以後有人在模板寫 ${FOO}，本機檢查綠燈，
+    # 正式環境的設定裡卻留著字面的 ${FOO}。
+    environment:
+      COMPOSE_PROJECT_NAME: ${COMPOSE_PROJECT_NAME:?}
+      MODE: ${MODE:?}
+    ports:
+      - ${SYSTEM_PORT:?}:80
+    volumes:
+      - ../nginx/templates/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: always
+
+volumes:
+  postgres_data:
+    name: ${COMPOSE_PROJECT_NAME:?}_${MODE:?}_postgres_data
+
+secrets:
+  # `environment:` 是把 .env 裡的變數當成 secret 的來源，值不會落到磁碟上，也不會進
+  # image layer —— 只在 Dockerfile 那一行 RUN 期間掛在 /run/secrets/ 底下。
+  #
+  # 注意這裡**無法**用 ${VAR:?} 的缺值保護（這個欄位要的是變數名稱，不是插值），
+  # 所以「忘了設」的把關落在 Dockerfile：required=true 擋沒給、空值檢查擋給了空字串。
+  next_actions_key:
+    environment: NEXT_SERVER_ACTIONS_ENCRYPTION_KEY

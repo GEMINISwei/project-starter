@@ -1,0 +1,59 @@
+/* 預設主題 —— 深色的灰／靛藍。這個模板只有這一份主題。
+ *
+ * **這裡是「主題」這個介面的定義檔**：它宣告的那組 `--color-*` 就是契約本身，
+ * `shared/ui` 與所有模組的 CSS 只認這組名字。加第二份主題＝複製這個檔案、
+ * 換選擇器、只改右手邊（步驟見 `docs/design-system.md`）。
+ *
+ * **單一色調，沒有明暗兩軌。** 每個顏色只有一個值，`color-scheme` 固定成 `dark`
+ * （在 `tokens/semantic.css`）。要換色調就改這份檔案的右手邊；要做成可切換的兩套，
+ * 那是「多一份主題」的事，不是在同一個 token 裡塞兩個值。
+ *
+ * 選擇器兩式並列：`:not([data-theme])` 讓沒有屬性時也有值，`[data-theme="default"]`
+ * 讓 `DEFAULT_THEME` 明確指定時命中。裸 `:root` 的權重比 `[data-theme]` 低一階，
+ * 加上 `:not()` 之後兩者同階 —— 之後多一份主題時選擇器彼此互斥，不必再擔心誰贏。 */
+
+:root:not([data-theme]),
+:root[data-theme="default"] {
+  /* ---- 表面 ---- */
+  --color-bg-app:         var(--ds-gray-950);
+  --color-surface-card:   var(--ds-gray-925);
+  --color-surface-raised: var(--ds-gray-875);
+  --color-surface-sunken: var(--ds-gray-975);
+  --color-surface-input:  var(--ds-gray-925);
+  --color-surface-hover:  var(--ds-gray-850);
+
+  /* ---- 文字 ---- */
+  --color-text-display:   var(--ds-gray-75);
+  --color-text-heading:   var(--ds-gray-100);
+  --color-text-body:      var(--ds-gray-300);
+  --color-text-secondary: var(--ds-gray-400);
+  /* 小型輔助文字仍然要能閱讀；較暗的 gray-500 保留在原始色階給 disabled 與裝飾用途。
+     混合比例是**由對比門檻反推**的，不是挑好看的：muted 會出現在四種表面上
+     （bg-app／card／raised／hover），而最亮的 surface-hover 是最緊的一個。
+     35% 時 hover 上只有 3.87:1、raised 上 4.17:1 —— 兩者都低於門檻，而
+     `modules/push` 的推播提示正是 muted 疊在 raised 上。60% 讓四種表面同時過 4.5:1。
+     要再調暗請先跑 tests/app/themes/contrast.test.ts。 */
+  --color-text-muted: color-mix(
+    in srgb, var(--ds-gray-400) 60%, var(--ds-gray-500));
+
+  /* ---- 品牌 ---- */
+  --color-primary:              var(--ds-indigo-400);
+  --color-primary-hover:        var(--ds-indigo-300);
+  --color-primary-container:    var(--ds-indigo-900);
+  --color-on-primary-container: var(--ds-indigo-300);
+
+  /* 亮靛藍適合深色底上的連結，但撐不起白字；實心行動獨立用較深的兩階。 */
+  --color-action-primary:       var(--ds-indigo-600);
+  --color-action-primary-hover: var(--ds-indigo-700);
+  --color-text-on-primary:      var(--ds-gray-75);
+
+  --color-focus-ring: color-mix(in srgb, var(--ds-indigo-400) 65%, transparent);
+  --color-scrim:      color-mix(in srgb, var(--ds-gray-975) 72%, transparent);
+
+  /* ---- 邊框 ---- */
+  --color-border-subtle:  var(--ds-gray-850);
+  --color-border-default: var(--ds-gray-825);
+  --color-border-control: color-mix(
+    in srgb, var(--ds-gray-400) 55%, var(--ds-gray-850));
+  --color-border-brand:   var(--ds-indigo-600);
+}

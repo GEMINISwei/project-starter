@@ -1,0 +1,55 @@
+services:
+  api:
+    volumes:
+      # 逐一列出各層，而不是掛整個 apps/api：`/app` 底下有 image 建出來的 `.venv`，
+      # 整包蓋上去會把它遮掉 —— 而主機上的 .venv 是 macOS 裝的，進到 linux 容器就是
+      # `exec format error`，錯誤訊息跟原因完全對不起來。
+      - ../../apps/api/app:/app/app
+      - ../../apps/api/modules:/app/modules
+      - ../../apps/api/shared:/app/shared
+      - ../../apps/api/scripts:/app/scripts
+      # 單檔 bind mount 會釘住 inode：用「寫暫存檔再 rename」存檔的編輯器改完之後，
+      # 容器看到的還是舊檔。main.py 只是 uvicorn 的啟動器，實務上不會動，可以接受。
+      - ../../apps/api/main.py:/app/main.py
+
+  # migrate 與 api 掛一樣的來源：開發時新增一支 migration 之後
+  # 應該直接 `make migrate` 就跑得到，不必先重建 image。
+  migrate:
+    volumes:
+      - ../../apps/api/app:/app/app
+      - ../../apps/api/modules:/app/modules
+      - ../../apps/api/shared:/app/shared
+      - ../../apps/api/scripts:/app/scripts
+      - ../../apps/api/main.py:/app/main.py
+
+  web:
+    build:
+      target: dev
+    environment:
+      # VAPID_PUBLIC_KEY／SYSTEM_NAME／EXPIRE_HOURS 已經在 base 的 `environment:` 裡，
+      # dev 不必再補一次 —— 兩邊現在都走執行期注入。
+      #
+      # dev 與 prod 相反，走執行期：`next dev` 自己就是 compiler，所以那把 salt 是在
+      # 容器啟動後才被讀到。不設的話每次重啟都會亂數換一把，所有 Server Action id 跟著
+      # 換，開著的分頁就會拿到「Server Action ... was not found on the server」。
+      NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:?}
+    volumes:
+      # 這裡與 api 相反，**整包掛**。Next 有一批「必須住在 app 根目錄」的慣例檔
+      # （`proxy.ts`，以及未來的 `instrumentation.ts` 那類），逐一列出的話，新增這種檔案時
+      # dev 容器看不到它 —— 而且不會有任何錯誤訊息，只是那層保護悄悄地不存在。
+      - ../../apps/web:/app
+      # 具名 volume 遮住這兩個目錄。主機上的 node_modules 是 macOS 裝的，蓋過 image 裡的
+      # linux 版本會壞；`.next` 則是不要讓容器的建置快取跟主機互相污染。
+      # 用具名而非匿名：改過相依之後可以單獨 `docker volume rm` 掉，不必動到資料庫的資料。
+      - web_node_modules:/app/node_modules
+      - web_next_cache:/app/.next
+
+  nginx:
+    volumes:
+      - ../nginx/templates/default.dev.conf.template:/etc/nginx/templates/default.conf.template:ro
+
+volumes:
+  web_node_modules:
+    name: ${COMPOSE_PROJECT_NAME:?}_dev_web_node_modules
+  web_next_cache:
+    name: ${COMPOSE_PROJECT_NAME:?}_dev_web_next_cache

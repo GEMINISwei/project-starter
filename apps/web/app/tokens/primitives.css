@@ -1,0 +1,159 @@
+/* 原始值層 —— 只有值，沒有用途。
+ *
+ * 這一層是 **Design System 的領土**：不要在這裡放任何「這個顏色用在哪」的判斷。
+ * 用途寫在語意層（`semantic.css` 與 `themes/*.css`），那裡才是 repo 自己維護的部分。
+ *
+ * 接外部 DS 時這份檔案會變成**對照表**（`--ds-indigo-600: var(--<上游的名字>)`），DS 的
+ * 原生產出落在 `vendor/<ds>/`。目前**還沒有導入任何 DS**，所以這裡全是字面值。
+ * 步驟與那份規範在 `docs/design-system.md` 的「導入外部 Design System」。
+ *
+ * 因此這裡**允許出現裸色值** —— `check-tokens.mjs` 的裸色值那條只放行 token 定義檔。
+ *
+ * 目前只有一條中性線（gray）與一條品牌線（indigo），因為只有一份主題。
+ * **一條線是某份主題的實作細節，不是共用的介面** —— 多一份主題時多一條線，
+ * 兩條線的階數不必對齊。對齊發生在 `--color-*` 那一層：每份主題宣告同一組名字，
+ * 值怎麼挑各自決定（見 `docs/design-system.md`）。 */
+
+:root {
+  /* ---- 中性：gray（預設主題） ---- */
+  --ds-white:      #FFFFFF;
+  --ds-gray-75:    #F9FAFB;
+  --ds-gray-100:   #F5F5F5;
+  --ds-gray-300:   #D1D5DB;
+  --ds-gray-400:   #9CA3AF;
+  --ds-gray-500:   #6B7280;
+  --ds-gray-925:   #171A21;
+  --ds-gray-950:   #0F1115;
+  --ds-gray-975:   #0B0D11;
+  --ds-gray-850:   #232833;
+  --ds-gray-875:   #1E222B;
+  --ds-gray-825:   #333A48;
+
+  /* ---- 品牌：indigo ---- */
+  --ds-indigo-300: #A5B4FC;
+  --ds-indigo-400: #818CF8;
+  --ds-indigo-600: #4F46E5;
+  --ds-indigo-700: #4338CA;
+  --ds-indigo-900: #312E81;
+
+  /* ---- 狀態 ----
+     只有 -600 一階，深色底上的淺色底由 `semantic.css` 用 color-mix 混出來。
+     **導入 DS 時這一段刻意不接到 vendor**：狀態色跨主題共用（不隨 data-theme 變），
+     接到某一套 DS 的 vendor 上，等於讓內建主題也依賴那套 DS。理由見
+     `docs/design-system.md` 的「跨主題共用的東西不要接到單一 DS」。 */
+  --ds-green-600:  #5C7A52;
+  --ds-amber-600:  #B08544;
+  --ds-red-600:    #A8584F;
+  --ds-slate-600:  #5B7184;
+
+  /* ---- 間距刻度 ----
+     4px 為基準。階號就是「幾個 4px」，所以 --ds-space-6 = 24px，中間跳過的階
+     （7、9、11）是刻意的：留著它們等於允許把任何數字寫進版面。 */
+  --ds-space-1:  4px;
+  --ds-space-2:  8px;
+  --ds-space-3:  12px;
+  --ds-space-4:  16px;
+  --ds-space-5:  20px;
+  --ds-space-6:  24px;
+  --ds-space-8:  32px;
+  --ds-space-10: 40px;
+  --ds-space-12: 48px;
+
+  /* ---- 字級 ----
+     用 rem 而不是 px：px 會讓使用者在瀏覽器調大字級完全沒有效果。
+     1rem = 16px（瀏覽器預設），所以 0.9375rem = 15px。 */
+  --ds-font-size-1: 0.75rem;    /* 12px */
+  --ds-font-size-2: 0.8125rem;  /* 13px */
+  --ds-font-size-3: 0.9375rem;  /* 15px */
+  --ds-font-size-4: 1rem;       /* 16px */
+  --ds-font-size-5: 1.125rem;   /* 18px */
+  --ds-font-size-6: 1.4375rem;  /* 23px */
+  --ds-font-size-7: 1.875rem;   /* 30px */
+
+  /* ---- 行高與字距 ----
+     排版刻度的一部分，和字級同層。無單位的行高會隨字級縮放，所以不帶 px。 */
+  --ds-line-height-1: 1.2;
+  --ds-line-height-2: 1.4;
+  --ds-line-height-3: 1.6;
+
+  --ds-letter-spacing-1: 0.01em;
+  --ds-letter-spacing-2: 0.04em;
+  --ds-letter-spacing-3: 0.06em;
+
+  /* ---- 字重 ---- */
+  --ds-font-weight-regular:  400;
+  --ds-font-weight-medium:   500;
+  --ds-font-weight-semibold: 600;
+  --ds-font-weight-bold:     700;
+
+  /* ---- 控制項高度 ----
+     按鈕、輸入框這類可點擊元素的高度。md 是預設，也是觸控目標的下限。 */
+  --ds-control-height-1: 36px;
+  --ds-control-height-2: 44px;
+  --ds-control-height-3: 52px;
+
+  /* ---- 不透明度 ----
+     停用與弱化狀態的階。三階就夠：不能操作、次要資訊、更淡的輔助資訊。 */
+  --ds-opacity-1: 0.45;
+  --ds-opacity-2: 0.55;
+  --ds-opacity-3: 0.7;
+
+  /* ---- 圖示與頭像尺寸 ---- */
+  --ds-size-icon-1: 16px;
+  --ds-size-icon-2: 20px;
+  --ds-size-icon-3: 24px;
+  --ds-size-avatar-1: 32px;
+  --ds-size-avatar-2: 40px;
+
+  /* ---- 版面寬度 ----
+     頁面內容的最大寬度。不是間距，所以不共用 --ds-space-* 的刻度。 */
+  --ds-container-0: 480px;
+  --ds-container-1: 520px;
+  --ds-container-2: 720px;
+  --ds-container-3: 760px;
+  --ds-container-4: 1180px;
+
+  /* 手機底部導覽的高度。shell 與 notify viewport 都要對齊它，各寫一次 64px 的話
+     改高度時另一邊會靜靜錯位。 */
+  --ds-bottom-nav-height: 64px;
+
+  /* 側欄的兩段寬度。rail 是平板斷點只剩圖示時的寬度；手機斷點是 0，那個 0 不是
+     刻度上的一階（側欄整個不在了），所以不給名字。 */
+  --ds-sidebar-width:      216px;
+  --ds-sidebar-width-rail: 72px;
+
+  /* focus 外環的粗細。和邊框分開：邊框是元件的形狀，外環是狀態指示。 */
+  --ds-focus-ring-width: 3px;
+
+  /* ---- 邊框寬度 ---- */
+  --ds-border-width-1: 1px;
+  --ds-border-width-2: 2px;
+  --ds-border-width-3: 3px;
+
+  /* ---- 圓角 ---- */
+  --ds-radius-1: 4px;
+  --ds-radius-2: 8px;
+  --ds-radius-3: 12px;
+  --ds-radius-4: 16px;
+  --ds-radius-5: 24px;
+  --ds-radius-full: 999px;
+
+  /* ---- 陰影 ---- */
+  --ds-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --ds-shadow-2: 0 2px 6px rgba(0, 0, 0, 0.06);
+  --ds-shadow-3: 0 6px 20px rgba(0, 0, 0, 0.08);
+  --ds-shadow-4: 0 16px 44px rgba(0, 0, 0, 0.12);
+  --ds-shadow-up: 0 -4px 18px rgba(0, 0, 0, 0.06);
+
+  /* ---- 動態 ---- */
+  --ds-ease-standard: cubic-bezier(0.4, 0.0, 0.2, 1);
+  --ds-ease-out:      cubic-bezier(0.16, 1, 0.3, 1);
+  --ds-duration-1:    120ms;
+  --ds-duration-2:    180ms;
+
+  /* ---- 字體 ----
+     `--font-*-loaded` 由 `next/font` 在 app/layout.tsx 產生並掛在 <html> 上，
+     值是它自架的 font-family 名稱。後面那串是它還沒載入時的系統字型後備。 */
+  --ds-family-serif: var(--font-serif-loaded), "Songti TC", "STSong", serif;
+  --ds-family-sans:  var(--font-sans-loaded), "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+}

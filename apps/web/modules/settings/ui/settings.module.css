@@ -1,0 +1,132 @@
+.page {
+  padding: var(--space-8);
+}
+
+.content {
+  max-width: var(--container-form);
+}
+
+.section {
+  border: var(--border-width-hairline) solid var(--color-border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-card);
+  margin-bottom: var(--space-6);
+  overflow: hidden;
+}
+
+.sectionTitle {
+  padding: var(--space-3) var(--space-5);
+  border-bottom: var(--border-width-hairline) solid var(--color-border-subtle);
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-muted);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+}
+
+.settingRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  min-height: 64px;
+}
+
+.settingInfo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1;
+  min-width: 0;
+}
+
+.settingName {
+  font-family: var(--font-sans);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+  color: var(--color-text-body);
+}
+
+.settingDesc {
+  font-family: var(--font-sans);
+  font-size: var(--fs-xs);
+  color: var(--color-text-muted);
+  line-height: var(--lh-snug);
+}
+
+.settingAction {
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .page {
+    padding: var(--space-4);
+  }
+
+  .settingRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+    min-height: auto;
+  }
+
+}
+
+.toggle {
+  position: relative;
+  display: inline-block;
+  width: var(--control-height-md);
+  height: var(--size-icon-lg);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.toggleInput {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.toggleSlider {
+  position: absolute;
+  inset: 0;
+  background: var(--color-border-subtle);
+  border-radius: var(--radius-xl);
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+
+.toggleSlider::before {
+  content: "";
+  position: absolute;
+  width: var(--size-icon-md);
+  height: var(--size-icon-md);
+  /* 置中是推導出來的：(--size-icon-lg 24 - --size-icon-md 20) / 2。
+     改了上面兩個尺寸就要重算這裡，否則留白會變成不對稱的 3 / 1。 */
+  left: 2px;
+  top: 2px;
+  background: var(--color-surface-raised);
+  border-radius: 50%;
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+.toggleInput:checked ~ .toggleSlider {
+  background: var(--color-primary);
+}
+
+.toggleInput:checked ~ .toggleSlider::before {
+  /* 同樣是推導出來的：--control-height-md 44 - 把手 20 - 兩端各 2 = 20。
+     軌道寬度換一階時這裡要一起算，沒有檢查器會提醒（transform 不在裸 px 那條的範圍）。 */
+  transform: translateX(20px);
+}
+
+.toggleInput:disabled ~ .toggleSlider {
+  opacity: var(--opacity-subtle);
+  cursor: not-allowed;
+}
+
+.toggle:has(.toggleInput:disabled) {
+  cursor: not-allowed;
+}

@@ -1,0 +1,61 @@
+# Environment
+.env*
+# 例外：這份是環境變數的**清單**（沒有值），要隨專案散播。實際的 .env 由 make init 產生。
+!.env.example
+*.code-workspace
+
+# 註：`contracts/openapi.json` 刻意**不**列在這裡，也不要把它加回來。它是前後端之間的正式
+# 契約，要進版控 —— 這樣「後端 schema 動了」在 code review 就看得見，而不是只有 CI 的
+# drift job 才會講。理由見 contracts/README.md。
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+# pytest-cov 的中繼檔。
+.coverage
+.coverage.*
+
+# Node
+node_modules/
+.next/
+out/
+next-env.d.ts
+tsconfig.tsbuildinfo
+coverage/
+
+# playwright 的產出。`.auth/` 裡是 e2e 建立的那個管理者的 session cookie ——
+# 每次跑都會重建，而且它是真的憑證，不要進版控。
+e2e/.auth/
+e2e/test-results/
+e2e/playwright-report/
+
+# Backups
+backups/
+
+# 主機端的部署紀錄（scripts/deploy.sh 寫入，CD 讀它決定回滾標的）
+.deployed
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+.obsidian/
+
+# developer —— 個人的 agent 工具設定，不隨專案散播。
+# 註：`AGENTS.md`（內容本體）與 `CLAUDE.md`（把它接進來的轉接檔）刻意**不**列在這裡。
+# 那是專案層級的共用說明，忽略掉會讓同事拉下來就是沒有，而且不會有任何提示。
+marketplaces/
+.agents/
+.claude/
+docs/tasks/
+# CLAUDE.md
+# AGENTS.md

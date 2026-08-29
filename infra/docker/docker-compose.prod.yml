@@ -1,0 +1,47 @@
+# 正式環境的 overlay。
+#
+# 它存在是為了讓 dev 與 prod 的結構對稱：兩邊都是 base + 一個 overlay。
+# 少了這份檔案，prod 會變成「base 不疊任何東西」，`make logs` 之類的地方就得為
+# 「一個 base+overlay、一個只有 base」寫兩套分支。
+#
+# 只放**真的只屬於正式環境**的設定。任何 dev 也需要的東西請放回 docker-compose.yml。
+
+x-prod-runtime: &prod-runtime
+  # 沒有這段，長跑的正式部署會把磁碟寫滿 —— docker 的 json-file driver 預設無上限，
+  # 而這幾個服務都是 `restart: always`，不會有「重開就清掉」的時機。
+  # dev 刻意不設：dev 的容器活不久，轉檔只會讓 `make logs` 翻不到早一點的訊息。
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  api:
+    <<: *prod-runtime
+    # 記憶體上限讓「某個請求吃爆記憶體」的後果限縮在單一容器被 OOM kill 後重啟，
+    # 而不是整台主機（含 postgres）一起被拖下水。
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  web:
+    <<: *prod-runtime
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  postgres:
+    <<: *prod-runtime
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  nginx:
+    <<: *prod-runtime
+
+  # migrate 是一次性工作，跑完就退出，不需要 log rotation，也不該設記憶體上限 ——
+  # migration 有時要一次載進大量文件，被 OOM kill 的後果是資料改到一半。

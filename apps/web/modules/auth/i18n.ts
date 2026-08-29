@@ -1,0 +1,53 @@
+// 這個模組的使用者可見字串。模組內以相對路徑引用（`../i18n`、`./i18n`），
+// 不從 public entry 匯出 —— 文案是模組的內部細節，跨模組沒有共用它的理由。
+
+import { defineMessages } from "@/shared/i18n/dictionary"
+
+export const authMessages = defineMessages({
+  zh: {
+    loginTitle: "登入帳號",
+    signupTitle: "註冊帳號",
+    login: "登入",
+    loggingIn: "登入中",
+    createAccount: "建立帳號",
+    creating: "建立中",
+    goLogin: "前往登入",
+    username: "帳號",
+    password: "密碼",
+    nickname: "暱稱",
+    registerKey: "註冊代碼",
+    newPasswordPlaceholder: "密碼（至少 {min} 個字元）",
+    showPassword: "顯示密碼",
+    hidePassword: "隱藏密碼",
+    securityNote: "安全登入 · 資料加密保護",
+    usernameRequired: "請輸入帳號",
+    nicknameRequired: "請輸入暱稱",
+    registerKeyRequired: "請輸入註冊代碼",
+    loginFailed: "登入失敗",
+    signupFailed: "註冊失敗",
+    sessionExpired: "登入狀態已過期，請重新登入後再繼續操作",
+  },
+  en: {
+    loginTitle: "Sign in",
+    signupTitle: "Create account",
+    login: "Sign in",
+    loggingIn: "Signing in",
+    createAccount: "Create account",
+    creating: "Creating",
+    goLogin: "Go to sign in",
+    username: "Username",
+    password: "Password",
+    nickname: "Display name",
+    registerKey: "Registration key",
+    newPasswordPlaceholder: "Password (at least {min} characters)",
+    showPassword: "Show password",
+    hidePassword: "Hide password",
+    securityNote: "Secure sign-in · Encrypted connection",
+    usernameRequired: "Username is required",
+    nicknameRequired: "Display name is required",
+    registerKeyRequired: "Registration key is required",
+    loginFailed: "Sign-in failed",
+    signupFailed: "Sign-up failed",
+    sessionExpired: "Your session has expired. Please sign in again.",
+  },
+})

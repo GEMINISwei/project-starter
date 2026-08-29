@@ -1,0 +1,27 @@
+{
+  "name": "e2e",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "//": [
+    "刻意是獨立的 package，不併進 apps/web：e2e 同時起 api、web、postgres 與 nginx，",
+    "不屬於任何一邊，而且要能像 items 一樣整包刪掉。",
+    "vitest 只掃 apps/web/tests/**/*.test.ts，playwright 的 *.spec.ts 天然不會被它撿走。"
+  ],
+  "scripts": {
+    "test": "playwright test"
+  },
+  "//devDependencies": [
+    "**`typescript` 與 `@types/node` 要跟 apps/web 同一個版本線。** 理由與移除條件寫在",
+    "apps/web/package.json 的 `//devDependencies`，這裡不抄一份（抄了就是兩份會各自飄）。",
+    "跨 major 由 .github/dependabot.yml 的 /e2e 那一段擋著，兩者被擋的理由不同，見那裡。",
+    "",
+    "`@playwright/test` 則是 e2e 自己的，跟 apps/web 無關 —— 它連帶決定瀏覽器版本，",
+    "所以 CI 與本機裝到的是同一版（scripts/e2e.sh 的 npx playwright install 讀它）。"
+  ],
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "@types/node": "^24",
+    "typescript": "^5.9.3"
+  }
+}

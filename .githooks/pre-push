@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+#
+# 擋住對 main 的直接 push、force push 與刪除。
+#
+# 為什麼是 hook 而不是 GitHub 的分支保護：ruleset 與舊版 branch protection 對
+# private repo 都是付費功能（免費方案連 API 都回 403），而這個模板不預設任何方案。
+# 所以保護分兩層 —— 這一層在本機擋下來，ci.yml 的 pushed-via-pr job 在事後把漏網的
+# 吵出來。**兩層都不是伺服器端強制**：`--no-verify` 繞得過去，沒跑過 `make setup`
+# 的機器上這支根本不會執行。它把「什麼都沒擋」換成「要刻意繞過」，僅此而已。
+#
+# 由 `make setup` 透過 `git config core.hooksPath .githooks` 掛上。
+#
+# 三種情況裡 force push 是最嚴重的那個，而且嚴重的原因跟一般專案不同：
+# 這個 repo 會被當成模板，下游是靠 `git merge template/main` 同步的。main 一旦被改寫，
+# 每個下游的共同祖先就不見了，而那不是重跑一次指令能修的 —— 要每個下游各自處理。
+set -euo pipefail
+
+readonly PROTECTED="main"
+readonly ZERO="0000000000000000000000000000000000000000"
+
+blocked=0
+
+# git 從 stdin 餵進來，一行一個 ref：<local ref> <local sha> <remote ref> <remote sha>
+while read -r _local_ref local_sha remote_ref remote_sha; do
+    [ "$remote_ref" = "refs/heads/$PROTECTED" ] || continue
+
+    if [ "$local_sha" = "$ZERO" ]; then
+        echo "擋下：刪除遠端的 ${PROTECTED}。" >&2
+        blocked=1
+        continue
+    fi
+
+    # 遠端還沒有這個分支 —— 這是「第一次把專案推上自己的 origin」，放行。
+    # 開案流程（TEMPLATE.md 第 1 步）一定會經過這裡，擋掉它等於擋掉開案。
+    if [ "$remote_sha" = "$ZERO" ]; then
+        continue
+    fi
+
+    # 遠端那個 commit 還在新的歷史裡嗎？不在就是改寫歷史。
+    if ! git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
+        echo "擋下：這是對 $PROTECTED 的 force push（遠端的 $remote_sha 不在新歷史裡）。" >&2
+        echo "  這個 repo 會被當成模板，下游靠 git merge template/main 同步 ——" >&2
+        echo "  改寫 $PROTECTED 會抹掉所有下游的共同祖先，而那要每個下游各自處理。" >&2
+        blocked=1
+        continue
+    fi
+
+    echo "擋下：直接 push 到 ${PROTECTED}。改推一個分支再開 PR ——" >&2
+    echo "  CI 的 changelog job 只在 PR 上跑，直接 push 會整個繞過它。" >&2
+    blocked=1
+done
+
+if [ "$blocked" -ne 0 ]; then
+    echo >&2
+    echo "真的要這麼做就加 --no-verify（它會被 ci.yml 的 pushed-via-pr job 記上一筆）。" >&2
+    echo "這個專案不走 PR 流程的話，改掉或刪掉 .githooks/pre-push 才是正確做法。" >&2
+    exit 1
+fi

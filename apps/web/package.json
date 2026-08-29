@@ -1,0 +1,91 @@
+{
+  "name": "web",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "//engines": [
+    "**兩份檔案各有一個意思，不要合併**：`.nvmrc` 只寫 major（24），是給 nvm、CI 的",
+    "setup-node 與 Dockerfile 讀的**版本線** —— 寫成完整版號會把它們釘死在那一版，",
+    "從此吃不到 24.x 的修補版。這裡的 engines 則是**下限**，由 scripts/setup.sh 讀。",
+    "npm 自己只會印 EBADENGINE warning 不會擋，而 `engine-strict=true` 會連帶檢查每個",
+    "相依套件宣告的 engines，誤傷面太大（同 setup.sh 的註解）。",
+    "下限訂 24.15.0 而不是 24：devDependency 已經開始把 Node 版本當成前置需求",
+    "（jsdom 30 要求 >=24.15、knip 6 要求 >=22.12）。",
+    "上限鎖 25：Node 24（Krypton）是目前的 Active LTS，跨 major 是一次刻意的決定，",
+    "要同時改這裡、.nvmrc 與 apps/web/Dockerfile 的 ARG NODE_VERSION。"
+  ],
+  "engines": {
+    "node": ">=24.15.0 <25"
+  },
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start",
+    "typecheck": "next typegen --webpack && tsc --noEmit",
+    "lint": "eslint && npm run check:architecture && npm run check:tokens && npm run check:deadcode",
+    "check:architecture": "node scripts/check-boundaries.mjs",
+    "check:tokens": "node scripts/check-tokens.mjs",
+    "check:deadcode": "knip",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "//scripts": [
+    "這裡刻意沒有 gen-types。契約與型別檔的路徑只在 scripts/lib/common.sh 定義一份",
+    "（CONTRACT／WEB_SCHEMA），`make gen-types` 是直接跑 npx、不會經過這裡的 script ——",
+    "再寫一份的話兩邊會各自飄，而且沒有任何檢查會發現。要重產型別請在 repo 根目錄跑",
+    "`make gen-types`（它跑完會自動 `make check-contracts` 驗證產出物落在正確位置）。"
+  ],
+  "//overrides": [
+    "js-yaml 4.3.0 帶著一個 high 等級的 quadratic CPU 消耗 advisory（GHSA-5p4m-2wfm-xmqj），",
+    "修在同一條 4.x 線的 4.3.1。它是 openapi-typescript → @redocly/openapi-core 的相依，",
+    "只在 `make gen-types` 時跑，不進正式環境 —— 所以 `make audit`（--omit=dev）看不到它。",
+    "還是釘：這個 repo 的規則是 advisory 不允許直接忽略，而修補版就在相容範圍內。",
+    "移除條件：openapi-typescript 自己升上去之後（`npm ls js-yaml` 確認），刪掉這一段重裝。",
+    "這一區塊的通則：只釘我們沒有直接呼叫、但帶著 advisory 的傳遞相依，且修補版要在原本的",
+    "相容範圍內。每一條都要附移除條件，否則它會變成沒人敢動的永久設定。"
+  ],
+  "overrides": {
+    "js-yaml": "^4.3.1"
+  },
+  "dependencies": {
+    "lucide-react": "^1.34.0",
+    "next": "^16.3.3",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "server-only": "^0.0.1"
+  },
+  "//devDependencies": [
+    "`@types/node` 跟著**執行時的 Node major** 走（見 .nvmrc），不是跟著 npm 的 latest ——",
+    "它描述的是 Node 24 的 API 表面，裝 26 的型別只會讓編譯期看得到執行期沒有的東西。",
+    "`typescript` 停在 5.x 不是懶得升，是被兩個 peer 夾住的**交集**：",
+    "openapi-typescript 7.13 要 `typescript@^5.x`（TS 6 起就 ERESOLVE），",
+    "typescript-eslint（eslint-config-next 帶進來）要 `>=4.8.4 <6.1.0`。兩者都是硬 peer，",
+    "不是警告。移除條件：兩邊都放寬之後 —— 用",
+    "`npm view openapi-typescript peerDependencies` 與 `npm view typescript-eslint peerDependencies`",
+    "確認，再把這裡與 //devDependencies 的說明一起刪掉。",
+    "`vite` 是直接列出的：@vitejs/plugin-react 6 要求 vite ^8，而 vitest 4 的相依範圍同時",
+    "接受 6/7/8 —— 不明確指定的話，同一棵樹裡會出現兩個 vite。",
+    "`eslint` 停在 9.x：eslint-config-next 帶的 eslint-plugin-react 最新版 peer 只到 ^9.7，",
+    "裝 ESLint 10 會在載入規則時直接拋錯（詳情與移除條件見 eslint.config.mjs 的註解）。"
+  ],
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.6",
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.1.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "babel-plugin-react-compiler": "1.0.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.3",
+    "jsdom": "^30.0.1",
+    "knip": "^6.32.2",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.2",
+    "vitest": "^4.1.10"
+  }
+}

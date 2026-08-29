@@ -1,0 +1,751 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    # 發版走 tag。tag push 也要跑完整套 CI —— publish job 會把 image 推上 registry，
+    # 而那份 image 就是要上線的東西，不能只因為「同一個 commit 在 main 上綠過」就跳過。
+    # （check-version 在 tag build 時會多驗 tag 與 APP_VERSION 一致，那條只有這裡跑得到。）
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+    # 預設只有 opened／synchronize／reopened。**`ready_for_review` 非加不可**：
+    # acceptance job 在 draft 上是跳過的（理由見那個 job），而「按下 Ready for review」
+    # 本身不推 commit —— 少了這個事件，CI 不會重跑，那個 job 就永遠停在 skipped，
+    # 而 skipped 對 required status check 算通過。加上它，整套檢查才會在
+    # 「draft → ready」的那一刻真的跑一次。
+    types: [opened, synchronize, reopened, ready_for_review]
+
+  # 每週跑一次完整 CI。**這一條存在的理由只有 security job**：它查的是外部 advisory
+  # 資料庫，會因為「今天有人公布了新漏洞」而變紅 —— 那跟有沒有人送 PR 無關。
+  # 沒有它的話，一個上線後穩定、幾週沒有 PR 的專案就是幾週沒有掃過，
+  # 而 dependabot 只在**有更新時**才開 PR，補不上沒有更新的那幾週。
+  #
+  # 不另外開一支只有 security 的 workflow：那要把 setup 步驟再抄一份，
+  # 而整套跑一次的邊際成本很低。
+  # publish 帶 `if: github.event_name == 'push'`、changelog 是 PR-only、
+  # pushed-via-pr 只在 push 到 main 時跑 —— 排程觸發時三者都是 skipped，不會推任何 image。
+  schedule:
+    - cron: "0 3 * * 1"
+
+# 沒宣告的話吃的是 repo 設定的預設值，而那可能是 read-write。底下的 job 會跑第三方
+# action 與 npm／uv 拉下來的程式碼，其中沒有一個需要寫入這個 repo。
+# 真的需要更多的那兩個 job（publish 要 packages: write、pushed-via-pr 要
+# pull-requests: read）自己宣告 —— job 層的 permissions 是**取代**而不是疊加，
+# 所以它們不受這裡影響。
+permissions:
+  contents: read
+
+# 同一個 PR 連續推送時，取消還在跑的舊 job。
+# **tag build 不取消**：那條路徑會推 image 並觸發部署，中途被砍會留下
+# 「有些 tag 推上去了、有些沒有」的半套狀態，而 registry 沒有交易可言。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' }}
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/api
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 啟動 PostgreSQL
+        # image **從 compose 讀出來**，這裡不寫第二份。
+        #
+        # 寫死的代價不是「跑錯版本」（`make check-compose` 會擋），而是 **dependabot 的
+        # 升版 PR 永遠紅燈**：它的 docker_compose 生態系只更新 compose 那一份，看不到
+        # `run:` 裡的字串，於是每次升 postgres 都要有人手動往它的分支補一個 commit。
+        #
+        # 用 `docker run` 而不是 `services:`：後者的 image 必須是字面值，
+        # 沒辦法在 job 開始前先算出來。
+        #
+        # 排在安裝相依之前，讓資料庫開機與 uv sync 重疊；等待就緒在那之後。
+        run: |
+          # **要用絕對路徑**：這個 job 的 `defaults.run.working-directory` 是 apps/api，
+          # 倉庫根目錄在 $GITHUB_WORKSPACE。寫成根目錄的相對路徑在這裡讀不到檔案，
+          # 而且底下那個守衛的訊息會指向 compose，看不出是路徑寫錯。
+          compose="${GITHUB_WORKSPACE}/infra/docker/docker-compose.yml"
+          image="$(grep -oE 'postgres:[0-9]+\.[0-9]+-alpine' "$compose" | head -1)"
+          # 抓不到就停。空字串會讓 docker run 去拉一個叫 "" 的 image，
+          # 而那個錯誤訊息完全看不出是這裡的 grep 壞了。**訊息要帶上路徑** ——
+          # 「找不到 image」與「檔案根本不在這裡」是兩回事。
+          [ -n "$image" ] || { echo "在 ${compose} 找不到 postgres image"; exit 1; }
+          echo "integration 測試使用 ${image}（來自 compose）"
+          docker run -d --name postgres -p 5432:5432 \
+            -e POSTGRES_USER=ci -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=ci \
+            "$image"
+
+      - name: 安裝 uv
+        # 釘 SHA 而不是 `@v9`：setup-uv 從 v8.0.0 起刻意不再發布會移動的 major tag
+        # （上游的供應鏈防護，理由見他們的 v8.0.0 release notes），`@v9` 解析不到，
+        # CI 會在 "Prepare all required actions" 就整個掛掉。旁邊的 actions/* 還有
+        # 移動式 tag 可用，所以這個檔案裡兩種寫法並存是刻意的。
+        # 版本由 dependabot 的 github-actions 生態系連同註解一起更新。
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+
+      - name: 安裝相依套件
+        run: uv sync --frozen
+
+      - name: 等待 PostgreSQL 就緒
+        # 沒有 `services:` 就沒有 healthcheck，所以「連得上」這件事要自己等 ——
+        # 少了這段，第一條測試會撞上 "the database system is starting up"。
+        #
+        # `-h 127.0.0.1` 是必要的：不帶主機時 pg_isready 走 unix socket，而那個 socket
+        # 在 initdb 期間就已經在了，檢查會提早轉綠（同 compose 的 healthcheck）。
+        run: |
+          for i in $(seq 1 30); do
+            docker exec postgres pg_isready -h 127.0.0.1 -U ci -d ci >/dev/null 2>&1 && \
+              echo "postgres ready" && exit 0
+            sleep 2
+          done
+          echo "PostgreSQL 未能在時限內接受連線"; exit 1
+
+      - name: Lint（ruff）
+        run: uv run ruff check .
+
+      - name: 型別檢查（mypy）
+        run: uv run mypy
+
+      - name: 測試
+        env:
+          PROJECT_NAME: ci
+          MODE: development
+          POSTGRES_URL: postgresql+asyncpg://ci:ci@localhost:5432/ci
+          JWT_SECRET_KEY: ci_secret_key_that_is_at_least_32_characters
+          # integration 測試在連不上 PostgreSQL 時會 `pytest.skip`，而 skip 的 exit code
+          # 是 0 —— 資料庫沒起來就整批消失，所有燈照樣是綠的。這個變數讓同樣的情況
+          # 變成 fail（見 tests/integration.py）。覆蓋率當不了代理指標：fail_under 刻意
+          # 訂到「本機完全沒有 PostgreSQL 也過得了」。
+          REQUIRE_INTEGRATION: "1"
+        # 帶覆蓋率跑。門檻在 pyproject.toml 的 fail_under（防退步的地板，不是目標）。
+        run: uv run pytest tests/ -q --cov
+
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: apps/web
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          # 版本讀 apps/web/.nvmrc，不在這裡再寫一次 —— 三個 job 加上 Dockerfile，
+          # 寫死的話有四處可以各自飄。
+          node-version-file: apps/web/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: 安裝相依套件
+        run: npm ci
+
+      - name: Lint（eslint）
+        run: npm run lint
+
+      - name: 型別檢查（tsc）
+        run: npm run typecheck
+
+      - name: 測試（vitest）
+        # 門檻在 vitest.config.ts 的 coverage.thresholds。
+        run: npm run test:coverage
+
+      - name: 建置
+        env:
+          # next.config.ts 會在載入時驗證這個值的格式。
+          UPLOAD_SIZE_LIMIT: 1mb
+        run: npm run build
+
+  # 部署設定的驗證。`make check` 只涵蓋原始碼 —— compose 檔與 production Dockerfile
+  # 壞掉時，前面那些 job 全部照樣綠燈，直到有人真的去部署才會發現。
+  #
+  # 這裡刻意**不**把整套 compose 跑起來（那需要在 CI 裡等 replica set、等 healthcheck，
+  # 又慢又不穩）。驗證的是「設定檔語法有效」與「image 建得起來」這兩件會靜靜壞掉的事；
+  # 啟動順序的正確性由 depends_on 的宣告保證，另有文件化的手動驗證步驟。
+  deploy-config:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Shell 腳本靜態檢查（shellcheck）
+        # 排在最前面：純靜態、不需 docker，而且 `make` 的指令實作全是 shell ——
+        # 底下每一步都在跑它們，腳本本身壞掉時最好先知道。ubuntu runner 內建 shellcheck。
+        run: make check-shell
+
+      - name: 確認 CI 與本機指令、分支保護三者一致
+        # 這一步守的是這份檔案自己：底下 api／web 兩個 job 內嵌的指令是從
+        # scripts/{lint,typecheck,test,build}.sh 抄過來的（為了讓兩邊平行跑），
+        # 而 .github/rulesets/main.json 又抄了一份 job 名單。三處都是手寫的，
+        # 漂移時沒有任何症狀 —— 尤其是 ruleset 少列一個 job，那個 job 就不再擋 merge。
+        run: make check-ci
+
+      - name: 確認環境變數四處一致
+        # .env.example（清單）、scripts/init.sh（產生 .env）與 compose（注入）都是手寫的，
+        # 而沒有任何程式讀 .env.example —— 它寫錯不會讓任何指令失敗，只會讓照著清單
+        # 設定的人踩坑。同樣是純靜態檢查，不需要 docker，所以排在建置那幾步之前。
+        run: make check-env
+
+      - name: 確認 APP_VERSION 與 CHANGELOG（發版時還有 git tag）一致
+        # 在這支之前 APP_VERSION 沒有任何檢查器 —— 而 registry 模式讓它從紀律問題
+        # 變成正確性問題：image 以 git tag 命名，image 裡的 OpenAPI 卻印 APP_VERSION。
+        run: make check-version
+
+      - name: 確認文件指向的檔案與識別字存在
+        # 沒有任何一個既有 job 會讀 markdown，所以文件教錯一個 API 可以綠燈到永遠 ——
+        # 而照抄的人一定編不過。同樣是純靜態、不需 docker，排在建置那幾步之前。
+        run: make check-docs
+
+      - name: 建立驗證用的 .env
+        # compose 的變數大量使用 ${VAR:?}（缺少即中止），所以 config 驗證需要一份完整的
+        # 環境變數。這些值只用來讓變數插值成立，不會真的啟動任何服務。
+        run: |
+          cat > .env <<'ENVEOF'
+          COMPOSE_PROJECT_NAME=ci
+          SYSTEM_NAME=CI
+          SYSTEM_PORT=3000
+          POSTGRES_USER=ci
+          POSTGRES_PASSWORD=ci-password
+          POSTGRES_DB=ci
+          JWT_SECRET_KEY=ci_secret_key_that_is_at_least_32_characters
+          EXPIRE_HOURS=8
+          TOKEN_VERSION=1
+          REGISTER_KEY=
+          UPLOAD_SIZE_LIMIT=1mb
+          NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=Y2ktb25seS1ub3QtYS1yZWFsLWtleS0zMmJ5dGVzISE=
+          VAPID_PRIVATE_KEY=ci
+          VAPID_PUBLIC_KEY=ci
+          VAPID_SUBJECT=mailto:ci@example.com
+          ENVEOF
+
+      - name: 驗證 compose 設定（語法、相對路徑、migrate 順序）
+        # 三件事都由這一支守。**不要在這裡手拼 compose 旗標** ——
+        # `--project-directory` 與 `--env-file` 的基準不同，組錯時 docker 不會報錯，
+        # 而唯一一份正確組合在 scripts/lib/compose.sh —— 那個檔案的檔頭就寫著
+        # 「這裡是唯一來源，不要在別處再組一份」。
+        run: make check-compose
+
+      - name: 確認 nginx 每個 proxy location 都覆寫用戶端 IP
+        # 後端的限流無條件信任 X-Real-IP，正確性完全建立在 nginx 會覆寫它上面。
+        # 漏掉一個 location block 是靜默的：所有人共用同一個限流 key，沒有任何錯誤訊息。
+        run: make check-nginx
+
+      # 以下兩個 image 建置改走 buildx 並把 layer 快取寫進 GitHub Actions cache，
+      # 讓後面的 publish job 直接命中 —— 否則同一個 commit 的同一份 image 會建兩次。
+      - uses: docker/setup-buildx-action@v4
+
+      - name: 建置 api production image
+        uses: docker/build-push-action@v7
+        with:
+          context: apps/api
+          target: base
+          tags: api-image-check
+          # `load: true` 才會把結果放進本機 docker daemon，下一步的 docker run 需要它。
+          load: true
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+      - name: 確認備份工具在 image 裡跑得起來
+        # pg_dump／pg_restore 是額外裝進 image 的（見 apps/api/Dockerfile），
+        # 缺少動態連結相依時 image 照樣建得起來、服務照常跑，只有 `make backup` 會炸。
+        # 這一步把它變成建置階段就會紅的錯。
+        run: |
+          docker run --rm api-image-check pg_dump --version
+          docker run --rm api-image-check pg_restore --version
+
+      - name: 建置 web production image
+        uses: docker/build-push-action@v7
+        with:
+          context: apps/web
+          target: prod
+          tags: web-image-check
+          # build arg 只剩這一個：SYSTEM_NAME／EXPIRE_HOURS／VAPID_PUBLIC_KEY 都已經
+          # 改成執行期注入（見 apps/web/shared/runtime/config.ts）。
+          build-args: UPLOAD_SIZE_LIMIT=1mb
+          # 對應 Dockerfile builder stage 的 `--mount=type=secret,id=next_actions_key`。
+          secrets: |
+            next_actions_key=Y2ktb25seS1ub3QtYS1yZWFsLWtleS0zMmJ5dGVzISE=
+          # scope 刻意與 publish 分開（`web-check` vs 完全不快取）。
+          # **不要把它改回跟 publish 共用** —— 這一步用的是上面那把寫死的假金鑰，
+          # 而 BuildKit 的 cache key **不包含 secret 的值**，所以共用 scope 會讓
+          # publish 直接命中這一層，把假金鑰烤進正式 image，而且完全沒有症狀。
+          cache-from: type=gha,scope=web-check
+          cache-to: type=gha,scope=web-check,mode=max
+
+  # CHANGELOG 的守衛。
+  #
+  # `CHANGELOG.md` 與 `APP_VERSION` 是下游判斷「落後多少、同步要做什麼」的唯一依據
+  # （見 docs/downstream.md）。沒有這個 job，漏寫不會有任何提示，
+  # 而下游要到合併衝突時才發現。
+  #
+  # 只在 pull_request 觸發：push 到 main 沒有可比較的基準。
+  #
+  # **下游專案可以整個刪掉這個 job。** 它守的是模板自己的發布紀律；下游有自己的
+  # CHANGELOG 節奏，不該被上游的規則綁住。
+  changelog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # 要跟 base 分支比對，所以需要完整歷史 —— 預設的淺 clone 找不到 merge-base。
+          fetch-depth: 0
+
+      - name: 確認實質改動有留下 CHANGELOG 條目
+        env:
+          # 用 base ref 而不是寫死 main：日後開 release 分支時這個 job 不必跟著改。
+          BASE_REF: ${{ github.base_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          # 放行方式：PR 標題帶 [skip changelog]。純重構、CI 調整這類不影響下游的改動
+          # 不該被卡住 —— 但要**明講**，而不是預設放行。
+          case "$PR_TITLE" in
+            *"[skip changelog]"*)
+              echo "PR 標題帶 [skip changelog]，略過檢查"
+              exit 0
+              ;;
+          esac
+
+          base="origin/$BASE_REF"
+          changed=$(git diff --name-only "$(git merge-base "$base" HEAD)" HEAD)
+
+          # 只看會影響下游的三個目錄。文件與 .github/ 自己的改動不需要條目。
+          if ! echo "$changed" | grep -qE '^(apps|scripts|infra)/'; then
+            echo "沒有動到 apps/、scripts/ 或 infra/，不需要 CHANGELOG 條目"
+            exit 0
+          fi
+
+          if echo "$changed" | grep -qx 'CHANGELOG.md'; then
+            echo "OK: 實質改動已附上 CHANGELOG 條目"
+            exit 0
+          fi
+
+          echo "::error::這個 PR 動到 apps/、scripts/ 或 infra/，但沒有更新 CHANGELOG.md。"
+          echo "::error::請補一筆條目並寫明**下游同步時需要做什麼**（見 docs/downstream.md）。"
+          echo "::error::純重構或不影響下游時，在 PR 標題加上 [skip changelog]。"
+          exit 1
+
+  # 功能級規格那一層的檢查器（見 docs/development.md 的「規格與測試的三層」）。
+  #
+  # **只在 PR 上跑**：它讀的是 PR 描述，push 與 schedule 上沒有那個東西 ——
+  # 所以它進不了 deploy-config job，只能自己一個，同 changelog。
+  #
+  # 不跟 changelog 併成一個 job：兩者的放行條件不同（changelog 看改了哪些目錄、
+  # acceptance 看標題），併起來之後「這個 PR 為什麼綠燈」會取決於兩組規則的交互，
+  # 而那正是要有人一眼看懂的東西。
+  #
+  # **draft 上不跑。** 流程是先開 draft PR 寫驗收條件、再寫測試，所以它在 draft 期間
+  # 必定是紅的 —— 而 draft PR 本來就 merge 不進去，那個紅燈擋不到任何東西，只會讓
+  # checks 清單上「預期中的紅」與「真的壞了」長得一模一樣。這是整套 CI 裡唯一一處
+  # 紅燈不代表有事的地方，所以拿掉。代價是驗收條件的紅綠燈要自己跑 `make check-acceptance`
+  # （它讀得到當前分支的 PR），換來的是 PR 頁面上的紅一律代表有事。
+  #
+  # 跳過而不是失敗，配合上面 `on:` 的 `ready_for_review` —— 兩者缺一就會開洞，
+  # 理由寫在那裡。
+  acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request' && !github.event.pull_request.draft
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 確認每條驗收條件都指得出一個存在的測試
+        env:
+          # 一律經由 env 傳入，**不要內插進 run 的腳本字串**：標題與描述是任何人都能
+          # 編輯的內容，內插等於讓 PR 作者在 runner 上執行任意指令。上面的 changelog
+          # job 同理。
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: make check-acceptance
+
+  # 實作級規格的防線：改動或刪掉既有測試時，要求 PR 描述說明為什麼。
+  #
+  # 同樣是 PR-only（要讀 PR 描述），而且**要完整歷史** —— 它跟 base 的 merge-base 比對，
+  # 淺 clone 找不到共同祖先，那時它會跳過而不是失敗，於是這個 job 靜靜地什麼都沒驗。
+  test-edits:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: 確認改動到既有測試時有說明
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: make check-test-edits
+
+  # 跨層 e2e。**這是唯一會把整套服務真的跑起來的 job** —— deploy-config 只驗設定與
+  # 建置得起來，api/web 兩個 job 只跑單層測試。
+  #
+  # 它守的是四條「兩邊各自都測過、中間沒人測」的接縫（清單見 e2e/tests/ 的檔頭）。
+  # 不在 make check 裡：check 涵蓋原始碼而且要能離線快跑，這一支要起整套 compose。
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # 排程觸發時不跑。那條 cron 存在的理由只有 security job（它查的是會自己變紅的外部
+    # advisory 資料庫）—— e2e 的相依全部釘死，每週跑一次測不到任何新東西，只是燒時間。
+    if: github.event_name != 'schedule'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          # 版本線同其他 job，讀 apps/web/.nvmrc（e2e 沒有自己的 .nvmrc，
+          # 多一份版本號就多一個會各自飄的地方）。
+          node-version-file: apps/web/.nvmrc
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: 建立 .env
+        # 值只要讓 compose 的 ${VAR:?} 插值成立即可，**但這個 job 會真的把資料庫跑起來**，
+        # 所以有兩個欄位不能隨便填：
+        #
+        #   REGISTER_KEY      不能留空 —— 第一條接縫就是拿它建立第一個超級管理者。
+        #                     空的話那條會失敗，而症狀是「註冊表單送不出去」。
+        #   POSTGRES_PASSWORD **不可以含 `@` `:` `/` `?` `#`**。它會被插進 compose 組出來的
+        #                     `postgresql+asyncpg://user:pass@postgres:5432/db`，那些字元
+        #                     會把 URL 切在錯的地方 —— 症狀是 api 一直重啟並說認證失敗，
+        #                     完全看不出跟密碼裡的字元有關。`scripts/init.sh` 對這個欄位
+        #                     的字元集限制是同一件事。
+        run: |
+          cat > .env <<'ENVEOF'
+          COMPOSE_PROJECT_NAME=e2e
+          SYSTEM_NAME=E2E
+          SYSTEM_PORT=3100
+          POSTGRES_USER=e2e
+          POSTGRES_PASSWORD=e2e-password
+          POSTGRES_DB=e2e
+          JWT_SECRET_KEY=e2e_secret_key_that_is_at_least_32_characters
+          EXPIRE_HOURS=8
+          TOKEN_VERSION=1
+          REGISTER_KEY=e2e-register-key
+          UPLOAD_SIZE_LIMIT=1mb
+          NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=ZTJlLW9ubHktbm90LWEtcmVhbC1rZXktMzJieXRlcyE=
+          VAPID_PRIVATE_KEY=e2e
+          VAPID_PUBLIC_KEY=e2e
+          VAPID_SUBJECT=mailto:e2e@example.com
+          ENVEOF
+
+      - name: 跑 e2e
+        run: make e2e
+
+      - name: 失敗時留下報告、trace 與容器 log
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-failure
+          # 三份東西，缺一不可：
+          #   playwright-report/  html 報告（哪一條失敗、每一步的細節）
+          #   test-results/       trace 與截圖，**以及 scripts/e2e.sh 在失敗時倒進去的
+          #                       容器 log** —— stack 起不來的時候，前兩份都是空的，
+          #                       只有 log 講得出原因
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7
+
+  # 事後偵測「沒經過 PR 就進了 main」。
+  #
+  # 這一段本來該由 GitHub 的分支保護處理，但 ruleset 與舊版 branch protection 對
+  # private repo 都是付費功能（免費方案連 API 都回 403），而這個模板不預設任何方案。
+  # 所以保護是兩層：.githooks/pre-push 在本機擋，這個 job 在事後吵。
+  #
+  # **它擋不住任何東西** —— 走到這裡東西已經在 main 上了。它的價值是留下一筆紅燈紀錄，
+  # 並涵蓋 hook 管不到的情況：沒跑過 `make setup` 的機器、`--no-verify`、
+  # 以及直接在 GitHub 網頁上編輯檔案。
+  #
+  # 順帶救回 changelog job：那一個只在 pull_request 上跑，繞過 PR 等於繞過它，
+  # 而 CHANGELOG 是下游判斷同步事項的唯一依據。
+  #
+  # 只在 push 到 main 時跑，所以**不能列進 .github/rulesets/main.json 的必要檢查** ——
+  # PR 上它根本不存在，列進去每個 PR 都會卡在等一個不會來的檢查（同 publish）。
+  # check-ci 守著這件事。
+  pushed-via-pr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # `!github.event.created` 排除掉「建立 main 的那一次 push」—— 那時候 repo 才剛開，
+    # 不可能有 PR。少了它，每個新專案的第一筆 CI 紀錄都是紅的，而那會教會人
+    # 「這個 job 紅是正常的」—— 一個註定被忽略的紅燈，等於這個 job 不存在。
+    #
+    # 用 created 而不是「排除 root commit」，因為開案有兩條路徑（見 TEMPLATE.md）：
+    # 不保留歷史時 tip 就是 root commit，保留歷史時 tip 是模板的某個 commit ——
+    # 後者用 root commit 判斷會漏掉，而 PR 關聯是 per-repo 的，那個 commit 在新 repo
+    # 裡一樣查不到 PR。
+    #
+    # **已知的洞**：刪掉 main 再重推也會讓 created 是 true。這個洞可以接受 ——
+    # 做得出那件事的人已經越過比繞過 PR 嚴重得多的線，而刪除本來就由 pre-push hook
+    # 與 ruleset 的 deletion 規則管，不是這個 job 的守備範圍。
+    if: >-
+      github.event_name == 'push' && github.ref_name == 'main'
+      && !github.event.created
+    permissions:
+      contents: read
+      # 查這個 commit 關聯到哪些 PR。private repo 少了它是 403，而 403 在
+      # `run:` 的預設 bash -e 下會讓這一步當場失敗 —— 那是要的行為，不要改成放行。
+      pull-requests: read
+    steps:
+      - name: 確認這個 commit 是從 PR 合進來的
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 用 commit → PR 的反查，而不是看 commit message 是不是 "Merge pull request"：
+          # squash 與 rebase 合併都不會產生那種訊息，用訊息判斷會把正常流程判成違規。
+          count="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq 'length')"
+          if [ "$count" -gt 0 ]; then
+            echo "OK: 這個 commit 來自 PR"
+            exit 0
+          fi
+
+          echo "::error::commit $GITHUB_SHA 直接進了 main，沒有經過 PR。"
+          echo "::error::CI 的 changelog job 只在 PR 上跑，這次等於繞過了它。"
+          echo "::error::本機的 .githooks/pre-push 會擋這件事；沒被擋下來代表那台機器"
+          echo "::error::沒跑過 make setup，或用了 --no-verify，或是在網頁上直接編輯。"
+          exit 1
+
+  # 相依套件的已知漏洞掃描。獨立成一個 job 而不是掛在 api/web 後面，理由有二：
+  #   1. 它查的是外部 advisory 資料庫，會因為「今天有人公布了新漏洞」而變紅 —— 那跟這個 PR
+  #      改了什麼無關，混在程式碼的 job 裡會讓人分不清是自己弄壞的還是外面變了。
+  #   2. 它需要網路，而 `make check` 刻意保持可離線執行（見 scripts/audit.sh 的檔頭註解）。
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+
+      - uses: actions/setup-node@v7
+        with:
+          # 版本讀 apps/web/.nvmrc，不在這裡再寫一次 —— 三個 job 加上 Dockerfile，
+          # 寫死的話有四處可以各自飄。
+          node-version-file: apps/web/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: 安裝相依套件（前端）
+        run: npm ci
+        working-directory: apps/web
+
+      - name: 稽核正式環境相依
+        run: make audit
+
+  # 前端型別是從後端 OpenAPI 產生的。這個 job 重新產生一次再比對 git diff，
+  # 確保有人改了 schema.py 卻忘記跑 `make gen-types` 時 CI 會擋下來 ——
+  # 沒有這一步，型別契約就只是「建議」而不是保證。
+  api-types-up-to-date:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+
+      - uses: actions/setup-node@v7
+        with:
+          # 版本讀 apps/web/.nvmrc，不在這裡再寫一次 —— 三個 job 加上 Dockerfile，
+          # 寫死的話有四處可以各自飄。
+          node-version-file: apps/web/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - run: uv sync --frozen
+        working-directory: apps/api
+
+      - run: npm ci
+        working-directory: apps/web
+
+      - name: 重新產生型別
+        run: make gen-types
+
+      - name: 檢查 API 契約與前端型別是否為最新
+        run: |
+          if ! git diff --exit-code -- contracts/openapi.json apps/web/shared/api/generated/schema.d.ts; then
+            echo "::error::contracts/openapi.json 或 apps/web/shared/api/generated/schema.d.ts 已過期。請在本機執行 'make gen-types' 並把兩份結果一併 commit。"
+            exit 1
+          fi
+
+  # 把驗過的 image 推上 GHCR。這是 CI 與 CD 的交界：從這裡之後，「上線的東西」
+  # 就是這個 job 產出的那份 digest，不再是任何人在某台主機上重建的近似品。
+  #
+  # 放在 ci.yml 而不是獨立 workflow：`needs` 是唯一能保證「全綠才發布」的機制。
+  # 拆成兩個 workflow 就得靠 workflow_run 去查另一個 workflow 的結論，
+  # 而那條路對「哪一次 run 對應哪一個 commit」的處理很容易寫出漏洞。
+  #
+  # **下游沒有要用 registry 的話，可以整個刪掉這個 job**（連同 deploy.yml）——
+  # `make prod` 那條本機建置的路徑完全不依賴它。
+  publish:
+    needs: [api, web, deploy-config, security, api-types-up-to-date, e2e]
+    # PR 不推 image：fork 來的 PR 拿不到 packages: write，而且未經審查的分支
+    # 本來就不該產出可部署的產物。changelog job 刻意不列進 needs —— 它是 PR-only，
+    # 在 push 上是 skipped，而 needs 一個 skipped 的 job 會讓這裡也跟著 skip
+    # （acceptance 與 test-edits 同理，兩者也都是 PR-only）。
+    #
+    # **e2e 要列進來**：它在 push 上會跑（只排除了 schedule，而這裡本來就 `if: push`），
+    # 所以不會有 skip 傳染的問題。少了它的話，e2e 紅燈時 image 照樣會帶著 `main` 與
+    # `sha-xxx` 兩個 tag 推上 registry —— 部署那一關雖然還是擋得住（deploy.yml 看的是
+    # 整個 CI run 的 conclusion），但 registry 裡多一份明知有問題的產物本身就不對。
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    env:
+      # **`sha-<short>` 的長度是跨檔案的契約，所以釘死而不是靠預設值。**
+      # `deploy.yml` 由 commit SHA 推導要部署的 image tag（取前 N 碼），兩邊對不上的話
+      # 症狀是部署時 pull 不到 tag —— 看起來像 registry 壞掉。
+      #
+      # metadata-action 的預設**動過**：PR #467 一度改成 12「for uniqueness」，
+      # v5.6.1 又改回 7。也就是說「兩邊剛好都用預設」是一個會被上游改掉的巧合，
+      # 而它壞掉的時機是下一次部署，不是升級 action 的當下。
+      #
+      # 要改長度的話：這裡與 deploy.yml 決定 image tag 那一步要一起改。
+      DOCKER_METADATA_SHORT_SHA_LENGTH: "7"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          # 內建 token 就夠，不必開 PAT。權限由上面的 `packages: write` 給。
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 確認發布用的 secret 有設
+        # 不倚賴 Dockerfile 那道空值檢查：它在 `RUN` 那層，而任何一次快取命中都會
+        # 讓整層被跳過。這一步在 docker 之前跑，沒有快取可以繞。
+        #
+        # 用 env 傳而不是直接內插進腳本：內插會把值寫進 run 的指令字串。
+        env:
+          ACTIONS_KEY: ${{ secrets.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY }}
+        run: |
+          if [ -z "$ACTIONS_KEY" ]; then
+            echo "::error::缺少 repository secret NEXT_SERVER_ACTIONS_ENCRYPTION_KEY。"
+            echo "::error::它是 Server Action id 的 hash salt，必須與部署主機 .env 的值相同。"
+            echo "::error::設定位置：Settings → Secrets and variables → Actions（**不是** environment）。"
+            exit 1
+          fi
+
+      - name: 讀取 APP_VERSION
+        # image 的 version label 用 APP_VERSION 而不是 git tag：tag 只有發版時才有，
+        # 而 main 上的每一份 image 也該說得出自己是哪一版。
+        # 兩者一致由 deploy-config 的 check-version 保證。
+        id: version
+        run: |
+          version="$(sed -n 's/^APP_VERSION = "\(.*\)"$/\1/p' apps/api/app/config.py)"
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
+      # tag 規則對兩個 image 都一樣：
+      #   push main → `main` + `sha-<short>`
+      #   push v1.2.3 → `1.2.3` + `1.2` + `latest`
+      # `sha-*` 是唯一一定存在、且一定唯一的那個 —— 部署與回滾優先用它。
+      #
+      # `flavor: latest=auto` 就是 metadata-action 的預設值，明寫出來是因為 `latest`
+      # 已經被 docs/operations.md 當成承諾寫進文件了 —— 被文件承諾的行為不該靠 action
+      # 的預設值成立，那種東西升一次 major 就可能改掉，而症狀是「某一版沒有 latest」。
+      - uses: docker/metadata-action@v6
+        id: meta-api
+        with:
+          images: ghcr.io/${{ github.repository }}/api
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          flavor: |
+            latest=auto
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.value }}
+
+      - uses: docker/metadata-action@v6
+        id: meta-web
+        with:
+          images: ghcr.io/${{ github.repository }}/web
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix=sha-,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+          flavor: |
+            latest=auto
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.value }}
+
+      - name: 建置並推送 api image
+        uses: docker/build-push-action@v7
+        with:
+          context: apps/api
+          target: base
+          push: true
+          tags: ${{ steps.meta-api.outputs.tags }}
+          labels: ${{ steps.meta-api.outputs.labels }}
+          # **明寫關掉，不要吃預設值。** build-push-action 從 v6 起，push 時預設會掛上
+          # min 模式的 inline provenance —— 也就是說「推上去的是純 image」這句話在
+          # 什麼都不寫的情況下是**錯的**，而且不看 buildx 指令列看不出來。
+          # 要做來源證明的話請改成 mode=max 並在 operations.md 一起改掉說法；
+          # 這裡選 false 是為了讓文件裡那條「刻意沒有做」名副其實。
+          provenance: false
+          # scope 與 deploy-config 那步相同，所以這裡通常是全快取命中。
+          cache-from: type=gha,scope=api
+
+      - name: 建置並推送 web image
+        uses: docker/build-push-action@v7
+        with:
+          context: apps/web
+          target: prod
+          push: true
+          tags: ${{ steps.meta-web.outputs.tags }}
+          labels: ${{ steps.meta-web.outputs.labels }}
+          # 唯一的 build 期設定。用 repository variable 而不是寫死：它必須與部署主機
+          # .env 的 UPLOAD_SIZE_LIMIT 相同，不同的話 web 會在啟動時印出原因並結束行程
+          # （apps/web/instrumentation.ts）—— 那是刻意的，見 docs/operations.md。
+          build-args: UPLOAD_SIZE_LIMIT=${{ vars.UPLOAD_SIZE_LIMIT || '1mb' }}
+          # Server Action id 的 hash salt。必須是**跨版次穩定**的值，所以放 secret
+          # 而不是每次 build 讓 Next 亂數產生 —— 換了值等於讓所有沒重載的分頁
+          # 拿到「Server Action ... was not found on the server」。
+          secrets: |
+            next_actions_key=${{ secrets.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY }}
+          # 理由同 api 那步：預設會掛上 inline provenance，不寫就跟文件對不起來。
+          provenance: false
+          # **這裡刻意沒有任何 cache 設定，api 那邊有。**
+          #
+          # BuildKit 的 cache key 不包含 secret 的**值**（那是它的設計，避免祕密進到
+          # 快取的中繼資料）。所以只要這個 build 讀得到別的 build 留下的快取，
+          # `npm run build` 那層就會直接命中 —— secret 掛載根本不會被求值，
+          # `required=true` 與 Dockerfile 的空值檢查兩道關卡一起失效，
+          # 而烤進 image 的是**當初建立那層快取時用的金鑰**。
+          #
+          # 那個壞法完全沒有症狀：build 綠燈、image 推得出去、服務跑得起來，
+          # 只有金鑰是錯的。每次重建的那兩三分鐘，換的是「發布出去的 image
+          # 一定用當下的 secret 建成」。
+
+      - name: 印出這次推出去的 tag
+        # 部署時要貼哪個字串，直接從這裡複製，不必去 registry 翻。
+        run: |
+          echo "### 已發布" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta-api.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "${{ steps.meta-web.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,99 @@
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+server {
+    listen 80;
+
+    resolver 127.0.0.11 valid=10s;
+
+    # ── 請求體大小上限 ────────────────────────────────────────────────────────
+    #
+    # 這是**粗粒度的 DoS 護欄**，不是業務規則：精確的上傳限制由應用層的
+    # UPLOAD_SIZE_LIMIT 負責。刻意設得比應用層寬鬆 —— 這樣超過業務限制的請求會拿到
+    # 應用層帶訊息的錯誤，而不是 nginx 一句冷冰冰的 413。
+    # 兩者格式不同（nginx 是 `16m`，Next.js 是 `1mb`），不要試著共用同一個變數。
+    client_max_body_size 16m;
+
+    # ── 安全回應標頭 ──────────────────────────────────────────────────────────
+    #
+    # 加 `always` 是必要的：沒有它，這些標頭不會出現在 4xx／5xx 回應上，
+    # 而錯誤頁一樣會被瀏覽器渲染。
+    #
+    # 註：`add_header` 不會累加 —— 只要任何一個 location 自己寫了 add_header，
+    # 這裡繼承下去的就全部消失。要在某個 location 加標頭時，記得把這幾行一起複製過去。
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    # 用 CSP 的 frame-ancestors 而不是 X-Frame-Options：後者已被取代，且無法表達
+    # 「只允許特定來源內嵌」。這裡刻意只放 frame-ancestors 一條指令，不放完整 CSP ——
+    # Next.js 會產生 inline script/style，一份沒調校過的 script-src 只會讓應用直接壞掉。
+    # 要收緊 script-src 時請搭配 Next.js 的 nonce 機制，另行處理。
+    add_header Content-Security-Policy "frame-ancestors 'none'" always;
+
+    # WebSocket endpoint
+    location /api/ws {
+        set $backend_upstream http://api:8000;
+        proxy_pass          $backend_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade    $http_upgrade;
+        proxy_set_header   Connection $connection_upgrade;
+        proxy_set_header   Host       $host;
+        # ── 追蹤識別碼 ────────────────────────────────────────────────────────
+        #
+        # `$request_id` 是 nginx 為每個請求產生的唯一值。這裡與底下兩個 location 都用
+        # **覆寫**（同 X-Real-IP 的處理）：用戶端送什麼進來都會被蓋掉，所以寫進 log 的值
+        # 一定是這一層產生的，偽造不了，也不會有人拿它塞換行做 log injection。
+        #
+        # 後端在 `app/server.py` 讀它、寫進每一行請求紀錄並回寫到回應標頭；
+        # Next 伺服器端則在 `shared/api/headers.ts` 把它往後端傳，這樣同一次使用者操作
+        # 在 nginx、Next 與 API 三份 log 裡是同一個 id。
+        proxy_set_header   X-Request-ID    $request_id;
+        proxy_set_header   X-Real-IP       $remote_addr;
+        # 與 location / 同樣覆寫，理由見下方。
+        proxy_set_header   X-Forwarded-For $remote_addr;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+        proxy_buffering    off;
+    }
+
+    # ── 這裡刻意**沒有** `location /api/` ──────────────────────────────────────
+    #
+    # REST API 不對外開放。瀏覽器不直接呼叫後端：頁面資料由 Server Component 取得、
+    # 寫入走 Server Action，兩者都在 Next 的伺服器端直接連 `api:8000`（compose 內網），
+    # 不經過這裡。瀏覽器唯一需要的後端路徑是上面那條 WebSocket。
+    #
+    # 加回一條 `location /api/` 等於把後端每一條路由重新對外曝露。真的需要從瀏覽器
+    # 呼叫後端時，正確做法是在模組的 `actions.ts` 包一層具名的 Server Action
+    #（見 apps/web/modules/push/actions.ts）。
+    #
+    # 對應的另一半在 `apps/web/next.config.ts` —— 那裡也沒有 `/api/:path*` 的 rewrite。
+    # **兩處要一起看**：只關掉一邊，請求會從另一邊繞過去，而且不會有任何錯誤訊息。
+
+    # Frontend（含 Next.js static assets）
+    location / {
+        set $frontend_upstream http://web:3000;
+        proxy_pass          $frontend_upstream;
+        proxy_set_header   Host              $http_host;
+        # ── 為什麼是覆寫（$remote_addr）而不是附加（$proxy_add_x_forwarded_for）──
+        #
+        # $proxy_add_x_forwarded_for 的意思是「把 $remote_addr 接在**用戶端送來的**
+        # X-Forwarded-For 後面」，也就是第一段由攻擊者說了算。而這個 header 最終會被
+        # Next 伺服器端往後端傳（apps/web/shared/api/headers.ts），成為登入與註冊限流的
+        # key —— 可偽造的話，只要每次請求換一個假 IP，那兩條限流就完全失效。
+        #
+        # 這份設定的前提是 **nginx 就是最外層**，$remote_addr 即真實用戶端位址。
+        # 若日後在前面接了 CDN 或雲端 LB，這樣寫會讓所有使用者共用同一個限流 key
+        # （全部變成 LB 的位址）。那時要改用 ngx_http_realip_module：
+        #
+        #     set_real_ip_from  <LB 的 CIDR>;
+        #     real_ip_header    X-Forwarded-For;
+        #     real_ip_recursive on;
+        #
+        # 由它負責把 $remote_addr 修正成真實用戶端位址，下面兩行維持不變即可。
+        proxy_set_header   X-Request-ID      $request_id;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $remote_addr;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+    }
+}

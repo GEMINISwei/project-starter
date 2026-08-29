@@ -1,0 +1,168 @@
+[project]
+name = "api"
+version = "0.0.1"
+# 釘住單一 minor 而不是只寫下限：這一行是 uv 解直譯器的依據，放寬之後本機、CI 與 image
+# 會各自解到不同的 minor，而那種差異只在某個語法或標準庫行為改變時才現形。
+#
+# **升 Python 要同時動四處**：這一行、下面 `[tool.ruff]` 的 `target-version`、
+# `[tool.mypy]` 的 `python_version`，以及 apps/api/Dockerfile 的 `FROM python:…-slim`；
+# 動完重跑 `uv lock`。**四處都改到才算升級** —— 只改 Dockerfile 的話 CI 照樣綠，
+# 因為 uv 會看 requires-python 自己抓舊的那個（見 .github/dependabot.yml 對 python
+# image 的 ignore 規則，它的下限要跟著這裡走）。
+requires-python = ">=3.14,<3.15"
+# 正式環境相依一律 `==` 釘死：uv.lock 已經保證可重現，但 lock 是「解出來的結果」，
+# 這裡才是「我們同意的版本」—— 沒有上限的話，下一次 `uv lock` 可以在沒有人決定的情況下
+# 把某個相依帶過 major。dev group 的釘法與理由見下面的 [dependency-groups]。
+dependencies = [
+    "fastapi==0.141.1",
+    "uvicorn[standard]==0.52.4",
+    # asyncio 版的 SQLAlchemy 需要 greenlet 才跑得起來（它用 greenlet 在同步的 Core
+    # 之上架出 await）。`[asyncio]` extra 就是在拉它 —— 不要改成裸的 "sqlalchemy"，
+    # 少了 greenlet 的症狀是啟動時才丟 `MissingGreenlet`，而 pip/uv 不會有任何警告。
+    "sqlalchemy[asyncio]==2.0.52",
+    "asyncpg==0.31.0",
+    "pydantic-settings==2.15.0",
+    # 刻意用 PyJWT 而非 python-jose：本專案只簽 HS256（見 app/config.py 的 jwt_algorithm），
+    # 而 python-jose 會連帶拉進 ecdsa／rsa／pyasn1 一整條非對稱加密鏈。那條鏈用不到，
+    # 但其中的 ecdsa 帶著一個 HIGH 等級的 P-256 timing attack（Minerva）。
+    # 換掉的理由是「移除用不到的攻擊面」，不是「python-jose 本身有漏洞」——它沒有。
+    "PyJWT==2.13.0",
+    "python-multipart==0.0.32",
+    "bcrypt==5.0.0",
+    "pywebpush==2.4.0",
+]
+
+# dev group 刻意用 `>=` 而不是 `==`：這些工具沒有進正式環境，跟著上游走可以早一點吃到
+# 新的 lint 規則與型別檢查修正。代價是**跨 major 不會有人發現** —— 目前
+# `mypy>=1.14.0` 已經解到 2.x。真正在擋的是 uv.lock（CI 與 make setup 都用 `--frozen`），
+# 所以升級只會發生在有人明確跑 `uv lock` 的時候，那時請看一眼 diff 裡的 major。
+[dependency-groups]
+dev = [
+    "ruff>=0.16.4",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "pytest-cov>=7.1.0",
+    "httpx==0.28.1",
+    "mypy>=2.3.1",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_mode = "strict"
+testpaths = ["tests"]
+markers = [
+    "integration: 需要真的連上 PostgreSQL 的測試（本機可用 -m 'not integration' 略過）",
+]
+
+[tool.coverage.run]
+# 逐一列出三個套件根，而不是 `["."]`：後者會把 `tests/` 與 `scripts/` 一起算進分母，
+# 下面的 fail_under 就不再是「production code 的覆蓋率」而是別的東西。
+source = ["app", "modules", "shared"]
+
+[tool.coverage.report]
+# 防退步的地板，不是目標（理由見 docs/development.md）。實測：
+#   - CI（有 PostgreSQL，integration 測試會跑）：81%
+#   - 本機沒有 PostgreSQL 時（integration 自動 skip）：74%
+# 門檻必須讓兩者都能過，所以取 72。
+fail_under = 72
+# 只列出有缺漏的檔案，全綠的不用佔版面。
+skip_covered = true
+
+[tool.ruff]
+# E501 據此檢查。注意 ruff 算的是**顯示寬度**（中文一字 2 欄），與前端 ESLint 的
+# max-len 算字元數不同 —— 同樣是 100，這裡對中文註解比較嚴格。取捨見
+# ../../docs/development.md 第 6 節。
+line-length = 100
+target-version = "py314"
+src = ["."]
+
+[tool.ruff.lint]
+# B      = flake8-bugbear，抓可變預設參數、迴圈變數綁定等實際會咬人的 bug
+# ASYNC  = flake8-async，抓 async 函式裡的阻塞呼叫 —— 對這種全 async 的服務特別有價值
+# S      = flake8-bandit，基本安全檢查
+# RUF    = ruff 自有規則
+# ARG    = flake8-unused-arguments，抓「宣告了參數卻沒用到」；在 repository 與 service 層，
+#          這類錯誤通常會讓查詢條件或操作目標被悄悄忽略。
+# C901   = mccabe 循環複雜度
+# PLR0915 = 單一函式的敘述數上限
+#          後兩者是**防退步的地板**，不是重構目標（理由見 docs/development.md）。
+#          門檻刻意訂在遠高於正常寫法的位置：它要擋的是「一個函式長到沒人敢動」，
+#          不是逼人把已經好讀的函式拆碎。
+select = ["E", "F", "I", "N", "W", "UP", "B", "ASYNC", "S", "RUF", "ARG", "C901", "PLR0915"]
+ignore = [
+    # 本專案的註解、docstring 與錯誤訊息都以繁體中文撰寫，全形標點是正確用法而非誤植。
+    # 不關掉的話這三條會在中文註解上產生兩百多筆雜訊，把真正的問題淹掉。
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-statements = 40
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI 的依賴注入本來就設計成放在參數預設值上，B008（不要在預設值裡呼叫函式）
+# 對它們是誤報。check_user_permission 是本專案的 dependency factory，同理。
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Form",
+    "fastapi.Header",
+    "fastapi.Cookie",
+    "shared.auth.dependency.check_user_permission",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# 測試裡 assert 是正常寫法（S101），硬編的測試密碼也不是真的祕密（S105/S106）。
+# ARG：monkeypatch 用的 stub 必須完整比對被取代者的簽名，用不到的參數是必要的。
+"tests/**" = ["S101", "S105", "S106", "ARG001", "ARG002", "ARG004"]
+# 這兩支腳本本來就是拿來跑 shell 與管理 DB 的。
+"scripts/**" = ["S404", "S603", "S607"]
+# SQLAlchemy 的 `__table_args__` 與本專案的 `seed_data` 都是宣告式設定，
+# 不是執行期可變狀態，RUF012 要求的 ClassVar 註記在這裡只會增加雜訊。
+"modules/**/model.py" = ["RUF012"]
+"modules/**/bootstrap_model.py" = ["RUF012"]
+# FastAPI 的 exception handler 簽名固定是 `(request, exc)`，用不到也不能省。
+"app/server.py" = ["ARG001"]
+
+[tool.mypy]
+python_version = "3.14"
+mypy_path = "."
+# tests/ 也要檢查：測試碼是樣板使用者最常照抄的部分，把它排除在型別檢查外，
+# 等於讓最容易被複製的程式碼失去護欄。
+# 逐一列出而不是 `["."]`：後者會把 `scripts/` 一起拉進來，那些是一次性的管理腳本，
+# 標準與服務程式碼不同。
+files = ["app", "modules", "shared", "main.py", "tests"]
+# 刻意**不開 strict**：這是一個要能快速長出新功能的模版，一開始就全開會逼所有人
+# 為了過型別檢查而寫防禦性程式碼。這裡先擋住最會出事的那類問題（型別對不上、
+# 呼叫不存在的方法），等程式碼穩定後再逐模組收緊。
+check_untyped_defs = true
+warn_redundant_casts = true
+
+[[tool.mypy.overrides]]
+# shared/ 與 app/ 是所有功能共用的基礎層，出錯的影響面最大，所以標準拉高：
+# 這兩層的函式一律要有型別註記。
+module = ["shared.*", "app.*"]
+disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# pywebpush 沒有 stub 也沒有 py.typed marker。**範圍只收這一個套件** ——
+# 設成全域的 `ignore_missing_imports = true` 會讓任何第三方模組名打錯都靜靜變成 `Any`
+# 而不是錯誤。其餘每個套件都有型別，不需要這條。
+module = ["pywebpush"]
+ignore_missing_imports = true
+
+# 這裡刻意**沒有** `[tool.ruff.format]`，也沒有任何地方跑 `ruff format`。
+#
+# 不把它接起來是有理由的，不是懶：`ruff format` 會把 `#（範例…` 正規化成 `# （範例…`，
+# 而全形括號本身就帶著間距，前面再加一個半形空白在中文排版裡是退步 ——
+# 這個 repo 的註解大量使用中文。格式化能買到的一致性，換不了那個代價。
+#
+# 真正會影響正確性的排版（行長、複雜度、未使用的 import）由 `ruff check` 擋，見上面的
+# select。縮排與引號的一致性靠 review —— 那是 docs/development.md 第 6 節
+# 「不進檢查器的部分」那一類。
