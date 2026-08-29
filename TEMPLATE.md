@@ -86,20 +86,41 @@ cd apps/web && npm run check:tokens
 
 兩件事：分支保護要**設**，CD 要**決定**。
 
-### 5a. 分支保護
+### 5a. repo 設成 public，然後三件事一次做完
 
-**多數人這一步不用做任何事。** `make setup` 已經掛上 `.githooks/pre-push`（擋直接 push 到
-`main`、force push 與刪除），CI 的 `pushed-via-pr` job 會把漏網的吵出來。這兩層不依賴
-任何 GitHub 方案，但**也都不是強制** —— 細節與限制見
-[`docs/development.md`](docs/development.md#分支保護)。
+**這個模板預設你的 repo 是 public**，因為免費方案上 public 與 private 拿到的東西差很多：
 
-要真正的伺服器端強制的話，那是 GitHub 的付費功能（**private repo 在免費方案上設不了**，
-API 直接回 403）。你的 repo 是 public 或付費方案時，綁好 `origin`（第 1 步的 `make remote`）
-之後匯入模板附的 ruleset 就有了：
+| | public | private（免費方案） |
+|---|---|---|
+| Actions 分鐘數 | 無限 | 每個帳號每月 2000 分鐘，**所有 repo 共用** |
+| ruleset（伺服器端分支保護） | 免費 | 設不了，API 回 403 |
+| secret scanning + push protection | 免費 | 要 GitHub Advanced Security（付費） |
+| code scanning（CodeQL） | 免費 | 同上 |
+| environment 的 required reviewers | 免費 | 設不了 |
+
+**private 不是不能用**，但上面每一列都要各自處理，散落在
+[`docs/downstream.md`](docs/downstream.md) 的幾節裡。這裡只講 public 的路。
+
+**先確認歷史裡沒有夾帶過金鑰再轉 public** —— 公開之後就收不回來了，
+刪 commit 也沒有用（`.env*` 出廠就在 `.gitignore` 裡，正常流程不會有問題）。
+
+轉成 public 之後，綁好 `origin`（第 1 步的 `make remote`）再做這三件：
 
 ```bash
 gh api --method POST repos/{owner}/{repo}/rulesets --input .github/rulesets/main.json
+gh api --method PATCH repos/{owner}/{repo} -f 'security_and_analysis[secret_scanning][status]=enabled' -f 'security_and_analysis[secret_scanning_push_protection][status]=enabled'
 ```
+
+第三件在網頁上：Settings 的安全那一頁開 **Code scanning**，選 **default setup**、
+query suite 選 **Default**。四個開關的意思與為什麼不要 advanced setup，見
+[`docs/development.md`](docs/development.md#repo-設定裡的安全掃描)。
+
+**ruleset 那一行不是選配的。** `ci.yml` 讓 merge 到 `main` 那一輪不重跑測試，靠的就是它的
+strict 政策（分支必須是最新才能 merge）—— 沒匯入的話那個前提不成立，而且**不會有任何紅燈**。
+細節見 [`docs/development.md`](docs/development.md#分支保護)。
+
+`make setup` 掛上的 `.githooks/pre-push` 與 CI 的 `pushed-via-pr` job 仍然留著，
+它們是第二、三層（本機擋、事後吵），不依賴任何 GitHub 方案。
 
 **團隊超過一個人時記得調高 ruleset 裡的 `required_approving_review_count`**（出廠是 `0`）。
 

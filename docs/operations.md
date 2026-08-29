@@ -112,7 +112,7 @@ registry 模式把建置移到 CI：`.github/workflows/ci.yml` 的 `publish` job
 | 主機 `.env` | `IMAGE_REGISTRY=ghcr.io/<owner>/<repo>`（**全小寫**，見下）；`IMAGE_TAG` 走 CD 就留空（tag 由 workflow 當參數帶），只有要在主機手動 `make deploy` 才填 | 必要 |
 | 主機 | `docker login ghcr.io`（唯讀 PAT） | package 設成 public 可略過 |
 | 主機 | 能免互動 `git fetch` 這個 repo 的憑證（見下） | 必要 |
-| GitHub → Environments | 建一個叫 `production` 的。**不必設 required reviewers** —— 核可靠手動觸發，見下面的「發版與回滾」（那是付費功能，private repo 在免費方案上設不了） | 必要 |
+| GitHub → Environments | 建一個叫 `production` 的。**不必設 required reviewers** —— 核可靠手動觸發，見下面的「發版與回滾」（public repo 想加是免費的，算加強不算必要） | 必要 |
 | repository secret | `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | 必要 |
 | environment secret | `DEPLOY_SSH_KEY`、`DEPLOY_SSH_KNOWN_HOSTS` | 必要 |
 | environment variable | `DEPLOY_HOST`、`DEPLOY_USER`、`DEPLOY_PATH`（**絕對路徑**，見下） | 必要 |
@@ -227,8 +227,9 @@ GHCR 的讀取憑證則相反，只放在主機的 `~/.docker/config.json`，不
 `invalid reference format: repository name must be lowercase` —— 而那句話不會告訴你
 要去 `.env` 改大小寫。
 
-**主機要能免互動地 `git fetch` 這個 repo。** private repo 需要一份**獨立於部署 SSH 金鑰**
-的讀取憑證：在 repo 的 Settings → Deploy keys 加一把唯讀公鑰（不勾 write），主機用 SSH remote。
+**主機要能免互動地 `git fetch` 這個 repo。** repo 是 public 的話 HTTPS remote 匿名就
+fetch 得到，這一段整段跳過。**private repo** 才需要一份**獨立於部署 SSH 金鑰**的讀取憑證：
+在 repo 的 Settings → Deploy keys 加一把唯讀公鑰（不勾 write），主機用 SSH remote。
 底下四件事各自對應一種「設定當下看起來沒事、CD 跑到一半才失敗」的錯法。
 
 **不要拿帳號層的 SSH key 充數**（Settings → SSH and GPG keys），即使主機上已經有一把在用。
@@ -310,12 +311,13 @@ gh run watch    # 這一步會跑好幾分鐘，見下面的步驟說明
 
 **那個手動動作就是核可閘門，這是刻意的。** 看起來更自然的做法是打 tag 自動部署，靠
 environment 的 required reviewers 攔一道 —— 但 deployment protection rules 對 private repo
-是 GitHub 的付費功能，免費方案上那道閘門**根本不存在**，於是打一個 tag 就等於無人看管地
-直接動線上。「有人到 Actions 頁面按下 Run workflow 並填入 commit」則不依賴任何方案，
-也沒有繞過的方法，所以核可用它。
+是付費功能，免費方案上那道閘門**根本不存在**，於是打一個 tag 就等於無人看管地直接動線上。
+「有人到 Actions 頁面按下 Run workflow 並填入 commit」則不依賴任何方案，也沒有繞過的方法，
+所以核可用它。
 
-public repo 或付費方案的話，在 `production` environment 上加 required reviewers 是免費的
-加強（變成「一個人按、另一個人核可」），但這條 CD 不預設它存在。
+**repo 是 public 的話 required reviewers 是免費的**，值得加在 `production` environment 上 ——
+它補的是手動觸發補不到的那一半：按的人與核可的人可以不是同一個。單人專案沒有差別，
+所以這條 CD 仍然不預設它存在。
 
 **回滾走同一條路**：Actions → Deploy → Run workflow，填要退回的那個 commit。
 
@@ -497,10 +499,10 @@ standalone 執行期不會重新求值 `next.config.ts`。它同時以執行期�
 
 **這是刻意的範圍，不是還沒做。** 七件事在別的專案裡常見，這裡沒有：
 
-**沒有伺服器端的分支保護。** GitHub 的 ruleset 與舊版 branch protection 對 private repo
-都要付費方案，所以這個模板不預設它們存在：`main` 的保護是 `.githooks/pre-push`（本機擋）
-加上 CI 的 `pushed-via-pr` job（事後吵）兩層，**兩層都不是強制**。
-細節與可選的 ruleset 見 [`development.md`](development.md#分支保護)。
+**沒有把分支保護寫進這條 CD。** `main` 的保護是三層（ruleset 在伺服器端擋、
+`.githooks/pre-push` 在本機擋、CI 的 `pushed-via-pr` job 事後吵），但 ruleset 是 repo 設定、
+不在版控裡，所以 CD 這一側不會、也沒辦法確認它在。細節見
+[`development.md`](development.md#分支保護)。
 
 **沒有 staging。** 只有 `production` 一個 environment：合進 `main` 與打 tag 都只是把 image
 推上 registry，而唯一的上線動作直接打在正式環境上，中間沒有一個「先部署到別的地方看看」的

@@ -5,7 +5,8 @@
 # workflow。
 #
 # **只能手動觸發，這是刻意的，而且它就是這條 CD 的核可閘門。** 不用 environment 的
-# required reviewers，是因為那對 private repo 是 GitHub 的付費功能（連 API 都回 403）——
+# required reviewers 當唯一的閘門，是因為那對 private repo 是付費功能（連 API 都回 403），
+# 而手動觸發不依賴任何方案。public repo 可以另外加上它當加強 ——
 # 完整理由見 docs/operations.md 的「發版與回滾」，那一節是這個主題的 owner。
 # 發版因此是兩段：打 tag → CI 建好 image；要上線 → 手動跑這一份。
 #
@@ -38,8 +39,8 @@ jobs:
     # 第一次用要在 repo 的 Settings → Environments 建一個叫 production 的。
     #
     # **核可不靠它**，理由見檔頭：deployment protection rules 對 private repo 是付費功能。
-    # public repo 或付費方案的話，在這個 environment 上加 required reviewers 是免費的加強，
-    # 但這條 CD 不預設它存在。
+    # public repo 加 required reviewers 是免費的加強（按的人與核可的人可以不是同一個），
+    # 但單人專案沒有差別，所以這條 CD 不預設它存在。
     environment: production
     permissions:
       contents: read

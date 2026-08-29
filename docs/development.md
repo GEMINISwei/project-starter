@@ -342,9 +342,13 @@ review 時一眼看得出來，為它們多養一個工具與一份設定不划�
 上面那句「PR 送出前必須通過 `make check`」與整套 CI，**沒有任何東西讓它變成強制** ——
 沒有啟用分支保護時，PR 上的 job 全紅也 merge 得進去。
 
-而這件事在 GitHub 那一側解不掉：**ruleset 與舊版 branch protection 對 private repo 都要
-付費方案**，免費方案連 API 都回 403。這個模板不預設任何方案，所以保護做成兩層，
-**兩層都不是伺服器端強制，這一點不要誤會**：
+**所以 ruleset 要匯入，而且它不是選配的** —— 見下面〈[匯入 ruleset](#匯入-ruleset)〉，
+那一段還說明了為什麼 `ci.yml` 的正確性現在依賴它。ruleset 對 public repo 免費，
+對 private repo 要付費方案（免費方案連 API 都回 403），所以 private 專案要自己處理，
+見 [`downstream.md`](downstream.md)。
+
+ruleset 之外還有兩層，**兩層都不是伺服器端強制，這一點不要誤會**。
+它們的價值在「ruleset 還沒匯入」與「ruleset 涵蓋不到的路徑」：
 
 | 層 | 是什麼 | 擋得住嗎 |
 |---|---|---|
@@ -364,10 +368,10 @@ review 時一眼看得出來，為它們多養一個工具與一份設定不划�
 `git merge template/main` 同步的，`main` 一旦被改寫，所有下游的共同祖先就消失，
 而那要每個下游各自處理。另外兩件的代價是「繞過 `pr-checks`」，可以補救。
 
-#### 可選：repo 是 public 或付費方案的話
+#### 匯入 ruleset
 
 [`../.github/rulesets/main.json`](../.github/rulesets/main.json) 是現成的，匯入一次就把上面兩層
-換成真正的伺服器端強制：
+從「唯一的防線」變回它們原本的角色（第二、三層）：
 
 ```bash
 gh api --method POST repos/{owner}/{repo}/rulesets --input .github/rulesets/main.json
@@ -381,6 +385,12 @@ gh api --method POST repos/{owner}/{repo}/rulesets --input .github/rulesets/main
 `make check-ci` 守著這份 JSON 與 [`../.github/workflows/ci.yml`](../.github/workflows/ci.yml)
 的 job 名單一致（檔案不存在就跳過，因為它是選配的）。**但它守不到「這份 JSON 有沒有真的匯入
 GitHub」** —— 那是 repo 設定，repo 裡沒有東西看得到，而且改了 JSON 要重新匯入才會生效。
+
+**這一步不做的話，`ci.yml` 有一個沒有症狀的洞。** merge 到 `main` 那一輪不重跑測試，
+前提就是 ruleset 的 `strict_required_status_checks_policy`（分支必須是最新才能 merge）——
+少了它，`main` 可能在 PR 開著的時候前進，於是進 `main` 的那棵 tree 沒有人驗過，
+而 CI 全綠。要嘛匯入 ruleset，要嘛照〈[4. 測試](#4-測試)〉說的把六個 job 的 `if` 改回去，
+不要兩個都不做。
 
 `required_approving_review_count` 是 `0`，因為模板要能被一個人開起來用。多人專案請自己調高。
 
