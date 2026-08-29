@@ -173,6 +173,36 @@ git diff HEAD template/main --stat -- apps/ scripts/ infra/
 `publish` job 推的是 `ghcr.io/<你的 owner>/<你的 repo>/api` 與 `/web`，
 沿用 `github.repository`，所以 fork／改名之後不必改設定。
 
+### Actions 分鐘數與 dependabot
+
+**免費方案的 2000 分鐘／月是「每個帳號」的，不是每個 repo 的。** 所有 private repo
+共用同一池 —— 包括模板自己。所以「從模板長出三個下游專案」不是三份額度，
+是同一份被切成三份。
+
+先看有沒有更大的槓桿：**repo 如果可以 public，Actions 分鐘數無限**，這一節就不用看了
+（順帶連 [`main.json`](../.github/rulesets/main.json) 也才匯得進去，見上面那張表）。
+
+private 的話，最大的一筆固定開銷是 dependabot —— 不是因為它慢，是因為**每個 PR 都要
+跑兩輪完整 CI**（開 PR 一輪、merge 一輪，模板實測各 12～18 分鐘），而那個成本跟
+「這次有沒有東西可更新」無關，只跟開了幾個 PR 有關。
+
+[`.github/dependabot.yml`](../.github/dependabot.yml) 會**原封不動跟著模板複製過來**，
+所以下游預設是照跑六組的。要省的話按「這份 manifest 是誰擁有的」切：
+
+| 生態系 | 下游怎麼處理 | 為什麼 |
+|---|---|---|
+| `docker` ×2、`docker-compose`、`github-actions` | **刪掉** | `Dockerfile`、compose 與 `.github/` 都是模板擁有的，升版會隨著[拉模板的更新](#拉模板的更新)一起帶過來 —— 而且是一個 PR 帶全部，不是四組各開各的 |
+| `uv`、`npm` ×2 | **不能全刪** | 下游會裝自己的相依，而模板對那些一無所知。只靠同步的話它們永遠不會被更新，那正是 `make audit` 掃得到、模板卻補不了的一層 |
+
+`uv`／`npm` 那三組如果還是太貴，有個折衷：把它們也刪掉，改在 repo 的
+**Settings → Code security** 開 Dependabot security updates。那是獨立於這個檔案的開關，
+只在真的有 advisory 命中你的 lockfile 時才開 PR —— 平常零成本，仍然守得住下游自己的相依。
+**代價**：不再有例行的版本推進，只修有漏洞的，所以相依會慢慢舊到某天升不動
+（那時的痛苦見 [`development.md`](development.md#相依升級紀律)）。
+
+刪整組就是把那個 entry 從 `updates:` 拿掉，**沒有檢查器在守這個檔案** ——
+`make check-ci` 只看 `ci.yml` 與 ruleset。
+
 ### 「不啟用」與「移除」是兩件事
 
 **不啟用**是主機那一側的事：`.env` 的 `IMAGE_REGISTRY` 留空就是 `make prod` 就地建置，

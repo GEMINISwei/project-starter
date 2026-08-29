@@ -22,6 +22,10 @@
   - 每週一的排程只跑 `security` —— 那本來就是那條 cron 唯一的存在理由。
   - 開 draft PR 的空 commit 建議帶 `[skip ci]`，見
     [`docs/development.md`](docs/development.md#落點要在動手之前存在)。
+- [`docs/downstream.md`](docs/downstream.md) 新增〈Actions 分鐘數與 dependabot〉：
+  免費方案的 2000 分鐘是**每個帳號**共用的，下游可以刪掉模板擁有的那四組 dependabot
+  entry（兩個 docker、compose、github-actions），靠同步帶更新；`uv` 與兩個 `npm`
+  不能全刪，因為下游會裝自己的相依。
 - dependabot 的三個 base image entry（兩個 Dockerfile、一組 compose）從 weekly 改成
   monthly；`uv` 與兩個 `npm` 維持 weekly。**代價**：OS 層的 CVE 修補最多延後一個月，
   而 `make audit` 掃不到那一層，期間不會有任何紅燈。理由與改回去的條件寫在
