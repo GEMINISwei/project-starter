@@ -25,6 +25,12 @@
 
 ### 變更
 
+- **[同步:無]** `ci.yml` 裡三個寫死的假金鑰改成每次執行時現產（`openssl rand -base64 32`）。
+  值本來就是假的（解開來是 `ci-only-not-a-real-key-32bytes!!`），但泛型的 secret 掃描器
+  只看熵，照樣判成外洩並寄信 —— 而那串字會被**每一個下游繼承**，等於每個 clone 出去的
+  專案都會收到同一封誤報，而且自己修不掉。安全性上等價（建置完就丟），
+  BuildKit 的 cache key 也不含 secret 值，所以不影響快取。
+
 - **[同步:無]** 文件補上 repo 設定裡的四個安全掃描開關（secret scanning、push protection、
   Dependabot security updates、code scanning）：模板該開哪些見
   [`docs/development.md`](docs/development.md#repo-設定裡的安全掃描)，

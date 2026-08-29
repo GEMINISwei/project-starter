@@ -265,7 +265,18 @@ jobs:
       - name: 建立驗證用的 .env
         # compose 的變數大量使用 ${VAR:?}（缺少即中止），所以 config 驗證需要一份完整的
         # 環境變數。這些值只用來讓變數插值成立，不會真的啟動任何服務。
+        #
+        # **金鑰那一欄不寫死，每次現產一把。** 這裡原本是一串 base64 字面值（解開來是
+        # `ci-only-not-a-real-key-32bytes!!`，本來就是假的），但泛型的 secret 掃描器
+        # （GitGuardian 這類）只看熵，照樣判成外洩的金鑰並寄信 —— 而這是個模板，
+        # 那串字會被**每一個下游繼承**，於是每一個 clone 出去的專案都會收到同一封誤報，
+        # 而且它們沒辦法自己修。安全性上兩者等價（建置完就丟），所以改成現產。
+        #
+        # 產生的值往 $GITHUB_ENV 送一份：底下「建置 web production image」那步要同一把，
+        # 而那裡是 action 的 `with:` 欄位，寫不了指令。
         run: |
+          key="$(openssl rand -base64 32)"
+          echo "FAKE_NEXT_ACTIONS_KEY=${key}" >> "$GITHUB_ENV"
           cat > .env <<'ENVEOF'
           COMPOSE_PROJECT_NAME=ci
           SYSTEM_NAME=CI
@@ -278,11 +289,13 @@ jobs:
           TOKEN_VERSION=1
           REGISTER_KEY=
           UPLOAD_SIZE_LIMIT=1mb
-          NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=Y2ktb25seS1ub3QtYS1yZWFsLWtleS0zMmJ5dGVzISE=
           VAPID_PRIVATE_KEY=ci
           VAPID_PUBLIC_KEY=ci
           VAPID_SUBJECT=mailto:ci@example.com
           ENVEOF
+          # 結束標記加引號 = 整段不做任何展開，每個值照字面寫進去（密碼那類欄位含 `$`
+          # 或反引號時才不會被 shell 吃掉）。所以現產的那一欄補不進去，只能在外面加一行。
+          echo "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=${key}" >> .env
 
       - name: 驗證 compose 設定（語法、相對路徑、migrate 順序）
         # 三件事都由這一支守。**不要在這裡手拼 compose 旗標** ——
@@ -329,10 +342,11 @@ jobs:
           # 改成執行期注入（見 apps/web/shared/runtime/config.ts）。
           build-args: UPLOAD_SIZE_LIMIT=1mb
           # 對應 Dockerfile builder stage 的 `--mount=type=secret,id=next_actions_key`。
+          # 值是「建立驗證用的 .env」那步現產的，理由寫在那裡。
           secrets: |
-            next_actions_key=Y2ktb25seS1ub3QtYS1yZWFsLWtleS0zMmJ5dGVzISE=
+            next_actions_key=${{ env.FAKE_NEXT_ACTIONS_KEY }}
           # scope 刻意與 publish 分開（`web-check` vs 完全不快取）。
-          # **不要把它改回跟 publish 共用** —— 這一步用的是上面那把寫死的假金鑰，
+          # **不要把它改回跟 publish 共用** —— 這一步用的是上面那把假金鑰，
           # 而 BuildKit 的 cache key **不包含 secret 的值**，所以共用 scope 會讓
           # publish 直接命中這一層，把假金鑰烤進正式 image，而且完全沒有症狀。
           cache-from: type=gha,scope=web-check
@@ -492,7 +506,10 @@ jobs:
         #                     會把 URL 切在錯的地方 —— 症狀是 api 一直重啟並說認證失敗，
         #                     完全看不出跟密碼裡的字元有關。`scripts/init.sh` 對這個欄位
         #                     的字元集限制是同一件事。
+        #
+        # 金鑰那一欄現產，理由同 deploy-config 的「建立驗證用的 .env」那步。
         run: |
+          key="$(openssl rand -base64 32)"
           cat > .env <<'ENVEOF'
           COMPOSE_PROJECT_NAME=e2e
           SYSTEM_NAME=E2E
@@ -505,11 +522,12 @@ jobs:
           TOKEN_VERSION=1
           REGISTER_KEY=e2e-register-key
           UPLOAD_SIZE_LIMIT=1mb
-          NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=ZTJlLW9ubHktbm90LWEtcmVhbC1rZXktMzJieXRlcyE=
           VAPID_PRIVATE_KEY=e2e
           VAPID_PUBLIC_KEY=e2e
           VAPID_SUBJECT=mailto:e2e@example.com
           ENVEOF
+          # heredoc 整段不展開（理由同 deploy-config 那步），所以這一欄在外面補。
+          echo "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=${key}" >> .env
 
       - name: 跑 e2e
         run: make e2e
