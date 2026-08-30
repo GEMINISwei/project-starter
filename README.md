@@ -38,11 +38,13 @@ PostgreSQL、Docker Compose 開發／生產環境分離、版本化的資料庫 
 
 **機制** —— 已接好但沒有業務在用，要用時直接呼叫
 
-WebSocket 即時事件推送（型別由後端 enum 產生，前端窮盡處理）、PWA 推播通知
-（Web Push / VAPID，支援桌面瀏覽器與 iOS/Android 主畫面 App）、三層設計 token（換一套色票
-只要改對照表，UI kit 一行不用動）與系統設定頁面。
-這兩項已由 module registry 啟用，端點與連線都在跑，從 `modules.realtime.public` 或
+**WebSocket 即時事件推送**（型別由後端 enum 產生，前端窮盡處理）與 **PWA 推播通知**
+（Web Push / VAPID，支援桌面瀏覽器與 iOS/Android 主畫面 App）—— 這兩個模組已由
+module registry 啟用，端點與連線都在跑，從 `modules.realtime.public` 或
 `modules.push.public` 呼叫公開介面即可。
+
+另有**三層設計 token**（換一套色票只要改對照表，UI kit 一行不用動）與**系統設定頁面**
+（語系切換與推播開關）。這兩樣不走 registry，前者是樣式層、後者是一般前端模組。
 
 **範例模組** —— 示範用，可整包刪除
 
@@ -81,9 +83,9 @@ flowchart LR
 | 你要做什麼 | 看哪裡 |
 |---|---|
 | **從這份模板開新專案**（一次性，做完就刪） | [`TEMPLATE.md`](TEMPLATE.md) |
-| CI/CD、分支保護、repo 的安全掃描開關、移除 CD | [`docs/ci-cd.md`](docs/ci-cd.md) |
 | 用 AI agent 開發：硬規則與容易安靜出錯的地方 | [`AGENTS.md`](AGENTS.md) |
-| 本機開發、`.env` 設定、指令、提交規範、測試與 CI | [`docs/development.md`](docs/development.md) |
+| 本機開發、`.env` 設定、指令、提交規範、測試 | [`docs/development.md`](docs/development.md) |
+| CI 有哪些 job、分支保護、repo 的安全掃描開關、移除 CD | [`docs/ci-cd.md`](docs/ci-cd.md) |
 | 新增頁面／API 模組／權限／WS 事件／migration、加一個語系 | [`docs/extending.md`](docs/extending.md) |
 | 依賴邊界、模組介面、目錄結構、新增或移除模組 | [`docs/architecture.md`](docs/architecture.md) |
 | 設計 token 的分層、主題、導入外部 Design System、樣式層的檢查器 | [`docs/design-system.md`](docs/design-system.md) |
