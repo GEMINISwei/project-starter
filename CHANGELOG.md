@@ -13,6 +13,15 @@
 
 ### 變更
 
+- **更新 ruleset 的指令從 `POST` 改成 `PUT`（三處）。** `POST` 是「建立」不是「更新」——
+  第一次匯入時它是對的，但改過 `main.json` 之後照著做，GitHub 會多出**第二個同名的
+  `main` ruleset**（名稱不要求唯一），兩個都是 active、兩份規則疊加。症狀很惡劣：
+  required checks 看起來是對的（新的那份確實有你剛加的 job），但舊的那份還在，
+  之後想調鬆任何一條時會改到其中一個、另一個繼續擋著，**而且沒有任何地方會提示你有兩份**。
+  三處裡 `scripts/check-ci.sh` 那行最關鍵 —— 它印出來的時機必定是「ruleset 剛被改過」，
+  也就是唯一需要 `PUT` 的情境。`TEMPLATE.md` 的開案情境確實是首次匯入，`POST` 維持不動，
+  只補一句指路。`docs/development.md` 的〈匯入 ruleset〉是這個主題的 owner，兩種都寫。
+
 - **新增 `draft-gated-jobs` job，把「draft 期間跳過的三個 job 從來沒補跑過」從沉默變成紅燈。**
   `deploy-config`／`e2e`／`security` 在 draft 上跳過，靠 `ready_for_review` 事件補跑 ——
   而那個補跑會被 push 撞掉。實測到**兩種**成因不同、結果相同的壞法：PR #14 是兩個 run
