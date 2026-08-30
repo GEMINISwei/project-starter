@@ -443,7 +443,7 @@ class BaseTable(DeclarativeBase):
         見 docs/extending.md「初始資料（Seed）」。
 
         - 有設 `seed_match_key`：每次都逐筆 upsert（`INSERT … ON CONFLICT DO UPDATE`），
-          讓模板更新新增的欄位能補到既有環境。**該欄位必須有唯一約束**，否則
+          讓日後新增的欄位能補到已經跑起來的環境。**該欄位必須有唯一約束**，否則
           `ON CONFLICT` 無從判斷衝突，PostgreSQL 會直接報錯。那個嚴格是好事 ——
           它擋掉「match key 沒有唯一約束，於是每次啟動都多插一筆」。
         - 沒設：只在資料表完全空的時候整批 insert，不動既有資料。

@@ -516,8 +516,11 @@ jobs:
     # 排程觸發時不跑。那條 cron 存在的理由只有 security job（它查的是會自己變紅的外部
     # advisory 資料庫）—— e2e 的相依全部釘死，每週跑一次測不到任何新東西，只是燒時間。
     #
-    # draft 期間也不跑，理由同 deploy-config job：計費，而且它回答的問題只有在準備
-    # merge 那一刻才需要答案。同樣靠 `on:` 的 ready_for_review 在同一個 SHA 上補跑。
+    # draft 期間也不跑，理由同 deploy-config job：回饋速度與噪音 —— 它回答的問題只有在
+    # 準備 merge 那一刻才需要答案，而 draft push 是整個流程中次數最多的事件。
+    # （**那邊原本寫的理由是計費，已經不成立了**，別照舊理由把 draft 全開回去。）
+    # 同樣靠 `on:` 的 ready_for_review 在同一個 SHA 上補跑，補跑被 push 撞掉時由
+    # draft-gated-jobs 擋下來。
     # draft 期間要看這盞紅綠燈就自己跑 `make e2e`。
     #
     # push 到 main 也不跑，理由同 api job。**tag 照跑** —— 那份 image 要上線。

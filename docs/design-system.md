@@ -71,7 +71,7 @@ token，而 CSS 的 `var()` 找不到變數時**不會報錯，只會沒有樣�
 
 **加一份主題＝複製那個檔案，選擇器改成 `:root[data-theme="<名字>"]`，只換右手邊**，
 再把名字登記到 `config/theme.ts` 的 `ThemeName`、**兩個進入點**（`app/layout.tsx` 與
-`app/global-error.tsx`）的 import，以及 `DEFAULT_THEME`。四條保證都有檢查器：
+`app/global-error.tsx`）的 import，以及 `DEFAULT_THEME`。三條保證都有檢查器：
 
 | 保證 | 漏了會怎樣 |
 |---|---|
@@ -292,7 +292,7 @@ app/themes/<ds>.css         導入的：同一組 --color-*，值指到新那條
 
 DS 專案通常長這樣：`tokens/`（色彩、排版、間距、陰影、動態）、`components/`（JSX 或 HTML）、
 `ui_kits/`、`guidelines/`。**只收 `tokens/`**：元件缺什麼要補進 UI kit
-（見下面「一個視覺概念只能有一份實作」），而上游的元件樣式表會夾帶它自己的斷點與字型 `@import`。
+（見上面「一個視覺概念只能有一份實作」），而上游的元件樣式表會夾帶它自己的斷點與字型 `@import`。
 
 `tokens/` 裡面也要挑。判準是**這一份帶進來的是值，還是只是撞名**：
 

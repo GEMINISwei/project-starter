@@ -501,7 +501,7 @@ WS 機制在 items 刪除後仍然可用。
 | `web/modules/settings/ui/settings.module.css` | `.toggle`、`.toggleInput`、`.toggleSlider` |
 | `api/tests/test_i18n_text_usage.py` | 移除 `NotificationPayload` 的靜態規則 |
 | `api/modules/realtime/manager.py` | 修掉 docstring 裡的 push 呼叫端說明 |
-| `.github/workflows/ci.yml` | 移除 `deploy-config` job 那份驗證用假 `.env` 裡的 `VAPID_*` 三行，並修掉 `publish` 提到它的註解 |
+| `.github/workflows/ci.yml` | **兩個 job 各有一份驗證用的假 `.env`**：`deploy-config` 與 `e2e`，各移除 `VAPID_*` 三行；再修掉 `publish` 那段提到它的註解 |
 | `README.md`、`TEMPLATE.md`、`docs/` | 移除推播功能與用法；最後刪掉本節 |
 
 `settings` 本身**不用刪**：`SettingsView` 還有 `LanguageSettings`（語系切換），

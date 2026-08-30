@@ -13,6 +13,37 @@
 
 ### 變更
 
+- **整份讀過 `docs/` 六份文件，修掉 15 處殘留與不一致。** 全部是檢查器守不到的類別 ——
+  `check-docs` 驗的是路徑、錨點與識別字存不存在，驗不到「這句話描述的東西已經不是這樣了」：
+  - **`operations.md` 的 Session 撤銷表殘留 MongoDB 用語**：`auth_version` 寫成存在
+    「`users` **文件**」、重設密碼時「自動 **`$inc`**」。這是全 repo 唯一一處 MongoDB 詞彙，
+    而實作是 PostgreSQL 上的 `auth_version = cls.auth_version + 1`（`modules/users/model.py`）。
+  - **舊「可同步上游」模型的最後三處**，全是同一句「**模板更新時**新增的權限／欄位要能補到
+    既有環境」：`extending.md` 的 Seed 一節、`shared/db/table.py` 的 `seed_match_key`
+    docstring、`tests/shared/test_seed.py` 的測試 docstring。快照模式下沒有「模板更新」
+    這件事，而那條分岔本身仍然需要 —— 理由改成「日後新增的權限要能補到已經跑起來的環境」。
+  - **`development.md` 的〈什麼時候跑 e2e〉說 merge 到 `main` 會跑，但 `ci.yml` 明說不跑。**
+    這條會讓人以為 merge 之後還有一道 e2e 網。改成不跑，並寫明前提是 ruleset。
+  - **`ci.yml` 的 e2e job 註解仍寫著「理由同 deploy-config job：計費」**，而 deploy-config
+    那段早就改成回饋速度、並註明計費那個理由已經不成立。指過去卻複述了被撤銷的理由。
+  - **`architecture.md` 剝除 `push` 的清單漏了一個位置**：`ci.yml` 有**兩份**驗證用假 `.env`
+    （`deploy-config` 與 `e2e`），原本只列了前者的 `VAPID_*` 三行。
+  - 四處計數對不上：`design-system.md`「四條保證」對三列表格、`development.md`
+    〈相依升級紀律〉「照這三條」對四條、`operations.md`「七件事」對八個項目、
+    以及 `gh` 設定腳本從 `# 6` 直接跳到 `# 8`。
+  - 三處內部指路壞掉：`development.md` 兩處指向〈測試與覆蓋率〉（實際章節叫〈覆蓋率門檻〉）、
+    一處「上面那 90 秒」而文件裡從沒出現過 90 秒（它在 `playwright.config.ts`）、
+    `design-system.md` 一處「見下面」指的其實在上面。
+  - `extending.md` 說 `shared/i18n/` 是「約 100 行」，實際 266 行 —— 那句話要撐的論證是
+    「小到不值得引入框架」，數字錯了論證就變弱。
+
+- **`ci-cd.md` 補上「補完 PR 描述之後要推 commit，不要按 re-run」。** `pr-checks` 裡讀
+  PR 描述的兩步在 CI 上吃的是 `github.event.pull_request.body`，而 **re-run 重放的是原本
+  那份 payload** —— 補進描述的段落不會進去，重跑幾次都是同一句「PR 描述沒有說明」，
+  而本機跑同一支檢查器是綠的（`scripts/lib/pr.sh` 沒有 `PR_BODY` 時走 `gh pr view`，
+  讀的是當下）。`pull_request` 的觸發清單裡也沒有 `edited`，所以改描述本身也不會重跑。
+  這是 `draft-gated-jobs` 那條「payload 記的是事件發生當時」的同一個坑，在另一個位置。
+
 - **修掉 `TEMPLATE.md` 的四處內部不一致。** 都是在它自己被改了好幾輪之後留下的，
   `check-docs` 守的是路徑與錨點，這四種一個都守不到：
   - §5a 標題還寫「三件事」，內文已經是四件（`Private vulnerability reporting`

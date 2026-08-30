@@ -166,7 +166,7 @@ gh variable set DEPLOY_PATH --env production --body "/srv/<專案名>"
 #    自己結束行程（理由見下面的「唯一的 build 期值」）。不設就是預設的 1mb。
 gh variable set UPLOAD_SIZE_LIMIT --body "1mb"
 
-# 8. 私鑰用完就刪，它已經在 GitHub 與主機兩邊了
+# 7. 私鑰用完就刪，它已經在 GitHub 與主機兩邊了
 rm -f ./deploy_key ./deploy_key.pub ./known_hosts
 ```
 
@@ -482,7 +482,7 @@ standalone 執行期不會重新求值 `next.config.ts`。它同時以執行期�
 
 #### 這條 CD 刻意沒有做的事
 
-**這是刻意的範圍，不是還沒做。** 七件事在別的專案裡常見，這裡沒有：
+**這是刻意的範圍，不是還沒做。** 八件事在別的專案裡常見，這裡沒有：
 
 **沒有把分支保護寫進這條 CD。** `main` 的保護是三層（ruleset 在伺服器端擋、
 `.githooks/pre-push` 在本機擋、CI 的 `pushed-via-pr` job 事後吵），但 ruleset 是 repo 設定、
@@ -670,7 +670,7 @@ make create-superuser
 | | 存在哪 | 作用範圍 | 什麼時候會變 |
 |---|---|---|---|
 | `TOKEN_VERSION` | `.env`（環境變數） | **所有人** | 手動 +1，例如 `JWT_SECRET_KEY` 外洩 |
-| `auth_version` | `users` 文件 | **單一使用者** | 重設密碼時自動 `$inc` |
+| `auth_version` | `users` 資料表的一欄 | **單一使用者** | 重設密碼時自動 +1 |
 
 重設密碼會在同一個資料庫操作裡換掉密碼並把 `auth_version` +1，於是那個人所有既有的
 session token 與 WebSocket ticket 在下一次請求就被拒絕（401）。
