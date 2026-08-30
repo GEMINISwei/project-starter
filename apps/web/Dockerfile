@@ -31,30 +31,38 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# NEXT_SERVER_ACTIONS_ENCRYPTION_KEY 是 Server Action id 的 hash salt，**只有這一步需要**：
-# `next build` 會把它寫進 .next/server/server-reference-manifest.json，執行期
-# （encryption-utils.js 的 getActionEncryptionKey）直接讀那份 manifest，所以 prod stage
-# 不必也不該再設一次 —— 多一個來源只會多一種「.env 改了但沒重建」的不一致。
+# NEXT_SERVER_ACTIONS_ENCRYPTION_KEY 在 Next 裡同時扛兩個角色，而**兩個角色的需求相反**：
 #
-# 不設的話 Next 每次 build 都會亂數產生一把（build/index.js 的
-# "Generate a random encryption key for this build"；在容器內 is-docker() 會讓它找不到
-# 可持久化的位置），所有 action id 隨之改變，使用者開著沒重載的分頁就會拿到
-# 「Server Action ... was not found on the server」。
+#   1. build 期：它是 Server Action id 的 hash salt。`next build` 會把它寫進
+#      .next/server/server-reference-manifest.json，而 id 是由它 salt 出來的 ——
+#      換一把就換一整組 id，使用者開著沒重載的分頁會拿到
+#      「Server Action ... was not found on the server」。**所以它要穩定。**
+#      而它**不需要保密**：那些 id 本來就在 client bundle 裡，任何使用者都讀得到。
 #
-# 用 BuildKit secret 而不是 ARG/ENV：後者會把金鑰留在 image 的 layer metadata 裡
-# （`docker history` 直接看得到），BuildKit 也會為此固定噴 SecretsUsedInArgOrEnv 警告。
-# secret 只在這一行的執行期間掛載成檔案，不進任何 layer。
+#   2. 執行期：它是閉包參數的 AES-GCM 加解密金鑰
+#      （next/dist/server/app-render/encryption-utils.js 的 getActionEncryptionKey）。
+#      **所以它要保密，而且要能輪替。**
 #
-# required=true 讓「忘了給 secret」直接 build 失敗，而不是靜靜地退回隨機金鑰；
-# 額外的空值檢查則擋掉「有給但給了空字串」—— 兩者都會讓 id 變回不可重現，
-# 而那種壞法要等到使用者踩到 404 才會被發現。
-RUN --mount=type=secret,id=next_actions_key,required=true \
-    key="$(cat /run/secrets/next_actions_key)"; \
-    if [ -z "$key" ]; then \
-        echo "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY 不可為空，請執行 make init 產生 .env" >&2; \
-        exit 1; \
-    fi; \
-    NEXT_SERVER_ACTIONS_ENCRYPTION_KEY="$key" npm run build
+# 兩個角色綁在同一個值上，結果是**秘密被烤進 image**：manifest 跟著 .next 進 prod stage，
+# 任何拿得到這個 image 的人都讀得出正式環境的金鑰。BuildKit 的 `--mount=type=secret`
+# 擋得住 layer metadata（docker history），但擋不住「建置程式自己把值寫進產物」。
+#
+# 所以這裡只給角色 1 用的**公開常數**（解開來就是 public-action-id-salt-not-secret），
+# 角色 2 由執行期的環境變數提供 —— getActionEncryptionKey 的實作是
+# `process.env.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY || manifest.encryptionKey`，
+# 環境變數優先，所以 manifest 裡這一把永遠不會被拿來加密任何東西。
+# 注入點在 infra/docker/docker-compose.yml 的 web `environment:`，
+# 「忘了注入」由 apps/web/instrumentation.ts 在開機時擋下來。
+#
+# 實測過的四件事（不要憑讀碼推翻，那已經錯過一次）：
+#   - 金鑰確實在 manifest 的 encryptionKey 欄位裡，跟著 image 走。
+#   - 執行期環境變數優先於 manifest。
+#   - **同一份原始碼、兩把不同的 build 金鑰 → action id 清單不同**，所以它真的是 salt。
+#   - build 期用 X、執行期用 Y 跑一整套 prod stack，Server Action 正常運作。
+#
+# 不再需要 BuildKit secret：這個值是公開的，沒有東西要藏。
+ARG NEXT_ACTIONS_ID_SALT="cHVibGljLWFjdGlvbi1pZC1zYWx0LW5vdC1zZWNyZXQ="
+RUN NEXT_SERVER_ACTIONS_ENCRYPTION_KEY="$NEXT_ACTIONS_ID_SALT" npm run build
 
 # ---- prod stage (standalone) ----
 FROM node:${NODE_VERSION}-slim AS prod

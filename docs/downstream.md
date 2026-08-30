@@ -1,183 +1,21 @@
-# 下游專案指南
+# 開案後指南
 
-這份文件是給**從模板 clone 出來的專案**看的：哪些目錄不該在下游改動，以及日後怎麼把
-模板的修正拉回來。開一個新專案的步驟在模板的 `TEMPLATE.md`（那是一次性的，
-你的專案裡應該已經刪掉了），不在這裡。
+這份文件是給**用這個模板開出來的新專案**看的：開案之後要做的一次性決定 ——
+CI/CD 留哪些、安全掃描開哪些、Actions 分鐘數怎麼算。開案本身的步驟在
+[`../TEMPLATE.md`](../TEMPLATE.md)（那份導入完成就該刪掉）。
 
-> **你在改的是下游專案，還是模板本身？**
-> 這份文件是給前者的。判斷方法：`git remote -v` 有沒有一個叫 `template` 的遠端。
-> 若你在改模板本身，看 [`development.md`](development.md)。
-> **這份文件要留在你的 repo 裡** —— 每次同步都會用到。
+> **這裡沒有「上游」。** 這個模板是 GitHub template repository，你拿到的是一份快照 ——
+> 沒有共同歷史，也沒有 `template` remote 要維護。**所有檔案都是你的**，包含 `shared/`
+> 與組裝層，改任何地方都不需要顧慮同步。代價是模板日後的修正不會自動流過來，
+> 那個取捨寫在 [`../TEMPLATE.md`](../TEMPLATE.md)。
 
-## 同步紀律：不要在下游改 `shared/` 與組裝層
+**開案時先做這兩件**（`TEMPLATE.md` 的清單裡也有，這裡重述是因為漏掉不會有任何錯誤）：
 
-這是讓「拉更新」不會痛的唯一條件：
-
-| 目錄／檔案 | 下游可以改嗎 |
-|---|---|
-| `apps/*/modules/` | **可以**，這是你的功能所在 |
-| `apps/*/shared/` | **不要改**，要改請回上游改再同步 |
-| 後端 `app/`、前端 `config/` | 只加自己模組的**清單項目**，不改機制 |
-| `apps/web/app/` | 只加自己模組的薄 route adapter（wrapper 形式，見 [`architecture.md`](architecture.md)） |
-| `apps/web/app/tokens/vendor/` | **完全是你的** —— 外部 DS 的原生產出，一套一個目錄，更新時整批覆蓋（每一份都要在 `app/layout.tsx` 與 `app/global-error.tsx` 各接一行 import，`check:tokens` 在守） |
-| `apps/web/app/tokens/primitives.css` | **可以加自己的調色線**，指向 vendor；不要整份換掉（見下方） |
-| `apps/web/app/tokens/semantic.css`、`app/themes/*.css` | **可以改對應，不可以改 token 的名字**（見下方） |
-| `apps/web/config/theme.ts` | 預期你會改 `DEFAULT_THEME`；自訂主題就加進 `ThemeName` |
-| `CHANGELOG.md` | **完全是你的** —— 模板不再碰這一份，所以它永遠不會衝突 |
-| `CHANGELOG.template.md` | **不要改**，那是模板的紀錄，同步時整份跟著上游走 |
-| `apps/api/app/config.py` 的 `APP_VERSION` | **改成你自己的產品版號**；同步時衝突留自己的（見下方） |
-| `AGENTS.md` | **可以**加自己專案的規則，但預期會在同步時衝突（見下一節） |
-| `README.md` | **要改寫成你自己專案的**，但先處理授權（見下方） |
-| `TEMPLATE.md` | 開案指南，**導入完成後就該刪掉**；還在的話代表流程沒走完 |
-
-樣式那幾列的規則只有一條：**語意層 token 的「名字」是模板的契約，「值」是你的。**
-`shared/ui` 的 CSS 只認語意層的那組名字（`--color-surface-card`、`--space-4`…），
-所以你可以把 `themes/*.css` 的對應全部重指到自己的色票、可以再加一份自己的主題，
-但那些名字要留著 —— 改名等於把 UI kit 的樣式拔掉一半。
-
-導入外部 DS 是**多一份主題**，不是覆蓋 `primitives.css`（內建的 `default` 留著，隨時切得
-回去）。步驟見 [`design-system.md`](design-system.md) 的「導入外部 Design System」。
-
-這條和上面那些不同，**它有檢查器在守**。把 `--color-surface-card` 改名之後跑
-`npm run check:tokens`，每一個還在用舊名字的呼叫點都會逐行報「引用了沒有宣告過的
-token」—— `shared/ui`、`config/shell` 與各模組的 CSS 都在其中。只改了其中一份主題檔
-的話訊息會不一樣（變成那份主題「少宣告」某個 token），但一樣是紅燈。
-
-token 分層的完整規則見 [`design-system.md`](design-system.md)。
-
-`AGENTS.md` 是給 AI agent 的指引**本體**，任何工具都讀得到，請留著。根目錄的 `CLAUDE.md`
-只是把它接進來的**轉接檔**（Claude Code 的慣例檔名）—— 這類轉接檔按你團隊實際使用的工具
-增刪即可，刪掉不算破壞上面的同步紀律。
-
-`AGENTS.md` 與 `TEMPLATE.md` 的生命週期是**相反**的，不要弄混：`TEMPLATE.md` 只在開案
-那幾天有用，導入完成就刪；`AGENTS.md` 寫的規則要到你開始長功能才真正開始生效，
-而且它們由 repo 裡持續存在的檢查器守著（`npm run check:architecture`、
-`tests/test_architecture.py`、`make check-docs` 等），不會因為開案結束而失效。
-
-**下游專案的授權要你自己決定並寫上** —— 理由與步驟在 [`../TEMPLATE.md`](../TEMPLATE.md)
-的「改寫 README 與授權」（那是開案時就該做完的事；這裡只提醒，因為改寫 README 的時機
-往往拖到開案之後）。
-
-這條紀律不是憑空要求，而是既有架構撐得起來的：boundary checker 保證 `modules/`
-不會被 `shared/` 反向依賴（`shared` 引用 `modules` 會直接檢查失敗），
-所以 `shared/` 在拓撲上是一層可以獨立替換的東西。**破壞這個前提的代價是每次同步都要手動合併。**
-
-真的需要改 `shared/` 時的正確做法：回模板改 → 模板升版 → 下游同步。
-急件可以先在下游改，但要立刻回上游補同一份修正，否則下次同步一定衝突。
-
-## 拉模板的更新
-
-```bash
-make sync
-```
-
-它會抓上游、**把落後的條目按同步影響分成「要動手」與「其餘」兩堆印出來**、顯示
-`apps/`／`scripts/`／`infra/` 的改動範圍，確認之後才合併，合併完再提醒你跑
-`make gen-types` 與 `make check`。分堆靠的是模板每一筆條目開頭的
-`[同步:無]`／`[同步:要動手]`／`[同步:破壞性]` 標記（意思見
-[`../CHANGELOG.template.md`](../CHANGELOG.template.md) 的檔頭，模板那邊有檢查器在擋漏標記）。
-
-不想用它的話，等價的是這兩行 —— 差別只在你要自己讀完整份條目：
-
-```bash
-git fetch template
-git merge template/main
-```
-
-**前置條件有兩個。** 一是有一個叫 `template` 的 remote —— 從 clone 開案的話是
-`git remote rename origin template`，其餘情況用 `make remote`（名稱填 `template`、
-網址填模板位置）。二是你的歷史與模板**有共同祖先**，也就是開案時保留了 clone 下來的
-歷史；`make remote` 綁定時會檢查並在對不上時當場告訴你。兩者少一個，這一節都不成立。
-
-**預期會衝突的地方分三類，解法不一樣，不要混著解。**
-
-一是**清單**，因為下游會在同一份清單裡加自己的模組：
-
-- `apps/web/config/routes.ts` 的 `ENABLED_MODULES`
-- `apps/api/app/registry.py` 的 `ENABLED_MODULES`
-- `apps/api/app/permissions.py` 的 `Permission` enum
-- `apps/web/config/shell/nav-icons.ts`（偶爾）
-
-清單的解法固定是**兩邊的項目都保留**（上游新增的 + 你自己的），不要二選一。
-
-二是 **token 檔**（`apps/web/app/tokens/**`、`apps/web/app/themes/**`），
-因為你會把它們重指到自己的色票。這裡**值以你的為準**，直接留下你自己那一份 ——
-（接了外部 DS 的話，vendor 那幾檔根本不該出現衝突：它們是上游 DS 的產出，
-整批覆蓋而不是手解，要合的只有對照表與主題檔。）
-但如果上游這次**新增**了語意 token，光留自己的會少掉那個名字，而 `shared/ui`
-已經在用它了。
-
-所以 token 檔衝突解完之後一定要跑一次：
-
-```bash
-cd apps/web && npm run check:tokens
-```
-
-它會逐行列出「引用了沒有宣告過的 token」，那就是你要補的對應。反過來，
-`make gen-types` 對這類衝突沒有幫助 —— 它管的是 API 契約，不是樣式。
-
-三是 **`APP_VERSION`**（`apps/api/app/config.py` 那一行）：兩邊都在升自己的版號，
-所以每次上游發版都會撞在同一行。**留自己的** —— 那個常數在你的專案裡記的是你的產品版本，
-模板的版本改成從 [`../CHANGELOG.template.md`](../CHANGELOG.template.md) 最上面那個版號標題讀。
-`make check-version` 會自己判斷這裡是模板還是下游（判準是 `TEMPLATE.md` 還在不在），
-下游模式比對的是你自己的 [`../CHANGELOG.md`](../CHANGELOG.md)。
-
-**兩份 CHANGELOG 都不會衝突**，那正是它們分家的理由：`CHANGELOG.md` 只有你在寫，
-`CHANGELOG.template.md` 只有上游在寫。哪天真的衝突了，代表有一邊寫錯地方了。
-
-如果你在 `AGENTS.md` 加過自己專案的規則，那份也會衝突，解法一樣是兩邊都保留 ——
-上游改的是模板本身的規則，跟你加的專案規則不會是同一件事。
-
-合併後必跑：
-
-```bash
-make gen-types   # 後端 schema 有變動時，前端型別要跟著重產
-make check       # 已含 check:tokens
-```
-
-如果衝突出現在 `shared/` 底下，代表上一節的紀律被破壞了 —— 先把下游對 `shared/` 的修改
-整理成一份補丁送回上游，再重新同步，不要在合併時硬解。
-
-## 版本與變更紀錄
-
-**兩份紀錄，兩個 owner，不要混用：**
-
-| 檔案 | 誰在寫 | 記什麼 |
-|---|---|---|
-| [`CHANGELOG.md`](../CHANGELOG.md) | 你 | 你的專案的功能變更，版號對應你自己的 `APP_VERSION` |
-| [`CHANGELOG.template.md`](../CHANGELOG.template.md) | 上游 | 模板的改動，版號是模板版；同步時整份跟著上游走 |
-
-分家之前這是同一份檔案，於是同一個區塊有兩個 owner ——
-結果是每次同步都衝突，而「我落後多少」那份 diff 裡混著自己寫的條目，讀不出來。
-
-開發階段版號一律是 `0.x.x`，只有到「實際可上線」的第一個版本才升到 `1.0.0`；
-下游專案自己接手後續開發時，也適用同一條規則。
-
-### 判斷自己落後多少
-
-```bash
-make sync
-```
-
-不合併也可以只看清單 —— 在確認提示按 `N` 就好。想手動看的話：
-
-```bash
-git fetch template
-git diff HEAD template/main -- CHANGELOG.template.md
-```
-
-那份檔案**只有上游在寫**，所以這個 diff 是單向的：新增行就是你還沒有的條目。
-每一筆開頭的標記直接告訴你要不要動手，`make sync` 印出來的兩堆就是照它分的。
-
-上游 CI 的 `pr-checks` 會擋掉「動了 `apps/`／`scripts/`／`infra/` 卻沒留條目」的 PR，
-所以這份清單相當可信。**但它有一個放行方式**（PR 標題帶 `[skip changelog]`，
-給純重構與相依升級用）。要百分之百確認的話請直接看程式碼：
-
-```bash
-git diff HEAD template/main --stat -- apps/ scripts/ infra/
-```
-
-（`make sync` 也會印這一段。）
+- 刪掉 [`../CHANGELOG.template.md`](../CHANGELOG.template.md)，在
+  [`../CHANGELOG.md`](../CHANGELOG.md) 寫你自己的紀錄。
+- `apps/api/app/config.py` 的 `APP_VERSION` 是**你的產品版號**了，重新從你要的起點開始。
+  `make check-version` 會比對它與 `CHANGELOG.md` 最上面那個版號標題
+  （還沒發過版、一個版號標題都沒有時它會略過）。
 
 ## CI/CD
 
@@ -200,6 +38,25 @@ git diff HEAD template/main --stat -- apps/ scripts/ infra/
 分支保護的三個層次與各自擋得住什麼，見
 [`development.md`](development.md#分支保護) —— 那一節是這個主題的 owner。
 
+### repo 設定裡的安全掃描：模板的設定不會跟著複製過來
+
+secret scanning、push protection、Dependabot security updates 與 code scanning（CodeQL）
+**都是 GitHub 那一側的 repo 設定，版控裡沒有它們**，所以 clone 出來的專案一個都不會繼承 ——
+要自己開一次。四個開關與建議的組合見
+[`development.md`](development.md#repo-設定裡的安全掃描)，那一節是 owner。
+
+**但那一節的建議是以 public repo 為前提的**，下游是 private 的話差別很大：
+
+| | public | private |
+|---|---|---|
+| Secret scanning + push protection | 免費 | 要 GitHub Advanced Security（付費） |
+| Code scanning（CodeQL） | 免費 | 同上 |
+| Dependabot security updates | 免費 | 免費 |
+
+也就是說 private 下游能白拿的只有最後一項（而它剛好也是最省事的一項，見上一節的折衷）。
+**不要因為模板開著就照抄** —— 沒有 GHAS 的 private repo 開 code scanning 的下場是
+workflow 照跑、吃完分鐘數，然後在上傳結果那一步 403。
+
 `make check-ci` 守著 ruleset 的 job 名單與 `ci.yml` 一致，所以**動 job 就要同時動 ruleset**
 （沒有那個檔案就跳過，不會紅）。整套 GitHub Actions 都不用時把 `.github/` 刪掉即可，
 `check-ci` 一樣會自己跳過。
@@ -214,14 +71,16 @@ git diff HEAD template/main --stat -- apps/ scripts/ infra/
 
 ### Actions 分鐘數與 dependabot
 
-**免費方案的 2000 分鐘／月是「每個帳號」的，不是每個 repo 的。** 所有 private repo
-共用同一池 —— 包括模板自己。所以「從模板長出三個下游專案」不是三份額度，
-是同一份被切成三份。
+**這一節只給 private 專案。repo 是 public 的話 Actions 分鐘數無限，整節跳過** ——
+而且 public 還順帶讓 [`main.json`](../.github/rulesets/main.json) 匯得進去（見上面那張表）
+與四個安全掃描開關免費（見下一節）。模板預設走的就是 public 這條路，
+開案步驟見 [`../TEMPLATE.md`](../TEMPLATE.md)。
 
-先看有沒有更大的槓桿：**repo 如果可以 public，Actions 分鐘數無限**，這一節就不用看了
-（順帶連 [`main.json`](../.github/rulesets/main.json) 也才匯得進去，見上面那張表）。
+還是 private 的話，先知道成本怎麼算：**免費方案的 2000 分鐘／月是「每個帳號」的，
+不是每個 repo 的。** 所有 private repo 共用同一池 —— 包括模板自己。所以「從模板長出
+三個下游專案」不是三份額度，是同一份被切成三份。
 
-private 的話，先確認兩件已經做在模板裡的事還在，它們比刪 dependabot entry 有效得多：
+接著確認兩件已經做在模板裡的事還在，它們比刪 dependabot entry 有效得多：
 
 - **merge 到 `main` 那一輪不重跑測試**（省約 12 分鐘／次），前提是匯入了 ruleset ——
   見上面那張表與 [`development.md`](development.md#4-測試)。
@@ -233,14 +92,11 @@ private 的話，先確認兩件已經做在模板裡的事還在，它們比刪
 所以下面這張表仍然有用，只是沒有原本那麼急。
 
 [`.github/dependabot.yml`](../.github/dependabot.yml) 會**原封不動跟著模板複製過來**，
-所以下游預設是照跑六組的。要省的話按「這份 manifest 是誰擁有的」切：
+所以新專案預設是照跑六組的。**六組都是你的東西**（沒有上游會幫你更新任何一組），
+所以「刪掉」等於「那份 manifest 從此不再有人盯版本」——
+`Dockerfile` 的基底映像尤其危險，它沒有 `make audit`、也沒有任何紅燈會提醒。
 
-| 生態系 | 下游怎麼處理 | 為什麼 |
-|---|---|---|
-| `docker` ×2、`docker-compose`、`github-actions` | **刪掉** | `Dockerfile`、compose 與 `.github/` 都是模板擁有的，升版會隨著[拉模板的更新](#拉模板的更新)一起帶過來 —— 而且是一個 PR 帶全部，不是四組各開各的 |
-| `uv`、`npm` ×2 | **不能全刪** | 下游會裝自己的相依，而模板對那些一無所知。只靠同步的話它們永遠不會被更新，那正是 `make audit` 掃得到、模板卻補不了的一層 |
-
-三個基底映像的 entry 如果留著，可以把它們的 `schedule.interval` 從 `weekly` 改成
+真的要省，先調頻率而不是刪除。三個基底映像的 entry 如果留著，可以把它們的 `schedule.interval` 從 `weekly` 改成
 `monthly`（模板出廠是 weekly）。**代價**：基底映像沒有 `make audit` 也沒有任何紅燈在守，
 OS 層的 CVE 最多會延後一個月修補，期間完全沒有症狀。理由寫在
 [`.github/dependabot.yml`](../.github/dependabot.yml) 的基底映像那一段。
@@ -254,15 +110,21 @@ OS 層的 CVE 最多會延後一個月修補，期間完全沒有症狀。理由
 刪整組就是把那個 entry 從 `updates:` 拿掉，**沒有檢查器在守這個檔案** ——
 `make check-ci` 只看 `ci.yml` 與 ruleset。
 
+**不要為了省分鐘數改用 self-hosted runner。** 它確實不計費（GitHub 只對 hosted runner 計費），
+但那條路只在 repo 是 private 時才安全 —— **public repo 掛 self-hosted runner 等於讓任何人
+用一個 fork PR 在你的機器上執行任意程式碼**。而如果你的 repo 已經是 private 到需要省分鐘數，
+比較划算的順序是先回頭問「這個 repo 可以 public 嗎」，那一步同時解決分鐘數、分支保護與
+安全掃描三件事。真的要自架，至少用容器化或 ephemeral runner，不要裸機常駐。
+
 ### 「不啟用」與「移除」是兩件事
 
 **不啟用**是主機那一側的事：`.env` 的 `IMAGE_REGISTRY` 留空就是 `make prod` 就地建置，
 那是 `make init` 產生的預設值，零動作。
 
 **但這管不到 GitHub 那一側。** `publish` job 的觸發條件是 push 到 `main`，跟你有沒有
-填 `IMAGE_REGISTRY` 無關；它第一步就檢查 repository secret
-`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` 在不在，沒設就紅燈。所以留著 CD 卻不用它並不是一個
-穩定狀態，兩條路選一條：設好那支 secret（即使暫時不部署），或照下面刪乾淨。
+填 `IMAGE_REGISTRY` 無關 —— 它不需要任何額外設定就會成功，所以留著不會紅燈，
+只會一直往 GHCR 推沒有人用的 image（外加每次 merge 的那幾分鐘 Actions 時間）。
+不打算走 registry 的話照下面刪乾淨。
 
 ### 移除 CD
 

@@ -4,7 +4,24 @@
 `git rm TEMPLATE.md`——留著它只會讓後續開發的人以為自己還在模板裡。
 
 長期有效的規則不在這裡：開發規則見 [`AGENTS.md`](AGENTS.md)，
-同步紀律見 [`docs/downstream.md`](docs/downstream.md)。
+開案之後的一次性決定見 [`docs/downstream.md`](docs/downstream.md)。
+
+## 0. 這個模板是快照，不是上游
+
+**用 GitHub 的 "Use this template" 開新 repo**（或自己 clone 之後 `rm -rf .git` 重開歷史）。
+你拿到的是一份**複製品**：沒有共同歷史、沒有 `template` remote、之後也不會有同步。
+
+**所以這個 repo 裡的每一個檔案都是你的**，包含 `shared/` 與組裝層（後端 `app/`、
+前端 `config/`）—— 想改就改，不必顧慮任何上游。
+
+**代價是模板日後的修正不會流過來**，包含安全修正。這是刻意的取捨，理由是：可同步的上游
+要能成立，前提是每個專案都遵守「不要改 `shared/` 與組裝層」那條紀律 —— 而多個平行開發的
+專案幾乎必然會破壞它。破壞之後，你付了同步機制的全部成本卻拿不到好處（每次拉更新都變成
+手動解衝突）。真的有東西需要跨專案更新時，正確的作法是把它做成套件（npm／PyPI），
+而不是複製整個 repo。
+
+有需要的話，自己去模板的 CHANGELOG 讀一讀、手動搬需要的修正 —— 那是**你主動的動作**，
+不是一條要維護的管線。
 
 ## 1. 開案
 
@@ -12,22 +29,16 @@
 [`apps/web/.nvmrc`](apps/web/.nvmrc) 為準。
 
 ```bash
-git clone <模板位置> my-project
+git clone <你用 Use this template 開出來的 repo> my-project
 cd my-project
-
-# 把模板留成可持續拉更新的上游
-git remote rename origin template
 
 make init      # 互動式產生 .env（專案名、port、DB 帳密、各項祕密），不需要網路
 make setup     # 驗證 Node 版本，安裝主機端 lint／測試／型別產生工具
-make remote    # 綁定你自己的儲存庫（名稱填 origin）；只在本機試跑可以略過
 make dev       # 啟動開發環境（首次會建置 image，約 2–5 分鐘）
 ```
 
-`<模板位置>` 由提供模板的人告知，git URL 或本機路徑都可以。
-
-**不要 `rm -rf .git` 重開一段歷史。** 保留 clone 下來的歷史是同步流程唯一的前提，
-理由見 [`docs/downstream.md`](docs/downstream.md#拉模板的更新)。`make remote` 會順便檢查並提醒你。
+**開案先刪兩個檔案**：[`CHANGELOG.template.md`](CHANGELOG.template.md)（模板自己的紀錄，
+你的寫在 [`CHANGELOG.md`](CHANGELOG.md)），以及走完這份清單之後的 `TEMPLATE.md` 本身。
 
 打開 `http://localhost:<SYSTEM_PORT>`（預設 http://localhost:3000）。系統還沒有超級管理者時
 會自動落在 `/signup`，填入 `make init` 印出的 `REGISTER_KEY` 建立第一個帳號 ——
@@ -86,20 +97,41 @@ cd apps/web && npm run check:tokens
 
 兩件事：分支保護要**設**，CD 要**決定**。
 
-### 5a. 分支保護
+### 5a. repo 設成 public，然後三件事一次做完
 
-**多數人這一步不用做任何事。** `make setup` 已經掛上 `.githooks/pre-push`（擋直接 push 到
-`main`、force push 與刪除），CI 的 `pushed-via-pr` job 會把漏網的吵出來。這兩層不依賴
-任何 GitHub 方案，但**也都不是強制** —— 細節與限制見
-[`docs/development.md`](docs/development.md#分支保護)。
+**這個模板預設你的 repo 是 public**，因為免費方案上 public 與 private 拿到的東西差很多：
 
-要真正的伺服器端強制的話，那是 GitHub 的付費功能（**private repo 在免費方案上設不了**，
-API 直接回 403）。你的 repo 是 public 或付費方案時，綁好 `origin`（第 1 步的 `make remote`）
-之後匯入模板附的 ruleset 就有了：
+| | public | private（免費方案） |
+|---|---|---|
+| Actions 分鐘數 | 無限 | 每個帳號每月 2000 分鐘，**所有 repo 共用** |
+| ruleset（伺服器端分支保護） | 免費 | 設不了，API 回 403 |
+| secret scanning + push protection | 免費 | 要 GitHub Advanced Security（付費） |
+| code scanning（CodeQL） | 免費 | 同上 |
+| environment 的 required reviewers | 免費 | 設不了 |
+
+**private 不是不能用**，但上面每一列都要各自處理，散落在
+[`docs/downstream.md`](docs/downstream.md) 的幾節裡。這裡只講 public 的路。
+
+**先確認歷史裡沒有夾帶過金鑰再轉 public** —— 公開之後就收不回來了，
+刪 commit 也沒有用（`.env*` 出廠就在 `.gitignore` 裡，正常流程不會有問題）。
+
+轉成 public 之後，綁好 `origin`（第 1 步的 `make remote`）再做這三件：
 
 ```bash
 gh api --method POST repos/{owner}/{repo}/rulesets --input .github/rulesets/main.json
+gh api --method PATCH repos/{owner}/{repo} -f 'security_and_analysis[secret_scanning][status]=enabled' -f 'security_and_analysis[secret_scanning_push_protection][status]=enabled'
 ```
+
+第三件在網頁上：Settings 的安全那一頁開 **Code scanning**，選 **default setup**、
+query suite 選 **Default**。四個開關的意思與為什麼不要 advanced setup，見
+[`docs/development.md`](docs/development.md#repo-設定裡的安全掃描)。
+
+**ruleset 那一行不是選配的。** `ci.yml` 讓 merge 到 `main` 那一輪不重跑測試，靠的就是它的
+strict 政策（分支必須是最新才能 merge）—— 沒匯入的話那個前提不成立，而且**不會有任何紅燈**。
+細節見 [`docs/development.md`](docs/development.md#分支保護)。
+
+`make setup` 掛上的 `.githooks/pre-push` 與 CI 的 `pushed-via-pr` job 仍然留著，
+它們是第二、三層（本機擋、事後吵），不依賴任何 GitHub 方案。
 
 **團隊超過一個人時記得調高 ruleset 裡的 `required_approving_review_count`**（出廠是 `0`）。
 
@@ -117,27 +149,17 @@ CI 那幾個 job 直接用就好，**要做決定的是 CD 這一段**：
 | **CI + CD 都用**（部署走 `make deploy`） | 照 [`docs/operations.md`](docs/operations.md#registry-模式build-once-deploy-anywhere) 的一次性設定表建好 environment、secrets 與主機憑證 |
 | **都不用**（自己接別的 CI 平台） | 整個 `.github/` 刪掉；`make check` 與其餘 `check-*` 在本機仍然可用（`check-ci` 沒有 `ci.yml` 會自己跳過） |
 
-**這件事要在第一次 push 到 `main` 之前決定，不是「以後想部署再說」。**
-`publish` job 在每次 push 到 `main` 都會跑，而它第一步就檢查 repository secret
-`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` 在不在 —— 沒設就是紅燈，而那支 secret 只有
-registry 模式需要（理由見 `operations.md` 的「兩個 build 期值」）。
-所以「先不管它」的結果是每次推程式碼都收到一封失敗通知。
+**這件事早點決定比較省事。** `publish` job 在每次 push 到 `main` 都會跑，而它不需要
+任何額外設定就會成功（用內建的 `GITHUB_TOKEN` 推 GHCR）。所以「先不管它」不會紅燈，
+但會一直往 GHCR 推沒有人用的 image。
 
 主機那一側不必做選擇：`.env` 的 `IMAGE_REGISTRY` 留空就是 `make prod` 就地建置，
 那是 `make init` 產生的預設值。**但它管不到 GitHub 那一側** —— 上面那個決定還是要做。
 
 要刪的話逐項清單在 [`docs/downstream.md`](docs/downstream.md#cicd)（那一節同時是日後
-反悔想加回來時的對照表）。**先刪完再走下一步** —— 下一步的「就此分家」會把
-`docs/downstream.md` 一起刪掉。
+反悔想加回來時的對照表）。
 
-## 6. 決定要不要繼續跟上游
-
-- **要繼續拉模板更新**：留著 `template` 這個 remote 與 `docs/downstream.md`，
-  之後照那份文件的紀律走（重點：不要改 `shared/` 與組裝層）。
-- **就此分家**：`git remote remove template`，並刪掉 `docs/downstream.md`
-  與 `AGENTS.md` 裡指向它的那一行。分家之後 `shared/` 就是你自己的了，隨便改。
-
-## 7. 刪掉這份檔案
+## 6. 刪掉這份檔案
 
 ```bash
 git rm TEMPLATE.md
@@ -150,13 +172,12 @@ git rm TEMPLATE.md
 ## 附錄：只有在改「模板本身」時才適用的規則
 
 如果你**不是**在開案，而是在維護模板這個 repo（判斷方法：`git remote -v`
-**沒有**一個叫 `template` 的遠端，因為你就是上游）：
+這個 repo 的 `origin` 就是模板本身）：
 
 - 改動要考慮「所有未來專案都會繼承這個決定」。
-- 每次實質改動在 [`CHANGELOG.template.md`](CHANGELOG.template.md) 留一筆，開頭帶同步影響標記
-  （`[同步:無]`／`[同步:要動手]`／`[同步:破壞性]`）並註明**下游同步時需要做什麼**。
-  根目錄的 `CHANGELOG.md` 是留給下游專案的，模板不碰它。
+- 每次實質改動在 [`CHANGELOG.template.md`](CHANGELOG.template.md) 留一筆。
+  根目錄的 `CHANGELOG.md` 是留給用這個模板開出來的專案的，模板不碰它。
 - 必要時升 `apps/api/app/config.py` 的 `APP_VERSION`。開發階段一律 `0.x.x`。
 
 **只有第二條有檢查器在守**（CI 的 `pr-checks` 擋漏寫與寫錯地方，`make check-version`
-擋漏標記與版號對不上）。第一條與第三條靠自律。
+擋版號對不上）。第一條與第三條靠自律。

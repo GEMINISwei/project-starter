@@ -46,6 +46,10 @@ ALLOW=(
     # 外部 Design System 產出的落地處。只有實際導入 DS 的專案才會有這個目錄，
     # 模板本身沒有 —— 但導入步驟必須寫在文件裡（docs/design-system.md）。
     "apps/web/app/tokens/vendor/"
+    # CodeQL 的 advanced setup 會產生的 workflow。**這個 repo 刻意不要它** ——
+    # 文件裡指名它是為了說明「為什麼選 default setup」（那份 workflow 會被下游繼承，
+    # 而 code scanning 對 private repo 要付費，繼承過去就是一個固定紅的 job）。
+    ".github/workflows/codeql.yml"
     # 還不存在的第二份契約，出現在命名規則的示範中。
     "ws-asyncapi.json"
     "api-asyncapi.json"

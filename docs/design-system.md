@@ -369,8 +369,8 @@ vendor 的名字只能出現在 `primitives.css`。少了那條限制，模組 C
 
 導入完成後**有三處文件會變成不實敘述，而且沒有任何檢查器看得到**：這一節開頭那句
 「這個模板出廠沒有導入任何 DS」、[`TEMPLATE.md`](../TEMPLATE.md) §3 的視覺敘述，
-以及 [`CHANGELOG.template.md`](../CHANGELOG.template.md)（要記一筆，寫清楚下游同步要做什麼：主題名稱、
-`DEFAULT_THEME` 改了沒）。下游的同步紀律見 [`downstream.md`](downstream.md)。
+以及 [`CHANGELOG.template.md`](../CHANGELOG.template.md)（要記一筆：主題名稱、
+`DEFAULT_THEME` 改了沒）。
 
 
 ## 加一類新 token
@@ -388,8 +388,8 @@ DS 給了這裡還沒有槽位的東西（模糊、外框、更多動態階）�
 ## 用這份模板開專案時
 
 視覺是開案時就該決定的事，步驟在 [`TEMPLATE.md`](../TEMPLATE.md) 的「決定視覺」。
-之後要跟模板同步的話，token 檔屬於**預期會衝突**的那一類，解法與其他衝突點不同 ——
-見 [`downstream.md`](downstream.md#拉模板的更新)。
+token 檔開案之後就完全是你的，改名、換色票、整套換掉都可以 —— 唯一的限制是
+`shared/ui` 的 CSS 只認語意層那組名字，改名的話要一起改（`npm run check:tokens` 會逐行指出來）。
 
 ## 斷點：唯一不能做成 token 的類別
 
