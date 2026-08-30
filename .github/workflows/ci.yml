@@ -340,6 +340,10 @@ jobs:
           # build arg 只剩這一個：SYSTEM_NAME／EXPIRE_HOURS／VAPID_PUBLIC_KEY 都已經
           # 改成執行期注入（見 apps/web/shared/runtime/config.ts）。
           build-args: UPLOAD_SIZE_LIMIT=1mb
+          # `load: true` 才會把結果放進本機 docker daemon，下一步的 docker run 需要它
+          # （同上面的 api image）。buildx 預設不 load，而症狀是 docker run 說找不到
+          # 那個 tag —— 看起來像上一步沒建成功。
+          load: true
           # **沒有 build secret 了。** Server Action 的 id salt 現在是 Dockerfile 裡的
           # 公開常數，金鑰改由執行期注入 —— 理由見 apps/web/Dockerfile 的長註解。
           #
