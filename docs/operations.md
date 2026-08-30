@@ -519,8 +519,22 @@ web image 的 `next build` 尤其慢。比 QEMU 划算的做法是拿 `ubuntu-24
 驗證一份 image 真的是這個 repo 的 CI 建出來的：
 
 ```bash
-gh attestation verify oci://ghcr.io/<owner>/<repo>/api:<tag> --repo <owner>/<repo>
+gh attestation verify oci://ghcr.io/acme-corp/my-project/api:main --repo Acme-Corp/my-project
 ```
+
+**同一行的兩半大小寫規則相反，這是最容易踩的地方。** `oci://` 那一半是 OCI 的
+repository name，規格要求**全小寫**；`--repo` 那一半是 GitHub 的 repo 識別字，
+要**維持帳號原本的大小寫**。帳號名含大寫時把兩邊寫成一樣，會拿到
+
+```
+Error: artifact ghcr.io/... is not a valid registry reference: repository name must be lowercase
+```
+
+—— 那個訊息看起來像 image 不存在，不像大小寫的問題。
+
+workflow 那一側不必操心：`metadata-action` 與 `attest-build-provenance` 都會自己把
+`github.repository` 轉小寫，所以推出去的 image 與證明裡記的 subject 本來就是小寫的。
+會踩到的只有手打這行指令的人。
 
 **這一步補的是〈[發版與回滾](#發版與回滾)〉那條鏈裡唯一一段靠推論撐著的地方。**
 `deploy.yml` 等 CI 綠燈、篩 `event == push`，然後在主機上 pull `sha-<short>` —— 但 tag

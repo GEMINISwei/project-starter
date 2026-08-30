@@ -884,8 +884,11 @@ jobs:
       # 主體是 **digest 不是 tag**，所以一份證明涵蓋這次推出去的每一個 tag
       # （main / sha-xxx / 1.2.3 / latest 全部指向同一份 digest）。
       #
-      # 驗證方式（主機上或任何地方）：
-      #   gh attestation verify oci://ghcr.io/<owner>/<repo>/api:<tag> --repo <owner>/<repo>
+      # 驗證方式（主機上或任何地方）。**兩半的大小寫規則相反**：`oci://` 那一半是 OCI
+      # 的 repository name，規格要求全小寫；`--repo` 那一半要維持帳號原本的大小寫。
+      # 帳號名含大寫時寫成一樣會被擋下來，而訊息看起來像 image 不存在 ——
+      # 完整說明見 docs/operations.md，那一節是這個主題的 owner。
+      #   gh attestation verify oci://ghcr.io/acme-corp/my-project/api:main --repo Acme-Corp/my-project
       - name: 產生 api image 的 build provenance
         uses: actions/attest-build-provenance@v4
         with:
