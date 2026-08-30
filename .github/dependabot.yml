@@ -127,7 +127,7 @@ updates:
   # 而且期間完全沒有症狀。那個代價只有在真的換到分鐘數的時候才值得付。
   #
   # 下游如果是 private 而且分鐘數吃緊，這三個改回 monthly 是一行的事 ——
-  # 判斷方式與其他省法見 docs/downstream.md 的〈Actions 分鐘數與 dependabot〉。
+  # 判斷方式與其他省法見 docs/ci-cd.md 的〈Actions 分鐘數與 dependabot〉。
   #
   # **compose 那組的 ecosystem 是 `docker-compose`，不是 `docker`**。`docker` 只認
   # Dockerfile，指到一個沒有 Dockerfile 的目錄時 dependabot 會直接報錯

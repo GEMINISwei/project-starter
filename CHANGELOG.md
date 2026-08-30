@@ -13,6 +13,30 @@
 
 ### 變更
 
+- **文件重整：新增 [`docs/ci-cd.md`](docs/ci-cd.md)，移除 `docs/downstream.md`。**
+  原本的 `downstream.md` 把兩種壽命不同的東西寫在一起：**開案期**的模板自我說明
+  （「模板附的」「這裡沒有上游」）與**永久有用**的 CI/CD 知識，而後者被寫成前者的語氣，
+  導致開案之後那份文件整份都不能原樣留著。現在以壽命切開：
+  - `docs/ci-cd.md` 是 GitHub 那一側的 owner —— CI 有哪些 job 各自守什麼、分支保護與
+    ruleset、repo 的四個安全掃描開關、Actions 分鐘數與 dependabot、部署主機的架構、
+    移除 CD 的逐項清單。用專案語氣寫，不提「模板」，開案之後原樣留著。
+  - 開案期的內容併進 [`TEMPLATE.md`](TEMPLATE.md)（清空 CHANGELOG 與重設 `APP_VERSION`、
+    public vs. private 的差別表），**所以 `docs/` 現在 100% 是永久內容** ——
+    分家只要 `git rm TEMPLATE.md`，不必再判斷 `docs/` 裡哪幾份該刪。
+  - 連帶把 `development.md` 的〈分支保護〉〈匯入 ruleset〉〈repo 設定裡的安全掃描〉
+    與 §4 的 CI job 清單搬進 `ci-cd.md`。`development.md` 收回它本來的範圍
+    （本機開發紀律），兩邊改成單向連結，不再互指。
+
+- **清掉四處已經不成立的敘述**，檢查器全部抓不到（`check-docs` 守的是路徑與錨點存在，
+  守不到「這段文字描述的東西已經沒了」）：`operations.md` 說「上游打的 tag 會出現在每個
+  下游的 `git tag -l` 裡」（快照模式下沒有上游）、`operations.md` 兩處
+  `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` 的「曾經是…現在是…」（演進史只該留在這裡，
+  見 [`docs/development.md`](docs/development.md#5-寫文件與註解的慣例) 第 3 條）、
+  `development.md` 疑難排解表的「同步上游後多了新變數」、`check-version.sh` 把存在理由
+  寫成「下游判斷落後多少、同步要做什麼」。另外 `development.md` 的〈安全 advisory〉
+  原本說「祕密不會進版控的唯一防線是 `.gitignore`」，那在 push protection 進來之後
+  就不對了，改寫成兩層各自守什麼。
+
 - **更新 ruleset 的指令從 `POST` 改成 `PUT`（三處）。** `POST` 是「建立」不是「更新」——
   第一次匯入時它是對的，但改過 `main.json` 之後照著做，GitHub 會多出**第二個同名的
   `main` ruleset**（名稱不要求唯一），兩個都是 active、兩份規則疊加。症狀很惡劣：
@@ -20,7 +44,7 @@
   之後想調鬆任何一條時會改到其中一個、另一個繼續擋著，**而且沒有任何地方會提示你有兩份**。
   三處裡 `scripts/check-ci.sh` 那行最關鍵 —— 它印出來的時機必定是「ruleset 剛被改過」，
   也就是唯一需要 `PUT` 的情境。`TEMPLATE.md` 的開案情境確實是首次匯入，`POST` 維持不動，
-  只補一句指路。`docs/development.md` 的〈匯入 ruleset〉是這個主題的 owner，兩種都寫。
+  只補一句指路。
 
 - **新增 `draft-gated-jobs` job，把「draft 期間跳過的三個 job 從來沒補跑過」從沉默變成紅燈。**
   `deploy-config`／`e2e`／`security` 在 draft 上跳過，靠 `ready_for_review` 事件補跑 ——
@@ -64,51 +88,33 @@
   `ci.yml` 的等待迴圈改用 `for _`、step summary 的五個 `>>` 收成一個區塊，
   `deploy.yml` 那條 jq 的誤報加了一行帶理由的 `# shellcheck disable`。
 
-- `docs/downstream.md` 新增〈部署主機的架構要先決定〉。`operations.md` 早就寫了
-  「只建 linux/amd64、arm64 主機拉得下來跑不起來」的症狀，缺的是**這個決定該在什麼時機做** ——
-  選主機的時候，不是第一次部署失敗的時候。
-
-- **清掉舊「可同步上游」模型的五處殘留，並移除 `make remote`。** 改成 GitHub template
-  repository 之後，還有五個地方在描述已經不存在的模型，而檢查器全部抓不到（`check-docs`
-  守的是路徑與錨點存在，守不到「這段文字描述的東西已經沒了」）：`README.md` 的
-  Quickstart 教人把模板留成上游、`docs/development.md` 描述 `make remote` 對 `template`
-  這個名稱的特殊行為（`remote.sh` 裡從來沒有那段邏輯）、`.githooks/pre-push` 的註解與
-  **執行期訊息**都說下游靠 `git merge template/main` 同步、`TEMPLATE.md` 指向一個不存在的
-  步驟。連帶：
-  - 移除 `make remote` 與 `scripts/remote.sh`。快照模式下正常開案（"Use this template"
-    之後 `git clone`）`origin` 早就綁好了，它一次都不會被呼叫；剩下的退路
-    （下載 ZIP、`rm -rf .git`）用兩行標準 git 指令就夠。而它最複雜的那段
-    （判斷共同祖先、警告 unrelated histories）本來就是為了舊模型寫的。
-  - `TEMPLATE.md` 第 6 步從「順手 grep 一下」改成逐檔清單。**照原本的寫法走完清單會讓
-    下游第一個 PR 紅燈** —— `git rm TEMPLATE.md` 之後有 12 條 markdown 連結斷掉，散在
-    五個檔案，而 `check-docs` 在 CI 的 `deploy-config` job 裡。
-  - `TEMPLATE.md` 的附錄補上「repo 的 `Template repository` 開關要打勾」。整個開案模式
-    建立在它上面，而它跟 ruleset、secret scanning 一樣是 GitHub 那一側的設定 ——
-    版控裡看不到，也沒有任何檢查器守得到。
-  - `docs/downstream.md` 的標題層級改成四個主題各自 `##`（原本三個主題擠在 `CI/CD`
-    底下當 `###`），並修掉兩處指反方向的「見上一節／下一節」。標題文字沒動，
-    既有的錨點連結全部還有效。
-
-- `make init` 問資料庫帳號時的預設值從 `admin` 改成 `app`，與 `.env.example` 和
-  `docs/development.md` 的表格一致。`check-env` 比對的是變數名不是預設值，所以這三處
-  飄了沒有任何症狀。
-
 - **改用 GitHub template repository 模式，不再提供可同步的上游。** 新專案用
   "Use this template" 開出來，拿到的是一份快照：沒有共同歷史、沒有 `template` remote、
   之後也不會有同步。**所以新專案可以改任何地方**，包含 `shared/` 與組裝層。
   取捨與理由寫在 [`TEMPLATE.md`](TEMPLATE.md) 的第 0 節（一句話：可同步的上游要成立，
   前提是每個專案都遵守「不要改 `shared/` 與組裝層」，而多個平行開發的專案幾乎必然破壞它；
   破壞之後就是付了成本卻拿不到好處）。連帶：
-  - 移除 `make sync` 與 `scripts/sync.sh`。
-  - 移除 CHANGELOG 條目的同步影響標記與 `make check-version` 對它的檢查。
-  - `docs/downstream.md` 從「同步紀律」改寫成「開案後指南」，只留開案後真的要做的決定
-    （CI/CD 留哪些、安全掃描、Actions 分鐘數、移除 CD）。
-  - `AGENTS.md` 移除「有 `template` remote 就不要改 `shared/`」那條規則。
+  - 移除 `make sync`／`scripts/sync.sh` 與 `make remote`／`scripts/remote.sh`。
+    快照模式下正常開案（"Use this template" 之後 `git clone`）`origin` 早就綁好了，
+    `remote` 一次都不會被呼叫；剩下的退路（下載 ZIP、`rm -rf .git`）用兩行標準 git 指令
+    就夠，而它最複雜的那段（判斷共同祖先、警告 unrelated histories）本來就是為舊模型寫的。
   - **變更紀錄維持單一份 `CHANGELOG.md`。** 開發過程中一度拆成
     `CHANGELOG.template.md` 加一份種子檔，那是為了讓「模板與下游持續寫進同一條血脈」
     不會永遠衝突而設計的；快照模式下同一時間只有一個 owner，拆開就只剩成本。
     連帶 `make check-version` 不再需要判斷「這個 repo 是模板還是新專案」，
     CI 的 CHANGELOG 守衛也從兩個方向縮回一個（只擋漏寫）。
+  - 移除 CHANGELOG 條目的同步影響標記與 `make check-version` 對它的檢查。
+  - `AGENTS.md` 移除「有 `template` remote 就不要改 `shared/`」那條規則。
+  - `TEMPLATE.md` 第 6 步從「順手 grep 一下」改成逐檔清單。**照原本的寫法走完清單會讓
+    下游第一個 PR 紅燈** —— `git rm TEMPLATE.md` 之後有十幾條 markdown 連結斷掉，散在
+    多個檔案，而 `check-docs` 在 CI 的 `deploy-config` job 裡。
+  - `TEMPLATE.md` 的附錄補上「repo 的 `Template repository` 開關要打勾」。整個開案模式
+    建立在它上面，而它跟 ruleset、secret scanning 一樣是 GitHub 那一側的設定 ——
+    版控裡看不到，也沒有任何檢查器守得到。
+
+- `make init` 問資料庫帳號時的預設值從 `admin` 改成 `app`，與 `.env.example` 和
+  `docs/development.md` 的表格一致。`check-env` 比對的是變數名不是預設值，所以這三處
+  飄了沒有任何症狀。
 
 - `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` 不再被烤進 web image。
   這把金鑰在 Next 裡同時扛兩個需求相反的角色 —— build 期是 Server Action id 的 salt
@@ -137,11 +143,13 @@
   trivy 的 secret scanner 對真的含金鑰的舊 image 掃出 0 筆，對只含那份 manifest 的對照組
   也是 0 筆 —— 它不認「JSON 欄位裡的一串 base64」，加了會得到一個守不到的檢查。
 
-- 模板的預設立場改成「repo 是 public」。免費方案上 public 與 private
-  拿到的東西差很多（Actions 分鐘數、ruleset、secret scanning、CodeQL、environment 的
-  required reviewers 五項），原本散在各處的「這是付費功能所以不預設」全部重寫。
-  **開新專案時**照 [`TEMPLATE.md`](TEMPLATE.md) 的第 5a 步把 repo 設成 public 並跑那三件設定；
-  **維持 private 的話** [`docs/downstream.md`](docs/downstream.md) 每一節都寫了對應的作法。
+- **模板的預設立場改成「repo 是 public」，並補上 repo 設定裡的安全掃描開關。**
+  免費方案上 public 與 private 拿到的東西差很多（Actions 分鐘數、ruleset、secret scanning、
+  CodeQL、environment 的 required reviewers 五項），原本散在各處的「這是付費功能所以不預設」
+  全部重寫。四個開關（secret scanning、push protection、Dependabot security updates、
+  code scanning）**都是 GitHub 那一側的設定，版控裡沒有它們**，所以 clone 出來的專案
+  一個都不會繼承 —— 建議的組合與 private 的差別見
+  [`docs/ci-cd.md`](docs/ci-cd.md#repo-設定裡的安全掃描)。
   - **`ruleset` 從「選配」變成「開案必做」**：`ci.yml` 讓 merge 到 `main` 那一輪不重跑測試，
     前提就是它的 strict 政策 —— 沒匯入的話那個洞**沒有任何症狀**。
   - `deploy-config` 與 `e2e` 在 draft 期間跳過的理由從「計費」改成「回饋速度」。
@@ -149,54 +157,35 @@
   - 新增警告：**public repo 不能掛 self-hosted runner**（fork PR 可以在你的機器上
     執行任意程式碼）。
   - public repo 的部署主機可以匿名 `git fetch`，deploy key 那段只有 private 需要。
+  - **Code scanning 選 default setup 而不是 advanced setup**：後者會產生一份
+    `codeql.yml` 進版控被每個下游繼承，而 code scanning 對 private repo 要付費 ——
+    等於送給每個 private 下游一個固定紅的 job。
+
 - `ci.yml` 裡三個寫死的假金鑰改成每次執行時現產（`openssl rand -base64 32`）。
   值本來就是假的（解開來是 `ci-only-not-a-real-key-32bytes!!`），但泛型的 secret 掃描器
   只看熵，照樣判成外洩並寄信 —— 而那串字會被**每一個下游繼承**，等於每個 clone 出去的
   專案都會收到同一封誤報，而且自己修不掉。安全性上等價（建置完就丟），
   BuildKit 的 cache key 也不含 secret 值，所以不影響快取。
 
-- 文件補上 repo 設定裡的四個安全掃描開關（secret scanning、push protection、
-  Dependabot security updates、code scanning）：模板該開哪些見
-  [`docs/development.md`](docs/development.md#repo-設定裡的安全掃描)，
-  **下游是 private 時哪些要付費**見
-  [`docs/downstream.md`](docs/downstream.md#repo-設定裡的安全掃描模板的設定不會跟著複製過來)。
-  這些設定不在版控裡，所以 clone 出來的專案一個都不會繼承。
-
-- CI 重新分配各階段跑哪些 job。以「一次 draft push + Ready + merge」計，
+- **CI 依 PR 階段分配工作量。** 以「一次 draft push + Ready + merge」計，
   帳單從約 34 分鐘降到約 19 分鐘（實測值，不含 `publish`）：
   - **merge 到 `main` 只跑 `pushed-via-pr` 與 `publish`**，測試那六個 job 全部跳過。
     **這一條的前提是匯入 `.github/rulesets/main.json`**（strict：分支必須是最新才能
-    merge，PR head 的 tree 才等於 merge 後的 tree）。**開案時要做的就是這件事** ——
-    沒有匯入 ruleset 的話，把那六個 job 的 `if` 改回 `github.event_name != 'schedule'`。
+    merge，PR head 的 tree 才等於 merge 後的 tree）。沒有匯入 ruleset 的話，
+    把那六個 job 的 `if` 改回 `github.event_name != 'schedule'`。
+  - `deploy-config`、`e2e` 與 `security` 在 draft 期間不跑，按下 Ready for review 時補跑。
+    draft 期間要看這幾盞燈就自己跑 `make check-compose`／`make e2e`／`make audit`。
+    `security` 查的外部資料庫一天最多變一次，而 Ready 與每週一的 cron 已經是兩個落點。
+  - **按下 Ready 時其餘 job 照樣重跑。** 試過不重跑，會讓 PR 頁面說謊 ——
+    被跳過的 job 仍然會產生一筆 `skipped` 的 check run 蓋掉 draft 期間那筆 `success`，
+    而 `skipped` 對必要檢查算通過。實測結果寫在 `ci.yml` 的 `api` job 註解上。
   - `changelog`、`acceptance`、`test-edits` 三個 job 合併成 `pr-checks`（三個 step）。
     GitHub 逐 job 進位到整分鐘計費，三支各跑 4～6 秒卻各收一分鐘。
     **ruleset 的 required check 也跟著換成 `pr-checks`**，`make check-ci` 在守。
-  - `security` 在 draft 期間不跑：它查的外部資料庫一天最多變一次，
-    而 Ready 與每週一的 cron 已經是兩個落點。
-  - tag build 完全不受影響，照跑全套 —— 那份 image 就是要上線的東西。
-- dependabot 的三個基底映像 entry 從 monthly 改回 weekly。
-  當初改 monthly 的理由是計費，而那個理由已經被上面那條與「repo 轉 public」拿掉了。
-  下游是 private 而且分鐘數吃緊的話，改回 monthly 是一行的事，見
-  [`docs/downstream.md`](docs/downstream.md#actions-分鐘數與-dependabot)。
-
-- CI 依 PR 階段分配工作量，把每月的 Actions 分鐘數從約 1550 壓到約 870
-  （免費私有 repo 的額度是 2000）。紅綠燈出現的時機變了：
-  - `deploy-config` 與 `e2e` 在 draft 期間不跑，按下 Ready for review 時補跑。
-    draft 期間要看這兩盞燈就自己跑 `make check-compose` 與 `make e2e`。
-  - 按下 Ready 時其餘 job 照樣重跑。**試過不重跑，會讓 PR 頁面說謊** ——
-    被跳過的 job 仍然會產生一筆 `skipped` 的 check run 蓋掉 draft 期間那筆 `success`，
-    而 `skipped` 對必要檢查算通過。實測結果寫在 `ci.yml` 的 `api` job 註解上。
   - 每週一的排程只跑 `security` —— 那本來就是那條 cron 唯一的存在理由。
   - 開 draft PR 的空 commit 建議帶 `[skip ci]`，見
     [`docs/development.md`](docs/development.md#落點要在動手之前存在)。
-- [`docs/downstream.md`](docs/downstream.md) 新增〈Actions 分鐘數與 dependabot〉：
-  免費方案的 2000 分鐘是**每個帳號**共用的，下游可以刪掉模板擁有的那四組 dependabot
-  entry（兩個 docker、compose、github-actions），靠同步帶更新；`uv` 與兩個 `npm`
-  不能全刪，因為下游會裝自己的相依。
-- dependabot 的三個 base image entry（兩個 Dockerfile、一組 compose）
-  從 weekly 改成 monthly；`uv` 與兩個 `npm` 維持 weekly。**代價**：OS 層的 CVE 修補最多
-  延後一個月，而 `make audit` 掃不到那一層，期間不會有任何紅燈。理由與改回去的條件寫在
-  [`.github/dependabot.yml`](.github/dependabot.yml) 的基底映像那一段。
+  - tag build 完全不受影響，照跑全套 —— 那份 image 就是要上線的東西。
 
 ## [0.0.1] - 2026-08-29
 

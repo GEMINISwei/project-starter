@@ -10,8 +10,8 @@
 - [`docs/design-system.md`](docs/design-system.md)：**樣式** —— token 分層、主題、導入外部 DS、CSS 檢查器
 - [`docs/extending.md`](docs/extending.md)：**教學** —— 新增頁面／模組／權限／WS／migration／Seed
 - [`docs/operations.md`](docs/operations.md)：**運行** —— 部署、帳號初始化、Session 撤銷、限流
+- [`docs/ci-cd.md`](docs/ci-cd.md)：**GitHub 那一側** —— CI 的 job、分支保護、安全掃描開關、移除 CD
 - [`contracts/README.md`](contracts/README.md)：前後端型別契約怎麼產生與消費
-- [`docs/downstream.md`](docs/downstream.md)：**開案後** —— 從這個模板長出新專案之後要做的一次性決定
 
 這個 repo 是 **GitHub template repository**：新專案用 "Use this template" 開出來，
 拿到的是一份**快照**，沒有共同歷史，也沒有持續同步的上游。所以**下游可以改任何地方**，
@@ -86,7 +86,9 @@
   它守 CI 內嵌的指令與 `scripts/{lint,typecheck,test,build}.sh` 一致，以及（ruleset 存在時）
   分支保護涵蓋每一個會在 PR 上跑的 job。**新增 job 卻沒加進 ruleset 是完全沒有症狀的**：
   job 照跑，只是不再擋 merge。只在 push 上跑的 job（`publish`、`pushed-via-pr`）
-  反過來**不能**列進去。
+  反過來**不能**列進去。改過 `main.json` 之後**要重新匯入 GitHub 才生效**，
+  而且要用 `PUT` 不是 `POST`（`POST` 會多出第二份同名 ruleset，兩份疊加而且沒有任何提示）——
+  指令見 [`docs/ci-cd.md`](docs/ci-cd.md#匯入-ruleset)。
 - **shell 訊息裡的變數一律寫成 `${VAR}`**，不要 `"$VAR，中文"`。macOS 內建的 bash 3.2 會把
   後面的多位元組字元吃進變數名，`set -u` 當場報 unbound variable —— 而中招的通常是錯誤路徑，
   結果是最需要那行訊息時看到一句亂碼。`make check-shell` 會擋。

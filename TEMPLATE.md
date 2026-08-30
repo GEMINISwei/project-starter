@@ -4,7 +4,7 @@
 `git rm TEMPLATE.md`——留著它只會讓後續開發的人以為自己還在模板裡。
 
 長期有效的規則不在這裡：開發規則見 [`AGENTS.md`](AGENTS.md)，
-開案之後的一次性決定見 [`docs/downstream.md`](docs/downstream.md)。
+CI/CD 與 GitHub 那一側的設定見 [`docs/ci-cd.md`](docs/ci-cd.md)（那份要留著）。
 
 ## 0. 這個模板是快照，不是上游
 
@@ -37,8 +37,15 @@ make setup     # 驗證 Node 版本，安裝主機端 lint／測試／型別產�
 make dev       # 啟動開發環境（首次會建置 image，約 2–5 分鐘）
 ```
 
-**開案先清空 [`CHANGELOG.md`](CHANGELOG.md)**（那是模板的歷史，留在模板 repo 上就好），
-從你自己的第一版重新寫；走完這份清單之後再刪掉 `TEMPLATE.md` 本身。
+**開案先做這兩件**（清單裡漏掉不會有任何錯誤，所以先寫在這裡）：
+
+- **清空 [`CHANGELOG.md`](CHANGELOG.md) 的條目**，從你自己的第一版重新寫。
+  那是模板的歷史，留在模板 repo 上就好。
+- **`apps/api/app/config.py` 的 `APP_VERSION` 是你的產品版號了**，重新從你要的起點開始。
+  `make check-version` 會比對它與 `CHANGELOG.md` 最上面那個版號標題（一個版號標題都
+  沒有時它會略過），所以清空之後不會紅。
+
+走完這份清單之後再刪掉 `TEMPLATE.md` 本身。
 
 打開 `http://localhost:<SYSTEM_PORT>`（預設 http://localhost:3000）。系統還沒有超級管理者時
 會自動落在 `/signup`，填入 `make init` 印出的 `REGISTER_KEY` 建立第一個帳號 ——
@@ -116,8 +123,9 @@ cd apps/web && npm run check:tokens
 | code scanning（CodeQL） | 免費 | 同上 |
 | environment 的 required reviewers | 免費 | 設不了 |
 
-**private 不是不能用**，但上面每一列都要各自處理，散落在
-[`docs/downstream.md`](docs/downstream.md) 的幾節裡。這裡只講 public 的路。
+**private 不是不能用**，但上面每一列都要各自處理，作法散在
+[`docs/ci-cd.md`](docs/ci-cd.md) 的各節裡（每一節都寫了 private 的差別）。
+這裡只講 public 的路。
 
 **先確認歷史裡沒有夾帶過金鑰再轉 public** —— 公開之後就收不回來了，
 刪 commit 也沒有用（`.env*` 出廠就在 `.gitignore` 裡，正常流程不會有問題）。
@@ -131,7 +139,7 @@ gh api --method PATCH repos/{owner}/{repo} -f 'security_and_analysis[secret_scan
 
 第三件在網頁上：Settings 的安全那一頁開 **Code scanning**，選 **default setup**、
 query suite 選 **Default**。四個開關的意思與為什麼不要 advanced setup，見
-[`docs/development.md`](docs/development.md#repo-設定裡的安全掃描)。
+[`docs/ci-cd.md`](docs/ci-cd.md#repo-設定裡的安全掃描)。
 
 第四件是 **Private vulnerability reporting**（同一頁）。
 [`.github/SECURITY.md`](.github/SECURITY.md) 要人走 Security 分頁的
@@ -145,11 +153,11 @@ gh api --method PUT repos/{owner}/{repo}/private-vulnerability-reporting
 
 那行 `POST` 是**首次匯入**用的（開案時正是首次）。日後改過 `main.json` 要改用 `PUT`
 更新既有那一份，否則會多出第二個同名 ruleset —— 指令與症狀見
-[`docs/development.md`](docs/development.md#匯入-ruleset)。
+[`docs/ci-cd.md`](docs/ci-cd.md#匯入-ruleset)。
 
 **ruleset 那一行不是選配的。** `ci.yml` 讓 merge 到 `main` 那一輪不重跑測試，靠的就是它的
 strict 政策（分支必須是最新才能 merge）—— 沒匯入的話那個前提不成立，而且**不會有任何紅燈**。
-細節見 [`docs/development.md`](docs/development.md#分支保護)。
+細節見 [`docs/ci-cd.md`](docs/ci-cd.md#分支保護)。
 
 `make setup` 掛上的 `.githooks/pre-push` 與 CI 的 `pushed-via-pr` job 仍然留著，
 它們是第二、三層（本機擋、事後吵），不依賴任何 GitHub 方案。
@@ -166,9 +174,9 @@ CI 那幾個 job 直接用就好，**要做決定的是 CD 這一段**：
 
 | 選擇 | 要做什麼 |
 |---|---|
-| **只用 CI**（部署走 `make prod`，出廠預設的部署方式） | 刪掉 `ci.yml` 的 `publish` job 與 `deploy.yml`，逐項清單見下 |
-| **CI + CD 都用**（部署走 `make deploy`） | 照 [`docs/operations.md`](docs/operations.md#registry-模式build-once-deploy-anywhere) 的一次性設定表建好 environment、secrets 與主機憑證 |
-| **都不用**（自己接別的 CI 平台） | 整個 `.github/` 刪掉；`make check` 與其餘 `check-*` 在本機仍然可用（`check-ci` 沒有 `ci.yml` 會自己跳過） |
+| **只用 CI**（部署走 `make prod`，出廠預設的部署方式） | 照 [`docs/ci-cd.md`](docs/ci-cd.md#移除-cd) 的逐項清單刪掉 `ci.yml` 的 `publish` job 與 `deploy.yml` |
+| **CI + CD 都用**（部署走 `make deploy`） | 照 [`docs/operations.md`](docs/operations.md#registry-模式build-once-deploy-anywhere) 的一次性設定表建好 environment、secrets 與主機憑證，並確認[部署主機的架構](docs/ci-cd.md#部署主機的架構) |
+| **都不用**（自己接別的 CI 平台） | 整個 `.github/` 刪掉，代價見 [`docs/ci-cd.md`](docs/ci-cd.md#整套都不用) |
 
 **這件事早點決定比較省事。** `publish` job 在每次 push 到 `main` 都會跑，而它不需要
 任何額外設定就會成功（用內建的 `GITHUB_TOKEN` 推 GHCR）。所以「先不管它」不會紅燈，
@@ -177,8 +185,8 @@ CI 那幾個 job 直接用就好，**要做決定的是 CD 這一段**：
 主機那一側不必做選擇：`.env` 的 `IMAGE_REGISTRY` 留空就是 `make prod` 就地建置，
 那是 `make init` 產生的預設值。**但它管不到 GitHub 那一側** —— 上面那個決定還是要做。
 
-要刪的話逐項清單在 [`docs/downstream.md`](docs/downstream.md#cicd)（那一節同時是日後
-反悔想加回來時的對照表）。
+`pr-checks` 的三個 step 也是這一步順便決定的（純人力團隊可能不需要其中兩個），
+見 [`docs/ci-cd.md`](docs/ci-cd.md#調整-pr-checks-的三個-step)。
 
 ## 6. 刪掉這份檔案，並修掉指著它的連結
 
@@ -186,7 +194,7 @@ CI 那幾個 job 直接用就好，**要做決定的是 CD 這一段**：
 git rm TEMPLATE.md
 ```
 
-**這一步不是刪完就結束。** 有五份文件用 markdown 連結指著這份檔案，刪掉之後
+**這一步不是刪完就結束。** 有三份文件、七條 markdown 連結指著這份檔案，刪掉之後
 `make check-docs`（在 CI 的 `deploy-config` job 裡）會逐條列出來變紅 ——
 症狀會出現在你的第一個 PR 上，而且指向你沒動過的檔案。逐份處理：
 
@@ -194,8 +202,7 @@ git rm TEMPLATE.md
 |---|---|
 | `README.md` | 第 4 步改寫時一併處理（4 處：抬頭、Quickstart、最短路徑那段、文件地圖那一列） |
 | [`AGENTS.md`](AGENTS.md) | 「為什麼不做成可同步的上游，見 TEMPLATE.md」整句刪掉 —— 那是模板的自我說明，對你的專案沒有意義 |
-| [`docs/design-system.md`](docs/design-system.md) | 2 處指向 §3「決定視覺」。視覺在第 3 步已經定了，改成敘述你自己的決定，或整句刪掉 |
-| [`docs/downstream.md`](docs/downstream.md) | 3 處。這份文件本身要留著（它講的是開案**之後**的決定），只把指回 `TEMPLATE.md` 的連結拆掉 |
+| [`docs/design-system.md`](docs/design-system.md) | 2 處指向 §3「決定視覺」：〈導入外部 Design System〉的「導入完成後有三處會變成不實敘述」，與最後那一節〈用這份模板開專案時〉整節。視覺在第 3 步已經定了，改成敘述你自己的決定，或整段刪掉 |
 
 還有三處是**純文字提及**（不是連結，所以 `check-docs` 不會紅，但一樣會過期）：
 [`docs/extending.md`](docs/extending.md) 與 [`docs/development.md`](docs/development.md)
