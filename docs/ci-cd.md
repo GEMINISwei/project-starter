@@ -112,6 +112,14 @@ tag build 不受這條影響，照跑全套 —— 那份 image 就是要上線�
 **三步全刪的話整個 job 拿掉，ruleset 也要跟著拿掉 `pr-checks` 這個 context**，
 不然 `make check-ci` 會紅。
 
+**補完 PR 描述之後不要按 re-run，要推一個 commit。** 這兩步讀的 `PR_TITLE`／`PR_BODY`
+在 CI 上來自 `github.event.pull_request.body`，而**re-run 重放的是原本那份事件 payload** ——
+描述是事件發生當下的那一版，你剛剛補的段落不在裡面。症狀很像檢查器壞了：本機
+`make check-test-edits` 綠的（它走 `gh pr view` 讀當下的描述），CI 重跑幾次都還是同一句
+「PR 描述沒有說明」。`pull_request` 的觸發清單裡也沒有 `edited`，所以光改描述不會重跑。
+推一個 commit 產生新的 `synchronize` 事件，payload 才會帶上新的描述。
+（`draft-gated-jobs` 改讀 `gh pr view` 就是為了避開同一個坑，見上面那個 job。）
+
 留著的話，[`../.github/PULL_REQUEST_TEMPLATE.md`](../.github/PULL_REQUEST_TEMPLATE.md)
 **可以自訂，但要保留「驗收條件」與「改動到既有測試」兩段的標題與填寫格式** ——
 `check-acceptance` 與 `check-test-edits` 讀的就是那兩段，改了標題它們會安靜地

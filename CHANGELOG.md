@@ -37,6 +37,13 @@
   - `extending.md` 說 `shared/i18n/` 是「約 100 行」，實際 266 行 —— 那句話要撐的論證是
     「小到不值得引入框架」，數字錯了論證就變弱。
 
+- **`ci-cd.md` 補上「補完 PR 描述之後要推 commit，不要按 re-run」。** `pr-checks` 裡讀
+  PR 描述的兩步在 CI 上吃的是 `github.event.pull_request.body`，而 **re-run 重放的是原本
+  那份 payload** —— 補進描述的段落不會進去，重跑幾次都是同一句「PR 描述沒有說明」，
+  而本機跑同一支檢查器是綠的（`scripts/lib/pr.sh` 沒有 `PR_BODY` 時走 `gh pr view`，
+  讀的是當下）。`pull_request` 的觸發清單裡也沒有 `edited`，所以改描述本身也不會重跑。
+  這是 `draft-gated-jobs` 那條「payload 記的是事件發生當時」的同一個坑，在另一個位置。
+
 - **修掉 `TEMPLATE.md` 的四處內部不一致。** 都是在它自己被改了好幾輪之後留下的，
   `check-docs` 守的是路徑與錨點，這四種一個都守不到：
   - §5a 標題還寫「三件事」，內文已經是四件（`Private vulnerability reporting`
