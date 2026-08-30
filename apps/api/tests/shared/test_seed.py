@@ -67,7 +67,7 @@ async def test_upserts_by_match_key(seed_row):
 
 
 async def test_upsert_updates_existing_rows_without_duplicating(seed_row):
-    """模板更新新增欄位時，既有環境要補得到 —— 這是 match key 那條分岔存在的理由。"""
+    """日後新增欄位時，已經跑起來的環境要補得到 —— 這是 match key 那條分岔存在的理由。"""
     model, rows = seed_row
     model.seed_match_key = "code"
     model.seed_data = [{"code": "a", "label": "舊的"}]

@@ -387,8 +387,8 @@ migration 在部署時自動執行，不需要手動介入；執行時機與 `ma
 | `prepare_seed_item()` | 選用的 async classmethod，寫入前轉換資料（例如雜湊密碼） |
 
 `RoleTable` 設了 `seed_match_key = "code"`，所以超級管理者角色**每次啟動都會 upsert** ——
-這是刻意的：模板更新時新增的權限要能補到既有環境。若你的 seed 不希望被覆寫，就不要設
-`seed_match_key`。
+這是刻意的：**日後新增的權限要能補到已經跑起來的環境**（既有的角色列是舊的，
+只靠 `create_all` 補不到它）。若你的 seed 不希望被覆寫，就不要設 `seed_match_key`。
 
 執行時機：服務啟動的 lifespan，以及 `python scripts/db.py seed`。兩者都是對
 `app/registry.py` 的 `TABLE_MODELS` 逐一呼叫；該清單由每個模組 manifest 的 `tables`
@@ -405,7 +405,7 @@ migration 在部署時自動執行，不需要手動介入；執行時機與 `ma
 ## 語系（i18n）
 
 模板支援中文與英文，**前後端同一個語系**。沒有引入 i18n 框架，機制自己寫在
-`apps/web/shared/i18n/`（約 100 行）—— 兩種語言不需要複數規則與日期格式化，
+`apps/web/shared/i18n/`（六個檔、不到 300 行）—— 兩種語言不需要複數規則與日期格式化，
 引入框架付出的相依與慣例衝突大於收益。要做第三種語言以外的需求時再重新評估。
 
 ### 語系怎麼決定
