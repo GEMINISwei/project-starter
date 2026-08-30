@@ -350,6 +350,47 @@ jobs:
           cache-from: type=gha,scope=web-check
           cache-to: type=gha,scope=web-check,mode=max
 
+      - name: 確認 web image 沒有把金鑰烤進去
+        # 守的不變條件：image 裡的 encryptionKey 必須是 Dockerfile 那個**公開常數**。
+        # 不是的話代表有人又把真金鑰接回 build 期（改 Dockerfile、加 build secret、
+        # 或設了 NEXT_SERVER_ACTIONS_ENCRYPTION_KEY 環境變數讓 next build 讀到），
+        # 而那個失敗**完全沒有症狀** —— image 建得起來、服務跑得動，只是秘密跟著 image 走。
+        #
+        # **為什麼不用通用的 secret 掃描器**：實測過 trivy 的 secret scanner，
+        # 對真的含金鑰的舊 image 掃出 0 筆，對只含那份 manifest 的對照組也是 0 筆 ——
+        # 它的規則庫不認「JSON 欄位裡的一串 base64」。加一個守不到的檢查比沒有更糟，
+        # 所以這裡改成針對性的斷言：我們知道那個值該是什麼，就直接比對。
+        #
+        # 常數從 Dockerfile 讀，不在這裡抄第二份（比照上面 postgres image 從 compose 讀）。
+        run: |
+          expected="$(sed -n 's/^ARG NEXT_ACTIONS_ID_SALT="\(.*\)"$/\1/p' apps/web/Dockerfile)"
+          # 抓不到就停。空字串會讓底下的比對變成「跟空字串比」，而那會在真的有金鑰時放行。
+          [ -n "${expected}" ] || {
+            echo "::error::在 apps/web/Dockerfile 找不到 ARG NEXT_ACTIONS_ID_SALT=\"...\"。"
+            echo "::error::這個檢查靠它當基準，改了那一行就要一起改這裡的 sed。"
+            exit 1
+          }
+
+          actual="$(docker run --rm --entrypoint node web-image-check -e '
+            const fs = require("fs")
+            const p = "/app/.next/server/server-reference-manifest.json"
+            if (!fs.existsSync(p)) process.exit(3)
+            process.stdout.write(String(JSON.parse(fs.readFileSync(p, "utf8")).encryptionKey ?? ""))
+          ')" || {
+            echo "::error::讀不到 image 裡的 server-reference-manifest.json。"
+            echo "::error::Next 換了產物路徑的話這個檢查會靜靜失效，所以這裡當成失敗處理。"
+            exit 1
+          }
+
+          # **不要把 actual 印出來** —— 不一致時它就是那個不該外流的值。
+          if [ "${actual}" != "${expected}" ]; then
+            echo "::error::web image 裡的 encryptionKey 不是 Dockerfile 的公開常數。"
+            echo "::error::代表有東西把真金鑰接回 build 期了，那會讓秘密跟著 image 散出去。"
+            echo "::error::理由與正確作法見 apps/web/Dockerfile 的長註解。（值刻意不印出來。）"
+            exit 1
+          fi
+          echo "OK: image 裡只有公開的 id salt"
+
   # 三件 PR-only 的紀律檢查，合在同一個 job 裡。
   #
   # **為什麼合併**：三個各自只跑 4～6 秒，而 GitHub 是**逐 job 進位到整分鐘**計費的 ——

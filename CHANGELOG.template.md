@@ -47,6 +47,11 @@
   主機 `.env` 不用動（`make init` 本來就會產生這個值），但 compose 現在用 `${VAR:?}` 要求它
   存在 —— 手寫過 `.env` 的話先確認那一行還在。
 
+  CI 的 `deploy-config` 多一步「確認 web image 沒有把金鑰烤進去」，斷言 image 裡的
+  `encryptionKey` 就是 Dockerfile 那個公開常數。**不用通用的 secret 掃描器是有實測依據的**：
+  trivy 的 secret scanner 對真的含金鑰的舊 image 掃出 0 筆，對只含那份 manifest 的對照組
+  也是 0 筆 —— 它不認「JSON 欄位裡的一串 base64」，加了會得到一個守不到的檢查。
+
 - **[同步:要動手]** 模板的預設立場改成「repo 是 public」。免費方案上 public 與 private
   拿到的東西差很多（Actions 分鐘數、ruleset、secret scanning、CodeQL、environment 的
   required reviewers 五項），原本散在各處的「這是付費功能所以不預設」全部重寫。
