@@ -60,8 +60,22 @@ permissions:
 # 同一個 PR 連續推送時，取消還在跑的舊 job。
 # **tag build 不取消**：那條路徑會推 image 並觸發部署，中途被砍會留下
 # 「有些 tag 推上去了、有些沒有」的半套狀態，而 registry 沒有交易可言。
+#
+# **`github.event.action` 在 group 裡不是贅字，拿掉會製造一個沒有紅燈的洞。**
+# 少了它，`synchronize`（push）與 `ready_for_review`（按下 Ready）會落在同一個群組 ——
+# 而這兩件事**經常在同一秒發生**（腳本化的流程就是 `git push` 接著 `gh pr ready`，
+# AGENTS.md 規定的 draft PR 流程正是如此）。撞在一起時兩個 run 的 SHA 與建立時間完全相同，
+# 互砍只活一個；活下來的如果是 push 那個（它啟動時 PR 還是 draft），
+# deploy-config／e2e／security 三個就全部 skipped —— **而這個 SHA 之後不會再有任何事件，
+# `on:` 那裡花了一整段解釋的補跑機制就此失效**。
+# 而 skipped 對 required status check 算通過，所以 PR 頁面是綠的、mergeStateStatus 是
+# CLEAN，看不出那三個從來沒跑過。（實際發生過：PR #14 的 run 33298650127 與 33298650135。）
+#
+# **省分鐘數的效果沒有因此丟掉**：連續 push 的 action 都是 `synchronize`，
+# 仍然同組、仍然互砍。多付的只有「push 與 ready 撞在一起」那一次的一輪便宜 job。
+# push 與 schedule 事件沒有 action，group 尾巴是空字串，行為與原本相同。
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event.action }}
   cancel-in-progress: ${{ github.ref_type != 'tag' }}
 
 jobs:

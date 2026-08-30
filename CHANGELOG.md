@@ -13,6 +13,18 @@
 
 ### 變更
 
+- **修掉 concurrency 讓 `ready_for_review` 的補跑機制失效的洞。** `push` 與「按下
+  Ready for review」幾乎同時發生時，兩個事件各開一個 run（SHA 與建立時間完全相同），
+  而它們原本落在同一個 concurrency 群組裡，互砍只活一個。活下來的如果是 push 那個
+  （啟動時 PR 還是 draft），`deploy-config`／`e2e`／`security` 就全部 skipped ——
+  **而這個 SHA 之後不會再有任何事件，補跑機制就此消失**。skipped 對 required status
+  check 算通過，所以 PR 頁面是綠的、看不出那三個從來沒跑過。
+  做法是 `concurrency.group` 加上 `github.event.action`。**省分鐘數的效果沒有丟**：
+  連續 push 的 action 都是 `synchronize`，仍然同組互砍。
+  人手動操作幾乎不會踩到（推完再切到瀏覽器按 ready，中間隔了幾秒到幾分鐘），
+  但 agent 幾乎必然踩到 —— `AGENTS.md` 的流程就是「draft PR → 實作 → 取消 draft」，
+  而腳本會把 `git push` 與 `gh pr ready` 連著跑。實際發生在 PR #14 上。
+
 - **`ci.yml` 補上 `workflow_dispatch`。** 原本想「對現在的 `main` 重跑一次完整 CI」
   沒有入口 —— 只能 re-run 一個舊 run，而那跑的是舊 SHA，答不了那個問題
   （merge 那一輪刻意不重跑測試）。**六個測試 job 的 `if` 也一起放行**：它們原本只認
