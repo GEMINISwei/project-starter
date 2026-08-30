@@ -159,8 +159,11 @@
   client 端 `usePublicConfig()`）。真的移不掉的 build 期值只有一個
   （`UPLOAD_SIZE_LIMIT`），它有開機自檢在守，見 `apps/web/instrumentation.ts`。
 - **`apps/web/proxy.ts` 不能搬**。那是 Next 的根目錄慣例檔（Next 16 把 `middleware.ts`
-  改名成它），只認 `<root>/proxy.ts` 或 `<root>/src/proxy.ts`。放錯位置不會報錯，
-  只是路由保護那一層安靜地不存在。確認方式：`npm run build` 的輸出要有 `ƒ Proxy (Middleware)`。
+  改名成它），只認 `<root>/proxy.ts` 或 `<root>/src/proxy.ts`。放錯位置**編譯不會報錯**，
+  只是路由保護那一層安靜地不存在 —— `tests/proxy.test.ts` 也照樣綠，它測的是那個函式的
+  邏輯，不是「Next 有沒有載到這個檔」。**唯一會紅的是 e2e**：`e2e/tests/proxy.spec.ts`
+  就是為這條規則寫的斷言版。手動確認的話看 `npm run build` 的輸出有沒有
+  `ƒ Proxy (Middleware)`。
 - **compose 旗標不要自己組**。`--project-directory` 與 `--env-file` 的基準不同，組錯時
   docker **不會報錯**（bind mount 來源目錄會被默默建立）。唯一一份正確組合與完整理由在
   `scripts/lib/compose.sh` 的長註解，`make check-compose` 守它。

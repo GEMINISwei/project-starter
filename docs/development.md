@@ -13,9 +13,10 @@ CI 有哪些 job 與 GitHub 那一側的設定見 [`ci-cd.md`](ci-cd.md)。
 - `uv` 與 Node.js/npm（用於在主機執行檢查與測試）。Node 的 major 線在
   [`../apps/web/.nvmrc`](../apps/web/.nvmrc)（nvm 與 CI 的 `setup-node` 讀它），
   **下限**在 `apps/web/package.json` 的 `engines`；本機可執行
-  `nvm use "$(cat apps/web/.nvmrc)"`，`make setup` 兩條線都會擋。
-  **`apps/web/Dockerfile` 讀不到 `.nvmrc`**，它的 `ARG NODE_VERSION` 是唯一要手動跟上的
-  第三處 —— 沒有任何檢查器在比對這三者
+  `nvm use "$(cat apps/web/.nvmrc)"`，`make setup` 會拿主機的 Node 去比對這兩條線。
+  **但 `apps/web/Dockerfile` 讀不到 `.nvmrc`**，它的 `ARG NODE_VERSION` 是要手動跟上的
+  第三處 —— **沒有任何東西在比對它與 `.nvmrc`**（`setup.sh` 管的是主機那一側，
+  容器裡用哪個版本它看不到）
 - `shellcheck`（只有 `make check-shell` 需要，macOS：`brew install shellcheck`）
 
 ### 產生設定檔

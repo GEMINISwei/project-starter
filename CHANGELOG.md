@@ -13,6 +13,21 @@
 
 ### 變更
 
+- **把文件裡每一條「守衛宣稱」逐條驗過一輪，修掉兩處。** 這一輪換的角度是：
+  所有「**沒有檢查器在守**」與「**由 X 守著**」的句子都抽出來，一條一條回去問程式碼 ——
+  前者會在有人加了檢查器時悄悄過期，後者可能一開始就不成立，而兩種 `check-docs` 都看不到。
+  - **`AGENTS.md` 的「`proxy.ts` 不能搬」漏了它真正的自動守衛。** 原本只給了手動的
+    `npm run build` 確認方式，但 `e2e/tests/proxy.spec.ts` 的檔頭直接寫著
+    「那正是 AGENTS.md 明文警告的失敗模式……這條 e2e 是那句警告的斷言版」——
+    **e2e 指向 AGENTS.md，AGENTS.md 卻沒指回來**。補上，並寫明
+    `tests/proxy.test.ts` 為什麼擋不到（它測函式邏輯，不測 Next 有沒有載到那個檔）。
+  - **`development.md` 的 Node 版本那段自相矛盾**：前半句「`make setup` 兩條線都會擋」、
+    後半句「沒有任何檢查器在比對這三者」。實際是 `setup.sh` 比對主機 Node 與
+    `.nvmrc`／`engines`，而**沒有任何東西比對 `.nvmrc` 與 `Dockerfile` 的
+    `ARG NODE_VERSION`** —— 沒人守的是第三處，不是三者。
+  - 其餘二十條守衛宣稱全部驗過成立，其中「`check:architecture` 守模組必備三件」
+    是**實測**的（把 `modules/roles/i18n.ts` 暫時移走，它確實報「缺 i18n.ts」）。
+
 - **`operations.md` 說 nginx 有「六個 proxy location」，實際是五個。** prod 兩個
   （`/api/ws`、`/`）、dev 三個（多一個 `/_next/hmr`）。這條特別值得記：
   **`make check-nginx` 每次跑完都把數字印在結論裡**（「都覆寫了（5 個）」），
