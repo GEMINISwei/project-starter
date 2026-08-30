@@ -80,7 +80,7 @@ jobs:
     #                  沒有匯入 ruleset 的話這個推論不成立（main 可能在 PR 開著的時候
     #                  前進），那時候請把這裡改回 `github.event_name != 'schedule'`。
     #                  匯入與否 repo 裡看不到，`make check-ci` 也守不到，見
-    #                  docs/development.md 的〈分支保護〉。
+    #                  docs/ci-cd.md 的〈分支保護〉。
     #
     #   draft          **不跳過**，理由見下一段。
     #
@@ -594,7 +594,7 @@ jobs:
   # 事後偵測「沒經過 PR 就進了 main」。
   #
   # 這一段本來該由 GitHub 的分支保護處理，而 ruleset 匯入之後它確實是（見
-  # docs/development.md 的〈分支保護〉）。這個 job 是**第三層**，存在的理由是
+  # docs/ci-cd.md 的〈分支保護〉）。這個 job 是**第三層**，存在的理由是
   # ruleset 不一定在：對 private repo 它要付費方案（免費方案連 API 都回 403），
   # 而且「JSON 有沒有真的匯入 GitHub」repo 裡看不到，沒有任何檢查器守得到。
   # 三層是：ruleset 在伺服器端擋，.githooks/pre-push 在本機擋，這個 job 在事後吵。
