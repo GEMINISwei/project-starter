@@ -31,14 +31,15 @@ make init
 （不必再開 `.env` 查看）。已存在的 `.env` 或 Git 都會跳過。
 
 **它不會問任何遠端網址，也不需要網路** —— 只在本機試跑的專案不必綁儲存庫。
-要綁的時候用 `make remote`（互動式輸入名稱與網址，預設名稱 `origin`）：
-它會先確認真的連得上才綁定，再依遠端目前的狀態決定下一步 —— **遠端是空的、或本機領先
-可快轉時直接問你要不要推，答 y 就推**，不必自己再下一次 `git push`；推不上去的狀態
-（落後、分岔、沒有共同祖先）則只給文字說明，不問一個註定失敗的問題。
-同一支指令跑第二次就能再綁一個。
 
-名稱是 `template` 時**不提供 push**：那是拉更新用的上游，而下游與它歷史相通，
-推上去會快轉成功並把專案自己的 commit 寫進模板 —— 而且不會有任何錯誤訊息。
+正常開案不會走到這裡：用 "Use this template" 開出 repo 再 `git clone`，`origin` 已經
+綁好了，`make init` 也會看到 `.git` 而跳過初始化。只有「下載 ZIP」或「`rm -rf .git`
+重開歷史」才會需要自己綁：
+
+```bash
+git remote add origin <你的 repo 網址>
+git push -u origin main
+```
 
 需要輸入的欄位：
 
@@ -145,7 +146,7 @@ make dev
 
 | 類別 | 指令 |
 |---|---|
-| 初次設定 | `make init`（建立 `.env`）、`make remote`（綁定 git remote，選用）、`make setup`（主機端相依：`uv sync --frozen` + `npm ci`） |
+| 初次設定 | `make init`（建立 `.env`）、`make setup`（主機端相依：`uv sync --frozen` + `npm ci`） |
 | 環境 | `make dev`、`make prod`、`make deploy`、`make down`、`make logs` |
 | 資料庫 | `make psql`、`make migrate`、`make reset`、`make backup`、`make restore` |
 | 帳號 | `make create-superuser` |

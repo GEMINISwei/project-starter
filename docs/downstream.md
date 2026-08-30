@@ -9,7 +9,9 @@ CI/CD 留哪些、安全掃描開哪些、Actions 分鐘數怎麼算。開案本
 > 與組裝層，改任何地方都不需要顧慮同步。代價是模板日後的修正不會自動流過來，
 > 那個取捨寫在 [`../TEMPLATE.md`](../TEMPLATE.md)。
 
-**開案時先做這兩件**（`TEMPLATE.md` 的清單裡也有，這裡重述是因為漏掉不會有任何錯誤）：
+## 開案時先做這兩件
+
+（`TEMPLATE.md` 的清單裡也有，這裡重述是因為漏掉不會有任何錯誤。）
 
 - 清空 [`../CHANGELOG.md`](../CHANGELOG.md) 的條目，從你自己的第一版開始寫
   （模板的歷史留在模板 repo 上）。
@@ -38,7 +40,7 @@ CI/CD 留哪些、安全掃描開哪些、Actions 分鐘數怎麼算。開案本
 分支保護的三個層次與各自擋得住什麼，見
 [`development.md`](development.md#分支保護) —— 那一節是這個主題的 owner。
 
-### repo 設定裡的安全掃描：模板的設定不會跟著複製過來
+## repo 設定裡的安全掃描：模板的設定不會跟著複製過來
 
 secret scanning、push protection、Dependabot security updates 與 code scanning（CodeQL）
 **都是 GitHub 那一側的 repo 設定，版控裡沒有它們**，所以 clone 出來的專案一個都不會繼承 ——
@@ -53,7 +55,8 @@ secret scanning、push protection、Dependabot security updates 與 code scannin
 | Code scanning（CodeQL） | 免費 | 同上 |
 | Dependabot security updates | 免費 | 免費 |
 
-也就是說 private 下游能白拿的只有最後一項（而它剛好也是最省事的一項，見上一節的折衷）。
+也就是說 private 下游能白拿的只有最後一項（而它剛好也是最省事的一項，
+見底下〈[Actions 分鐘數與 dependabot](#actions-分鐘數與-dependabot)〉的折衷）。
 **不要因為模板開著就照抄** —— 沒有 GHAS 的 private repo 開 code scanning 的下場是
 workflow 照跑、吃完分鐘數，然後在上傳結果那一步 403。
 
@@ -69,11 +72,12 @@ workflow 照跑、吃完分鐘數，然後在上傳結果那一步 403。
 `publish` job 推的是 `ghcr.io/<你的 owner>/<你的 repo>/api` 與 `/web`，
 沿用 `github.repository`，所以 fork／改名之後不必改設定。
 
-### Actions 分鐘數與 dependabot
+## Actions 分鐘數與 dependabot
 
 **這一節只給 private 專案。repo 是 public 的話 Actions 分鐘數無限，整節跳過** ——
 而且 public 還順帶讓 [`main.json`](../.github/rulesets/main.json) 匯得進去（見上面那張表）
-與四個安全掃描開關免費（見下一節）。模板預設走的就是 public 這條路，
+與四個安全掃描開關免費（見上面〈[repo 設定裡的安全掃描](#repo-設定裡的安全掃描模板的設定不會跟著複製過來)〉）。
+模板預設走的就是 public 這條路，
 開案步驟見 [`../TEMPLATE.md`](../TEMPLATE.md)。
 
 還是 private 的話，先知道成本怎麼算：**免費方案的 2000 分鐘／月是「每個帳號」的，
@@ -116,7 +120,9 @@ OS 層的 CVE 最多會延後一個月修補，期間完全沒有症狀。理由
 比較划算的順序是先回頭問「這個 repo 可以 public 嗎」，那一步同時解決分鐘數、分支保護與
 安全掃描三件事。真的要自架，至少用容器化或 ephemeral runner，不要裸機常駐。
 
-### 「不啟用」與「移除」是兩件事
+## 移除 CD
+
+### 先分清楚「不啟用」與「移除」
 
 **不啟用**是主機那一側的事：`.env` 的 `IMAGE_REGISTRY` 留空就是 `make prod` 就地建置，
 那是 `make init` 產生的預設值，零動作。
@@ -126,7 +132,7 @@ OS 層的 CVE 最多會延後一個月修補，期間完全沒有症狀。理由
 只會一直往 GHCR 推沒有人用的 image（外加每次 merge 的那幾分鐘 Actions 時間）。
 不打算走 registry 的話照下面刪乾淨。
 
-### 移除 CD
+### 逐項清單
 
 | 位置 | 動作 |
 |---|---|
