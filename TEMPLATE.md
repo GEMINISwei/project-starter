@@ -203,16 +203,39 @@ git rm TEMPLATE.md
 | [`AGENTS.md`](AGENTS.md) | 「為什麼不做成可同步的上游，見 TEMPLATE.md」整句刪掉 —— 那是模板的自我說明，對你的專案沒有意義 |
 | [`docs/design-system.md`](docs/design-system.md) | 2 處指向 §3「決定視覺」：〈導入外部 Design System〉的「導入完成後有三處會變成不實敘述」，與最後那一節〈用這份模板開專案時〉整節。視覺在第 3 步已經定了，改成敘述你自己的決定，或整段刪掉 |
 
-還有三處是**純文字提及**（不是連結，所以 `check-docs` 不會紅，但一樣會過期）：
+**`check-docs` 只掃 `.md`，所以還有六處它不會紅。** 三處在文件裡（純文字提及，不是連結）：
 [`docs/extending.md`](docs/extending.md) 與 [`docs/development.md`](docs/development.md)
 各有一句「見 `TEMPLATE.md` 第 2 步」指向範例模組，
-[`docs/architecture.md`](docs/architecture.md) 的移除模組表格列著 `TEMPLATE.md`。
-刪掉範例模組時會一起處理到，這裡順手確認：
+[`docs/architecture.md`](docs/architecture.md) 的移除模組表格列著 `TEMPLATE.md` ——
+這三處刪掉範例模組時會一起處理到。
+
+另外三處在**檢查器掃不到的檔案**裡，要自己去改：
+
+| 檔案 | 那句話 |
+|---|---|
+| [`.githooks/pre-push`](.githooks/pre-push) | 「開案流程（TEMPLATE.md 第 1 步）一定會經過這裡」 |
+| [`scripts/check-ci.sh`](scripts/check-ci.sh) | 「見 TEMPLATE.md 第 5 步的第三個選項」 |
+| [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | 「開案有兩條路徑（見 TEMPLATE.md）」 |
+
+**[`scripts/check-docs.sh`](scripts/check-docs.sh) 的那兩行不要動** ——
+`[ -f TEMPLATE.md ] && DOCS+=(TEMPLATE.md)` 正是讓這一步能成立的機制：
+它讓這份檔案在的時候被掃、不在的時候安靜跳過。
+
+確認的指令要**排除兩種噪音**，否則會看到一堆不該動的東西：
 
 ```bash
-grep -rn "TEMPLATE.md" . --exclude-dir=.git
+grep -rn "TEMPLATE\.md" . --exclude-dir=.git --exclude=CHANGELOG.md | grep -v PULL_REQUEST_TEMPLATE
 make check-docs
 ```
+
+`PULL_REQUEST_TEMPLATE.md` 是**完全不同的檔案**（PR 描述的模板，四處引用，都要留著），
+不排除的話它會在結果裡佔四筆；`CHANGELOG.md` 提到十幾次，但你在第 1 步已經清空它了，
+而且 `check-docs` 刻意不掃已發布的條目。
+
+> 這一整節的內容是**實際跑過一次驗證出來的**：在拋棄式 worktree 裡 `git rm TEMPLATE.md`、
+> 照上表逐份修、再跑 `check-docs`／`check-shell`／`check-env`／`check-compose`／
+> `check-nginx`／`check-version`／`check-ci` 全綠。連結那七條與這裡列的六處，
+> 就是那次跑出來的完整清單。
 
 ---
 
