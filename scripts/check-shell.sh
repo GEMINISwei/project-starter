@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# 對 scripts/ 與 .githooks/ 底下的 shell 腳本做靜態檢查（shellcheck）。
+# 對 scripts/ 與 .githooks/ 底下的 shell 腳本做靜態檢查：shellcheck，外加它抓不到的變數展開那條。
 #
 # 為什麼需要這支：`make` 的指令實作全部是 shell（見 Makefile 的檔頭），而 shell 是這個 repo
 # 裡唯一沒有型別檢查、沒有單元測試的語言 —— `make check` 的 lint／typecheck／test／build
