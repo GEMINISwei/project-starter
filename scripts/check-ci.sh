@@ -29,7 +29,7 @@
 # 檔案在的時候才比對，因為那時它是一份會被匯入 GitHub 的東西，少列一個 job 等於那個 job
 # 不再擋 merge，而且沒有任何症狀。注意這支腳本只能確認 JSON 的內容對得上 ci.yml，
 # **不能**確認 JSON 真的被匯入 GitHub —— 那是 repo 設定，沒有檢查器守得到
-# （見 docs/development.md 的分支保護）。
+# （見 docs/ci-cd.md 的分支保護）。
 set -euo pipefail
 
 # shellcheck source=scripts/lib/common.sh
@@ -85,7 +85,7 @@ jobs="$(awk -v skip="$NOT_REQUIRED" '
 [ -n "$jobs" ] || { echo "在 $WORKFLOW 找不到任何 job，檢查器本身壞了" >&2; exit 1; }
 
 if [ ! -f "$RULESET" ]; then
-    echo "沒有 ${RULESET}，跳過分支保護那一半（它是選配的，見 docs/development.md）"
+    echo "沒有 ${RULESET}，跳過分支保護那一半（下游可以整套不用 .github/，見 docs/ci-cd.md）"
 else
     # ruleset 是我們自己寫的 JSON，用 grep 取 context 就夠 —— 為了這一件事要求裝 jq 不划算。
     contexts="$(grep -oE '"context"[[:space:]]*:[[:space:]]*"[^"]+"' "$RULESET" \
@@ -106,7 +106,7 @@ if [ "$failed" -ne 0 ]; then
     # **給 PUT 不是 POST。** 這段訊息印出來的時機必定是「ruleset 已經存在、而且剛被改過」，
     # 也就是唯一需要更新的情境 —— POST 是建立，會在 GitHub 上多出第二個同名 ruleset，
     # 兩個都 active、兩份規則疊加，而且沒有任何地方會提示你有兩份。
-    # 首次匯入的 POST 寫在 docs/development.md 的〈匯入 ruleset〉。
+    # 首次匯入的 POST 寫在 docs/ci-cd.md 的〈匯入 ruleset〉。
     echo "  id=\$(gh api repos/{owner}/{repo}/rulesets --jq '.[]|select(.name==\"main\")|.id')" >&2
     echo "  gh api --method PUT repos/{owner}/{repo}/rulesets/\"\${id}\" --input $RULESET" >&2
     exit 1
