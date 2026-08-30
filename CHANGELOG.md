@@ -13,6 +13,17 @@
 
 ### 變更
 
+- **掃了一輪「腳本印給人看的訊息說的是不是真的」，修掉兩處 `make help` 的說明。**
+  這是先前每一輪都沒碰過的一類：`check-shell` 驗語法、`check-docs` 只掃 `.md`，
+  所以**執行期訊息的內容正確性完全沒人守**，而它出現的時機往往是使用者被擋住、
+  最需要正確資訊的那一刻（`pre-push` 那個點名不存在 job 的訊息就是這樣被發現的）。
+  - `check-shell` 的說明只寫「（shellcheck）」，但它守的是**兩件事** —— shellcheck，
+    加上 shellcheck 抓不到的變數展開那條，而 `AGENTS.md` 正是把 `make check-shell`
+    列為那條硬規則的守衛。照 help 去找會找不到。
+  - `check-docs` 的說明漏了目錄樹（它自己的成功訊息反而有列，兩則訊息對不起來）。
+  兩處都正是 [`docs/development.md`](docs/development.md#2-常用指令) 自己警告過的
+  「清單不會脫節，但那一行說明會」。
+
 - **結掉「dependabot 的取捨要不要做成開案流程的一步」這個待續問題：不加。**
   那個決定其實是「是不是 private」的下游 —— `dependabot.yml` 的成本只有 Actions 分鐘數
   一種，而 public 無限、private 才是整個帳號每月 2000 分鐘共用。`TEMPLATE.md` §5a
