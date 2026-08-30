@@ -138,11 +138,9 @@ CI 那幾個 job 直接用就好，**要做決定的是 CD 這一段**：
 | **CI + CD 都用**（部署走 `make deploy`） | 照 [`docs/operations.md`](docs/operations.md#registry-模式build-once-deploy-anywhere) 的一次性設定表建好 environment、secrets 與主機憑證 |
 | **都不用**（自己接別的 CI 平台） | 整個 `.github/` 刪掉；`make check` 與其餘 `check-*` 在本機仍然可用（`check-ci` 沒有 `ci.yml` 會自己跳過） |
 
-**這件事要在第一次 push 到 `main` 之前決定，不是「以後想部署再說」。**
-`publish` job 在每次 push 到 `main` 都會跑，而它第一步就檢查 repository secret
-`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` 在不在 —— 沒設就是紅燈，而那支 secret 只有
-registry 模式需要（理由見 `operations.md` 的「兩個 build 期值」）。
-所以「先不管它」的結果是每次推程式碼都收到一封失敗通知。
+**這件事早點決定比較省事。** `publish` job 在每次 push 到 `main` 都會跑，而它不需要
+任何額外設定就會成功（用內建的 `GITHUB_TOKEN` 推 GHCR）。所以「先不管它」不會紅燈，
+但會一直往 GHCR 推沒有人用的 image。
 
 主機那一側不必做選擇：`.env` 的 `IMAGE_REGISTRY` 留空就是 `make prod` 就地建置，
 那是 `make init` 產生的預設值。**但它管不到 GitHub 那一側** —— 上面那個決定還是要做。

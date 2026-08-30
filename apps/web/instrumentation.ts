@@ -1,6 +1,6 @@
 /**
- * Next 的啟動掛勾（每個伺服器行程啟動時跑一次）。唯一的用途：擋掉「image 裡烤的設定」與
- * 「主機 .env 給的設定」不一致。
+ * Next 的啟動掛勾（每個伺服器行程啟動時跑一次）。擋兩件「image 裡的值」與「執行期給的值」
+ * 對不起來的事，兩件都是**沒有症狀**的失敗，所以要在開機當下就吵。
  *
  * `UPLOAD_SIZE_LIMIT` 是整包設定裡唯一結構上移不到執行期的一個（機制見 next.config.ts 的
  * `env` 區塊）。registry 模式下 image 由 CI 建、主機只是 pull，所以「改了主機的 .env 卻沒重新
@@ -11,6 +11,8 @@
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return
+
+  requireActionsEncryptionKey()
 
   const built = process.env.BUILT_UPLOAD_SIZE_LIMIT
   const runtime = process.env.UPLOAD_SIZE_LIMIT
@@ -30,5 +32,30 @@ export async function register() {
   //
   // 退出碼 1 配上 compose 的 `restart: always` 是明顯的重啟迴圈，而 nginx 等不到 web healthy
   // 也不會起來 —— 部署停在這裡，不會有半套的服務上線。
+  process.exit(1)
+}
+
+/**
+ * Server Action 的加解密金鑰必須由執行期提供。
+ *
+ * image 裡 manifest 帶的那一把是**公開常數**（只當 action id 的 salt 用，理由見
+ * `apps/web/Dockerfile` 的長註解）。Next 取金鑰的順序是
+ * `process.env.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY || manifest.encryptionKey`，
+ * 所以忘了注入環境變數的下場不是壞掉，而是**用一把全世界都知道的金鑰加密閉包參數** ——
+ * 服務照常啟動，沒有任何錯誤訊息。那正是這個檢查存在的理由。
+ *
+ * **這裡跟底下的 UPLOAD_SIZE_LIMIT 檢查有一個刻意的差別**：那一個在執行期沒給值時
+ * 直接放行（不經 compose 直接 `next start` 是合法用法），這一個不行 —— 那是設定漂移，
+ * 這是安全性，失敗要往「關」的方向倒。
+ */
+function requireActionsEncryptionKey() {
+  if (process.env.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY) return
+
+  console.error(
+    "缺少 NEXT_SERVER_ACTIONS_ENCRYPTION_KEY。image 裡只有公開的 id salt，"
+    + " 沒有這個環境變數的話 Server Action 會用那把公開值加密閉包參數。"
+    + " 用 compose 起的話它由 web 服務的 environment 注入（值在主機的 .env，make init 會產生）。"
+  )
+  // 理由同底下：throw 會被 Next 接住並讓伺服器繼續監聽。
   process.exit(1)
 }
