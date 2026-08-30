@@ -1,11 +1,8 @@
 # 開發指南
 
 本機開發環境、常用指令、提交規範、測試，以及這個 repo 寫文件與註解的慣例。
-擴充功能的作法見 [`extending.md`](extending.md)，部署與維運見 [`operations.md`](operations.md)。
-
-> **模板本身與用它開出來的專案都適用這一份** —— 環境設置、指令、提交規範、測試與
-> 文件慣例，兩邊是同一套。剛開新專案的話另外看 [`downstream.md`](downstream.md)：
-> 開案後要做的一次性決定（CI/CD 留哪些、安全掃描、Actions 分鐘數）。
+擴充功能的作法見 [`extending.md`](extending.md)，部署與維運見 [`operations.md`](operations.md)，
+CI 有哪些 job 與 GitHub 那一側的設定見 [`ci-cd.md`](ci-cd.md)。
 
 ## 1. 開發環境設置
 
@@ -130,7 +127,7 @@ make dev
 | `port is already allocated` | `SYSTEM_PORT` 被別的東西佔了 | `lsof -i :3000` 找出來，或改 `.env` 的 `SYSTEM_PORT` 後 `make down && make dev` |
 | 後端一直重啟、log 是 `relation "users" does not exist` | migrate 沒跑成功（資料表還沒建），多半是它自己先失敗了 | `make logs` 看 `migrate` 容器說了什麼；結構真的亂了就 `make reset && make migrate`（**會清空資料**，只在 dev 用） |
 | `make setup` 抱怨 Node 版本 | 主機 Node 與 [`apps/web/.nvmrc`](../apps/web/.nvmrc) 不同 | `nvm use`（或裝上那個版本）。注意 `apps/web/Dockerfile` 的 `ARG NODE_VERSION` 是**第三處**版本號，沒有檢查器在守 |
-| 任何指令說 `.env` 缺這個缺那個 | 沒跑過 `make init`，或同步上游後多了新變數 | 跑 `make check-env`，它會指出四個同步點中哪一處對不上 |
+| 任何指令說 `.env` 缺這個缺那個 | 沒跑過 `make init`，或改動加了新變數卻沒補進 `.env` | 跑 `make check-env`，它會指出四個同步點中哪一處對不上 |
 | `make dev` 卡在建置很久 | 首次建置沒有 layer 快取 | 正常，2–5 分鐘。第二次起會快很多 |
 
 再往下的線索一律看 log：`make logs` 會依目前的運行模式選服務。
@@ -315,115 +312,15 @@ CI 的 `pr-checks` 會擋。
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)，版號採
 [語意化版本](https://semver.org/lang/zh-TW/)。
 
-### 分支保護
+### 分支保護與 CI 的紅綠燈
 
-上面那句「PR 送出前必須通過 `make check`」與整套 CI，**沒有任何東西讓它變成強制** ——
-沒有啟用分支保護時，PR 上的 job 全紅也 merge 得進去。
+「PR 送出前必須通過 `make check`」與整套 CI，**沒有任何東西讓它變成強制** ——
+沒有啟用分支保護時，PR 上的 job 全紅也 merge 得進去。補上這件事要在 GitHub 那一側
+匯入 ruleset，連同 repo 的四個安全掃描開關，都是版控裡看不到的設定 ——
+清單、指令與各自擋得住什麼見 [`ci-cd.md`](ci-cd.md#分支保護)。
 
-**所以 ruleset 要匯入，而且它不是選配的** —— 見下面〈[匯入 ruleset](#匯入-ruleset)〉，
-那一段還說明了為什麼 `ci.yml` 的正確性現在依賴它。ruleset 對 public repo 免費，
-對 private repo 要付費方案（免費方案連 API 都回 403），所以 private 專案要自己處理，
-見 [`downstream.md`](downstream.md)。
-
-ruleset 之外還有兩層，**兩層都不是伺服器端強制，這一點不要誤會**。
-它們的價值在「ruleset 還沒匯入」與「ruleset 涵蓋不到的路徑」：
-
-| 層 | 是什麼 | 擋得住嗎 |
-|---|---|---|
-| [`../.githooks/pre-push`](../.githooks/pre-push) | 擋直接 push 到 `main`、force push 與刪除 | 本機擋得住，但 `--no-verify` 繞得過，沒跑過 `make setup` 的機器上根本不會執行 |
-| CI 的 `pushed-via-pr` job | push 到 `main` 卻查不到對應的 PR 就紅燈 | **擋不住** —— 走到那裡東西已經在 `main` 上了。它留下的是紀錄 |
-
-第一層由 `make setup` 透過 `git config core.hooksPath .githooks` 掛上。
-`core.hooksPath` 是 per-clone 設定、不跟著 clone 走，所以每個人都要跑過一次 `make setup`。
-已經指向別處（例如你自己裝的 husky）時 `setup` 不會覆蓋，會印一行提醒。
-
-`pushed-via-pr` 有**一個豁免**：建立 `main` 的那一次 push 不跑（`!github.event.created`）。
-那時候 repo 才剛開，不可能有 PR —— 少了這個豁免，每個新專案的第一筆 CI 紀錄都是紅的，
-而一個被解釋成「正常的」紅燈，等於這個 job 不存在。它的洞（刪掉 `main` 再重推）
-寫在 job 自己的註解裡。
-
-三件事裡 **force push 是唯一嚴重的**：`main` 被改寫之後，每一個已經 clone 或 fork 的人
-下一次拉都會撞上分岔的歷史，而那要每個人各自處理。另外兩件的代價是「繞過 `pr-checks`」，
-可以補救。
-
-#### 匯入 ruleset
-
-[`../.github/rulesets/main.json`](../.github/rulesets/main.json) 是現成的，匯入一次就把上面兩層
-從「唯一的防線」變回它們原本的角色（第二、三層）：
-
-```bash
-gh api --method POST repos/{owner}/{repo}/rulesets --input .github/rulesets/main.json
-```
-
-**這一行只適用第一次。** `POST` 是「建立」，之後每次改過 `main.json` 都要改用 `PUT`
-更新既有那一份，先查出它的 id：
-
-```bash
-id=$(gh api repos/{owner}/{repo}/rulesets --jq '.[]|select(.name=="main")|.id')
-gh api --method PUT repos/{owner}/{repo}/rulesets/"${id}" --input .github/rulesets/main.json
-```
-
-**改過之後再 `POST` 一次的話，GitHub 會多出第二個同名的 `main` ruleset** ——
-名稱不要求唯一，兩個都是 active、兩個都生效。症狀很惡劣：required checks 看起來是對的
-（新的那份確實有你剛加的 job），但舊的那份還在，兩份規則疊加，之後想調鬆任何一條時
-你改到其中一個、另一個繼續擋著，**而且沒有任何地方會提示你有兩份**。
-數量確認：`gh api repos/{owner}/{repo}/rulesets --jq '.[].name'` 應該只有一個 `main`。
-
-它要求 `main` 只能經 PR 進入、禁止 force push 與刪除，並把**所有會在 PR 上跑的 job**
-列為必要檢查；完整名單以 ruleset 與 [`ci.yml`](../.github/workflows/ci.yml) 為準。
-`publish` 與 `pushed-via-pr` 不在裡面 —— 它們只在 push 上跑，PR 上不存在，列進去會讓每個 PR
-都卡在等一個永遠不會來的檢查。
-
-`make check-ci` 守著這份 JSON 與 [`../.github/workflows/ci.yml`](../.github/workflows/ci.yml)
-的 job 名單一致（檔案不存在就跳過，因為它是選配的）。**但它守不到「這份 JSON 有沒有真的匯入
-GitHub」** —— 那是 repo 設定，repo 裡沒有東西看得到，而且改了 JSON 要重新匯入才會生效。
-
-**這一步不做的話，`ci.yml` 有一個沒有症狀的洞。** merge 到 `main` 那一輪不重跑測試，
-前提就是 ruleset 的 `strict_required_status_checks_policy`（分支必須是最新才能 merge）——
-少了它，`main` 可能在 PR 開著的時候前進，於是進 `main` 的那棵 tree 沒有人驗過，
-而 CI 全綠。要嘛匯入 ruleset，要嘛照〈[4. 測試](#4-測試)〉說的把六個 job 的 `if` 改回去，
-不要兩個都不做。
-
-`required_approving_review_count` 是 `0`，因為模板要能被一個人開起來用。多人專案請自己調高。
-
-### repo 設定裡的安全掃描
-
-這一節與上面的分支保護是同一類東西：**設定在 GitHub 那一側，版控裡看不到，
-所以只能靠文件記得它們存在**。四個開關，都在 Settings 的安全那一頁
-（頁名被改過幾次，早期叫 Code security and analysis）：
-
-| 開關 | 掃什麼 | 建議 |
-|---|---|---|
-| Secret scanning | 已推上去的內容裡有沒有金鑰 | 開 |
-| └ Push protection | **推的當下就擋**，金鑰進不了歷史 | 開，而且這才是重點 |
-| Dependabot security updates | 有 advisory 命中 lockfile 時自動開 PR | 開 |
-| Code scanning（CodeQL） | **你自己寫的程式碼**的漏洞模式 | 開，用 default setup |
-
-**push protection 是這四個裡唯一防得住不可逆事故的。** 其餘三個都是事後通知，
-而金鑰一旦進了 git 歷史就永遠在裡面 —— 後面的 commit 刪掉它沒有用，repo 是 public 的話
-幾秒內就被爬走了。它是 Secret scanning 底下的子開關，所以要先開上面那個。
-
-介面名稱會動，所以指令比路徑可靠：
-
-```bash
-gh api --method PATCH repos/{owner}/{repo} -f 'security_and_analysis[secret_scanning][status]=enabled' -f 'security_and_analysis[secret_scanning_push_protection][status]=enabled'
-```
-
-**Code scanning 選 default setup，不要 advanced setup。** 後者會產生一份
-`.github/workflows/codeql.yml` 進版控，看起來比較符合這個 repo 的紀律，但對**模板**是負債：
-那份 workflow 會被每個下游繼承，而 code scanning 對 private repo 要 GitHub Advanced Security
-（付費）—— 沒有的話它會照跑、吃完分鐘數，然後在上傳結果那一步 403 失敗。
-等於送給每個 private 下游一個固定紅的 job。default setup 不進版控，什麼都不會被繼承。
-順帶一提，它的 CodeQL 版本由 GitHub 自己維護，不會變成 dependabot 要盯的第七組 manifest。
-
-query suite 選 **Default** 而不是 Extended／`security-and-quality`：後兩者多出來的查詢信心較低，
-第一次開就吃一堆 false positive，而那的下場是大家學會按 dismiss，等於這個掃描沒開。
-
-**CodeQL 的紅綠燈不要加進 [`../.github/rulesets/main.json`](../.github/rulesets/main.json)。**
-兩個理由：`make check-ci` 要求 ruleset 的必要檢查恰好等於 `ci.yml` 裡會在 PR 上跑的 job，
-而 CodeQL 的 job 不在那個檔案裡（default setup 根本沒有檔案），加了會紅；
-而且用一個會有 false positive 的掃描擋 merge，通常換來的是「大家學會按 dismiss」。
-它的定位是提示，不是閘門。
+**這裡只留一個對日常開發有影響的結論**：ruleset 沒有匯入時，下一節那幾分鐘就是
+整條流程裡唯一真的擋得住東西的關卡。
 
 ### 取消 draft 之前：自己讀一次 diff
 
@@ -458,79 +355,10 @@ cd apps/web && npm test                   # 前端
 後端部分整合測試（游標分頁、bootstrap 的併發與交易回滾）需要連得到 PostgreSQL；
 本機沒有時會自動 skip，也可以用 `uv run pytest -m "not integration"` 明確略過。CI 上會真的跑。
 
-CI（[設定來源](../.github/workflows/ci.yml)）在 push 到 `main`、push `v*` tag、
-PR to `main`，以及每週一的排程上執行（排程的理由見下面的[安全 advisory](#安全-advisory)）。
-
-**不是每個階段都跑全部**，因為每個階段需要的答案不同：
-
-| 階段 | 跑什麼 | 帳單 |
-| --- | --- | --- |
-| 開 draft PR（空 commit） | 什麼都不跑 —— commit message 帶 `[skip ci]`，見〈[先寫規格，再寫程式](#落點要在動手之前存在)〉 | 0 |
-| draft 期間的每次 push | `api`、`web`、`api-types-up-to-date`、`pr-checks`（驗收條件那一步跳過） | 約 6 分 |
-| 按下 Ready for review | 全部 —— `deploy-config`、`e2e`、`security` 是第一次跑，其餘是重跑 | 約 12 分 |
-| Ready 之後再 push | 全部 | 約 12 分 |
-| merge 到 `main` | **只有 `pushed-via-pr` 與 `publish`** | 1 分加 `publish` |
-| push `v*` tag | 全部，加上 `publish` | |
-| 每週一排程 | 只有 `security` | 1 分 |
-
-**merge 那一輪不重跑測試，前提是 ruleset 已經匯入。** 它的
-`strict_required_status_checks_policy` 要求「分支必須是最新的才能 merge」，所以 PR head
-的 tree 就等於 merge 之後的 tree —— 那一輪重跑的是同一棵樹，零新資訊，實測 12 分鐘。
-**沒有匯入 ruleset 的話這個推論不成立**（`main` 可能在 PR 開著的時候前進），那時候要把
-`ci.yml` 裡那六個 job 的 `if` 改回 `github.event_name != 'schedule'`。匯入與否 repo 裡
-看不到、`make check-ci` 也守不到，見〈[分支保護](#分支保護)〉。
-tag build 不受這條影響，照跑全套 —— 那份 image 就是要上線的東西。
-
-**切 job 的成本不是零。** GitHub 是**逐 job 進位到整分鐘**計費的：一輪完整 PR 實測是
-7 分鐘的工作、14 分鐘的帳單，差額全部是那些只跑幾秒的 job 各自被收滿一分鐘。所以
-`changelog`、`acceptance`、`test-edits` 三支（各 4～6 秒）合併成一個 `pr-checks`，
-三個 step 各自保留自己的逃生門。**要新增 job 之前先問「這盞燈值得一分鐘嗎」** ——
-值得的理由通常是「需要獨立的紅綠燈」或「可以跟別的 job 平行」，不是「這件事跟那件事不一樣」。
-
-**按下 Ready 時其餘 job 照樣重跑，即使 SHA 沒變。** 這看起來很浪費（同一份 tree
-必得同一個答案），但試過不行：被跳過的 job **仍然會產生一筆 `skipped` 的 check run**，
-而 GitHub 取同名 check 的最新那筆 —— draft 期間那筆 `success` 會被蓋掉，PR 頁面顯示
-`api — skipping`，跟「這個 PR 從頭到尾沒跑過 api」長得一模一樣。完整論證與實測結果在
-[`ci.yml`](../.github/workflows/ci.yml) 的 `api` job 註解上。
-
-`deploy-config`、`e2e` 與 `security` 在 draft 期間跳過則沒有這個問題：它們接著就會在
-`ready_for_review` 補跑，最新那筆是真的結果。`pr-checks` 裡的驗收條件那一步是
-**step 層**的跳過，跳過時整個 job 仍然是 `success`，所以連這個問題都不會碰到。
-
-- **api**（**只在 PR 與 tag 上跑**）：ruff → mypy → pytest（會起一個 PostgreSQL 跑整合測試）
-- **web**（同 `api`）：eslint → tsc → vitest → next build
-- **deploy-config**（**只在非 draft 的 PR 與 tag 上跑**）：`make check` 只涵蓋原始碼，
-  所以部署設定與文件壞掉時前面那些 job
-  會全部照樣綠燈。這個 job 補的就是那一塊 —— 那排 `check-*`、兩份 compose 設定、
-  兩個 production image、備份工具能不能在 image 裡跑，以及斷言 `api` 確實等 `migrate`
-  成功結束。**逐步清單看 `ci.yml` 本身**，不抄在這裡：手抄的清單一定會落後於 `ci.yml`，
-  理由同下面第 5 節的第 4 條
-- **pr-checks**（只在 PR 上跑）：三件 PR-only 的紀律檢查，三個 step：
-  - **CHANGELOG**：動到 `apps/`／`scripts/`／`infra/` 卻沒更新 `CHANGELOG.md` 就失敗。
-    漏寫沒有症狀 —— 程式碼照樣進去，只是「這個版本改了什麼」少一筆。
-    純重構可在 PR 標題加 `[skip changelog]` 放行
-  - **驗收條件**（**draft 期間跳過**）：`make check-acceptance` 確認每條驗收條件
-    都指向存在的測試；純文件等無行為變更的改動可在 PR 標題加 `[skip acceptance]`，
-    規則見〈常用指令〉。draft 期間要看那盞紅綠燈就自己跑 `make check-acceptance`
-  - **改到既有測試**：`make check-test-edits` 要求刪改既有測試時附上說明，
-    規則見〈改到既有測試要說明〉
-- **e2e**（**只在非 draft 的 PR 與 tag 上跑**）：`make e2e` 對隔離的 stack
-  驗證跨層接縫，
-  範圍與操作見〈e2e 的範圍〉
-- **security**（**非 draft 的 PR、tag 與排程上跑**；draft 不跑，因為它查的外部資料庫
-  一天最多變一次，而排程與 Ready 那兩個落點已經涵蓋）：`make audit`
-- **api-types-up-to-date**（同 `api`）：重新產生型別並比對 `git diff`，
-  擋下「改了後端 schema 卻忘記跑
-  `make gen-types`」
-- **publish**（只在 push 上跑，PR 不跑）：把兩個 image 推上 GHCR。
-  **兩條路徑的保證不同**：tag build 上 `needs` 那六個真的在同一個 commit 上跑過、全綠才發布；
-  push 到 `main` 時那六個都是 skipped，image 的證據來自「同一棵 tree 在 PR 上綠過」
-  （靠 ruleset 的 strict 政策撐住）。`if` 因此帶 `always()`，少了它 `main` 上會永遠不再推
-  image 而且顯示 skipped —— 理由寫在那個 job 的註解上。
-  它**不需要任何 repository secret**（用內建的 `GITHUB_TOKEN` 推 GHCR）。
-  不走 registry 那條路的專案可以把這個 job 刪掉 —— 留著不會紅，只是一直推沒有人用的 image。
-  設定見 [`operations.md`](operations.md#registry-模式build-once-deploy-anywhere)，
-  刪除清單見 [`downstream.md`](downstream.md#移除-cd)
+CI 有哪些 job、各自守什麼、哪個階段跑哪些，見
+[`ci-cd.md`](ci-cd.md#ci-有哪些-job各自守什麼) —— 那份是 GitHub 那一側的 owner。
+這裡只講一件跟寫測試直接有關的事：**`api` 與 `web` 只在 PR 與 tag 上跑**，
+merge 到 `main` 那一輪不重跑，所以「等 merge 之後再看紅綠燈」不是一個選項。
 
 ### 覆蓋率門檻
 
@@ -547,10 +375,13 @@ tag build 不受這條影響，照跑全套 —— 那份 image 就是要上線�
 「advisory ID + 不可達的理由 + 到期複查日」，而不是把它從掃描範圍拿掉。
 
 **掃描範圍刻意只到相依套件。** `make audit` 與 CI 的 security job 查的是 npm／uv 相依的
-已知漏洞，**沒有**機密掃描（gitleaks 之類），**也沒有**原始碼的靜態安全分析（CodeQL 之類）。
-所以「祕密不會進版控」目前唯一的防線是 [`../.gitignore`](../.gitignore) 的 `.env*` 規則
-（連同 `!.env.example` 那個例外）—— 放寬它之前請先想清楚，`make init` 產生的 `.env` 裡是
-真的金鑰。要加這兩類掃描的話它們是獨立的 job，不會動到現有流程。
+已知漏洞，**沒有**機密掃描，**也沒有**原始碼的靜態安全分析。那兩類在這個 repo 走 GitHub
+那一側的開關（secret scanning + push protection、CodeQL default setup），不佔 workflow
+也不進版控 —— 開法見 [`ci-cd.md`](ci-cd.md#repo-設定裡的安全掃描)。
+
+版控裡那一層仍然只有 [`../.gitignore`](../.gitignore) 的 `.env*` 規則
+（連同 `!.env.example` 那個例外），而它是**唯一在沒有網路、沒有 GitHub 的情況下也成立的
+那一層** —— 放寬它之前請先想清楚，`make init` 產生的 `.env` 裡是真的金鑰。
 
 **掃描有排程，不是只跟著 PR 跑。** advisory 資料庫是外部的，它會因為「今天有人公布了
 新漏洞」而變紅 —— 那跟有沒有人送 PR 無關。所以 `ci.yml` 除了 push 與 pull_request，

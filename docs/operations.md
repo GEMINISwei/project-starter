@@ -118,8 +118,8 @@ registry 模式把建置移到 CI：`.github/workflows/ci.yml` 的 `publish` job
 | repository variable | `UPLOAD_SIZE_LIMIT` | 選用，預設 `1mb` |
 
 `DEPLOY_*` 那幾個放 environment 層。**這裡沒有任何 repository 層的 secret** ——
-`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` 曾經要放在這裡，現在它是純粹的執行期值，只存在於
-主機的 `.env`（理由見 [`../apps/web/Dockerfile`](../apps/web/Dockerfile) 的長註解）。
+`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` 是純粹的執行期值，只存在於主機的 `.env`
+（理由見 [`../apps/web/Dockerfile`](../apps/web/Dockerfile) 的長註解）。
 
 ##### 照著跑
 
@@ -285,10 +285,9 @@ main 上的每次合併則推 `main` 與 `sha-<short>`。
 > `APP_VERSION` 都有對應的 tag —— 「有版號、沒有 tag」是允許的狀態，因為部署的身分是
 > commit（見下面的「Deploy workflow 做了什麼」），`sha-<short>` 對每個 commit 都存在。
 >
-> 模板本身因此不帶 tag：`APP_VERSION` 是 OpenAPI 的 `info.version`，結構上不能是空的，
-> 而模板沒有被部署過，沒有東西可以標記。下游保留 clone 下來的歷史，而 `git clone` 預設
-> 會把 tag 一起帶走 —— 上游打的 tag 會出現在每個下游的 `git tag -l` 裡，標記著一個
-> 他們沒有發布過的東西。下游的第一個 tag 打在自己第一次真的上線的那一版上。
+> 所以一個還沒上線過的專案是「有 `APP_VERSION`、沒有任何 tag」的：`APP_VERSION` 是
+> OpenAPI 的 `info.version`，結構上不能是空的，而沒有部署過就沒有東西可以標記。
+> 第一個 tag 打在第一次真的上線的那一版上。
 
 第二段：**GitHub 的 Actions → Deploy → Run workflow，填要部署的 commit** ——
 commit SHA、tag 或 branch 都可以（`abc1234`、`v1.2.3`、`main`）。等效的 CLI：
@@ -474,15 +473,12 @@ standalone 執行期不會重新求值 `next.config.ts`。它同時以執行期�
 > 並**讓伺服器繼續監聽**，對每個請求回 500。那個狀態下 `docker ps` 看起來是 Up，
 > 只有 healthcheck 會紅 —— 等於把可見度外包給那份 healthcheck 還在不在。
 
-**`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` 不再是其中之一。** 它曾經也是 build 期值
-（而且是整份清單裡唯一一個 `make check-env` 守不到的同步點），現在 image 裡只有一個
-公開的 id salt，真金鑰由 compose 在執行期注入 —— 所以它跟其他秘密一樣，只住在主機的
-`.env`，改了重啟即可。理由與實測見 [`../apps/web/Dockerfile`](../apps/web/Dockerfile) 的長註解。
-
-歷史留在這裡是因為代價還在，只是換了位置：**重建 image 會讓所有 Server Action id 改變**
-（salt 是常數，但程式碼變了 id 就變），使用者開著沒重載的分頁按下按鈕會拿到
-「Server Action ... was not found on the server」。所以它設一次就不要動 ——
-輪換它跟輪換 `JWT_SECRET_KEY` 不一樣，後者只是要大家重新登入。
+**`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` 不是其中之一**，但它有一個形狀相似的代價值得
+先知道：image 裡只有一個公開的 id salt，真金鑰由 compose 在執行期注入，所以它跟其他秘密
+一樣只住在主機的 `.env`、改了重啟即可 —— **可是重建 image 會讓所有 Server Action id
+改變**（salt 是常數，但程式碼變了 id 就變），使用者開著沒重載的分頁按下按鈕會拿到
+「Server Action ... was not found on the server」。重載即可，而且是一次性的。
+理由與實測見 [`../apps/web/Dockerfile`](../apps/web/Dockerfile) 的長註解。
 
 #### 這條 CD 刻意沒有做的事
 
@@ -491,7 +487,7 @@ standalone 執行期不會重新求值 `next.config.ts`。它同時以執行期�
 **沒有把分支保護寫進這條 CD。** `main` 的保護是三層（ruleset 在伺服器端擋、
 `.githooks/pre-push` 在本機擋、CI 的 `pushed-via-pr` job 事後吵），但 ruleset 是 repo 設定、
 不在版控裡，所以 CD 這一側不會、也沒辦法確認它在。細節見
-[`development.md`](development.md#分支保護)。
+[`ci-cd.md`](ci-cd.md#分支保護)。
 
 **沒有 staging。** 只有 `production` 一個 environment：合進 `main` 與打 tag 都只是把 image
 推上 registry，而唯一的上線動作直接打在正式環境上，中間沒有一個「先部署到別的地方看看」的
@@ -506,7 +502,7 @@ standalone 執行期不會重新求值 `next.config.ts`。它同時以執行期�
 web image 的 `next build` 尤其慢。比 QEMU 划算的做法是拿 `ubuntu-24.04-arm`
 （public repo 免費）跑一個平行的 job 再合 manifest，兩份都是原生建置。
 **這個決定的時機是「選部署主機」的時候**，見
-[`downstream.md`](downstream.md#部署主機的架構要先決定)。
+[`ci-cd.md`](ci-cd.md#部署主機的架構)。
 
 **沒有 image 層的漏洞掃描。** `security` job 查的是 npm 與 uv 相依的已知漏洞
 （範圍見 [`development.md`](development.md#安全-advisory)），base image 裡的 OS 套件不在裡面。

@@ -63,7 +63,7 @@ project-starter/
 │   └── nginx/templates/        # nginx 設定模板（envsubst）
 ├── scripts/                    # 每個 make 指令一支腳本，共用的部分在 lib/
 └── docs/                       # architecture、development、design-system、
-                                # extending、operations、downstream
+                                # extending、operations、ci-cd
 ```
 
 兩個 app 都**沒有** `src/` 中間層 —— 目錄根就是程式碼根。後端的 Python import root 是

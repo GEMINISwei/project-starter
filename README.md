@@ -81,7 +81,7 @@ flowchart LR
 | 你要做什麼 | 看哪裡 |
 |---|---|
 | **從這份模板開新專案**（一次性，做完就刪） | [`TEMPLATE.md`](TEMPLATE.md) |
-| 用這個模板開出新專案之後要做的一次性決定 | [`docs/downstream.md`](docs/downstream.md) |
+| CI/CD、分支保護、repo 的安全掃描開關、移除 CD | [`docs/ci-cd.md`](docs/ci-cd.md) |
 | 用 AI agent 開發：硬規則與容易安靜出錯的地方 | [`AGENTS.md`](AGENTS.md) |
 | 本機開發、`.env` 設定、指令、提交規範、測試與 CI | [`docs/development.md`](docs/development.md) |
 | 新增頁面／API 模組／權限／WS 事件／migration、加一個語系 | [`docs/extending.md`](docs/extending.md) |

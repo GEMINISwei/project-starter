@@ -23,8 +23,8 @@ const config: KnipConfig = {
     "shared/ui/index.ts",
     // 契約型別的具名目錄，用途就是給人按名字引用 —— 即使某些型別目前都由 url 自動推導。
     "shared/api/entities.ts",
-    // 模組啟用清單。`ENABLED_MODULES` 與 `getRoute` 是下游要改／要用的擴充點，
-    // 見 docs/downstream.md。
+    // 模組啟用清單。`ENABLED_MODULES` 與 `getRoute` 是新增模組時要改／要用的擴充點，
+    // 見 docs/extending.md 的〈新增前端頁面〉。
     "config/routes.ts",
     // service worker 由瀏覽器在執行期抓取，沒有任何 import 指向它。
     "public/sw.js",
