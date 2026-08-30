@@ -85,13 +85,20 @@ UI kit 認得的契約，**名字不要動**），需要新的色階就在 `app/
 cd apps/web && npm run check:tokens
 ```
 
-## 4. 改寫 README 與授權
+## 4. 改寫 README、授權與安全性政策
 
 `README.md` 現在描述的是模板，**要改寫成你自己專案的**。
 
 模板 README 那句「內部自用，權利保留」是整個 repo 唯一的授權敘述，沒有 `LICENSE` 檔。
 改寫時它會被蓋掉，所以**下游專案的授權要由你自己決定並寫上**，
 否則你的 repo 會處於完全沒有授權敘述的狀態。
+
+[`.github/SECURITY.md`](.github/SECURITY.md) 也順便看一次。它**刻意沒有寫任何人名或
+信箱**，走的是 GitHub 的 repo 相對入口（Security 分頁的「Report a vulnerability」），
+所以複製到你的 repo 之後回報會進到**你這裡**，不會誤送到模板維護者 —— 忘了改也不會出事。
+要改的只有兩處：「這個 repo 附帶的安全機制」那張清單（你剝掉哪些模組就刪哪幾條），
+以及「已知的邊界」（你補上 SBOM 或 image 掃描的話要拿掉對應那條）。
+**開關本身要在第 5a 步開**，沒開的話那個回報按鈕不存在。
 
 ## 5. 設定 GitHub 那一側
 
@@ -125,6 +132,16 @@ gh api --method PATCH repos/{owner}/{repo} -f 'security_and_analysis[secret_scan
 第三件在網頁上：Settings 的安全那一頁開 **Code scanning**，選 **default setup**、
 query suite 選 **Default**。四個開關的意思與為什麼不要 advanced setup，見
 [`docs/development.md`](docs/development.md#repo-設定裡的安全掃描)。
+
+第四件是 **Private vulnerability reporting**（同一頁）。
+[`.github/SECURITY.md`](.github/SECURITY.md) 要人走 Security 分頁的
+「Report a vulnerability」回報，而**那個按鈕要開了這個開關才會出現** ——
+沒開的話那份文件指向一個不存在的入口，而回報的人只會改去開公開 issue。
+一行也可以：
+
+```bash
+gh api --method PUT repos/{owner}/{repo}/private-vulnerability-reporting
+```
 
 **ruleset 那一行不是選配的。** `ci.yml` 讓 merge 到 `main` 那一輪不重跑測試，靠的就是它的
 strict 政策（分支必須是最新才能 merge）—— 沒匯入的話那個前提不成立，而且**不會有任何紅燈**。

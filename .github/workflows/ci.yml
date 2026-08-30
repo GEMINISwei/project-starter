@@ -24,6 +24,18 @@ on:
     # 見 api job 的註解（試過，會讓 PR 頁面說謊）。
     types: [opened, synchronize, reopened, ready_for_review]
 
+  # 手動觸發。**這條的用途是「對當前的 main（或任何分支）重跑一次完整 CI」** ——
+  # 沒有它的話，唯一的重跑方式是去 Actions 頁面 re-run 一個舊 run，而那跑的是舊的 SHA，
+  # 答不了「現在的 main 是不是綠的」這個問題（merge 那一輪刻意不重跑測試，見 api job）。
+  #
+  # **只加這一行是不夠的，這是最容易寫錯的地方。** 底下六個測試 job 的 `if` 都只認
+  # pull_request 與 tag，不一起放行的話手動觸發會得到一個「所有 job 都 skipped」的空 run。
+  # 那個畫面看起來像成功 —— 而它其實什麼都沒驗。六個 job 各自的 `if` 都列了
+  # workflow_dispatch，改動時要一起改。
+  #
+  # pr-checks 刻意**不**放行：它讀的是 PR 標題與描述，手動觸發時沒有 PR context。
+  workflow_dispatch:
+
   # 每週跑一次完整 CI。**這一條存在的理由只有 security job**：它查的是外部 advisory
   # 資料庫，會因為「今天有人公布了新漏洞」而變紅 —— 那跟有沒有人送 PR 無關。
   # 沒有它的話，一個上線後穩定、幾週沒有 PR 的專案就是幾週沒有掃過，
@@ -83,7 +95,9 @@ jobs:
     # check 算通過。等於在最需要看清楚的那一刻（merge 前）把訊號拿掉，
     # 換 6 分鐘不划算。draft 期間跳過 deploy-config、e2e 與 security 是另一回事：
     # 那三個接著就會在 ready_for_review 補跑，最新那筆是真的結果。
-    if: github.event_name == 'pull_request' || github.ref_type == 'tag'
+    if: >-
+      github.event_name == 'pull_request' || github.ref_type == 'tag'
+      || github.event_name == 'workflow_dispatch'
     defaults:
       run:
         working-directory: apps/api
@@ -169,7 +183,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # 條件與理由同 api job。
-    if: github.event_name == 'pull_request' || github.ref_type == 'tag'
+    if: >-
+      github.event_name == 'pull_request' || github.ref_type == 'tag'
+      || github.event_name == 'workflow_dispatch'
     defaults:
       run:
         working-directory: apps/web
@@ -235,6 +251,7 @@ jobs:
     if: >-
       (github.event_name == 'pull_request' && !github.event.pull_request.draft)
       || github.ref_type == 'tag'
+      || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v7
 
@@ -507,6 +524,7 @@ jobs:
     if: >-
       (github.event_name == 'pull_request' && !github.event.pull_request.draft)
       || github.ref_type == 'tag'
+      || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v7
 
@@ -648,6 +666,7 @@ jobs:
       github.event_name == 'schedule'
       || (github.event_name == 'pull_request' && !github.event.pull_request.draft)
       || github.ref_type == 'tag'
+      || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v7
 
@@ -678,7 +697,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # 條件與理由同 api job。
-    if: github.event_name == 'pull_request' || github.ref_type == 'tag'
+    if: >-
+      github.event_name == 'pull_request' || github.ref_type == 'tag'
+      || github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v7
 
