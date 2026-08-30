@@ -3,12 +3,9 @@
 本機開發環境、常用指令、提交規範、測試，以及這個 repo 寫文件與註解的慣例。
 擴充功能的作法見 [`extending.md`](extending.md)，部署與維運見 [`operations.md`](operations.md)。
 
-> **模板本身與下游專案都適用這一份** —— 環境設置、指令、提交規範、測試與文件慣例，
-> 兩邊是同一套。剛從模板開出新專案的話另外看 [`downstream.md`](downstream.md)：
+> **模板本身與用它開出來的專案都適用這一份** —— 環境設置、指令、提交規範、測試與
+> 文件慣例，兩邊是同一套。剛開新專案的話另外看 [`downstream.md`](downstream.md)：
 > 開案後要做的一次性決定（CI/CD 留哪些、安全掃描、Actions 分鐘數）。
-> 底下只有一條**只對模板本身成立**：每一次實質改動都要在
-> [`CHANGELOG.template.md`](../CHANGELOG.template.md) 留一筆（根目錄的
-> [`CHANGELOG.md`](../CHANGELOG.md) 屬於下游專案，模板不碰它）。
 
 ## 1. 開發環境設置
 
@@ -260,8 +257,7 @@ nginx 模板、任何 `scripts/*.sh` 或任何 `.md` 之後，本機補跑一次
    升 PostgreSQL 的 major 還要多一步：資料目錄格式與 major 綁死，新版 server 直接讀舊的
    `PGDATA` 會拒絕啟動，必須 `pg_dump` →換版本→ `pg_restore`（或 `pg_upgrade`）。
    這對已部署的下游是破壞性動作，升級步驟要寫進
-   [`../CHANGELOG.template.md`](../CHANGELOG.template.md) 的那一筆條目，
-   並帶 `[同步:破壞性]` 標記。
+   [`../CHANGELOG.md`](../CHANGELOG.md) 的那一筆條目。
 4. **跨 major 的升級要自己補 CHANGELOG 條目。** dependabot 開的 PR 標題一律帶
    `[skip changelog]`（設定在 [`../.github/dependabot.yml`](../.github/dependabot.yml)，
    理由寫在那裡），所以 CI 的 `pr-checks` 不會提醒你。minor/patch 本來就不需要條目，
@@ -303,12 +299,8 @@ review 時一眼看得出來，為它們多養一個工具與一份設定不划�
 
 ### CHANGELOG 條目
 
-這一節與檔頭那句「每一次實質改動都要留一筆」一樣，**只對模板本身成立**。
-
-**寫進 [`../CHANGELOG.template.md`](../CHANGELOG.template.md)，不是根目錄的
-`CHANGELOG.md`。** 那一份屬於下游專案，模板不再碰它 —— 兩份分家的理由寫在
-`CHANGELOG.template.md` 的檔頭（一句話：同一個區塊有兩個 owner 的話，每次同步都衝突，
-而那份 diff 也不再讀得出「我落後多少」）。寫錯地方由 CI 的 `pr-checks` 擋。
+動到 `apps/`／`scripts/`／`infra/` 卻沒在 [`../CHANGELOG.md`](../CHANGELOG.md) 留一筆時，
+CI 的 `pr-checks` 會擋。
 
 **條目只寫改了什麼。** 功能怎麼用、為什麼這樣設計，一律留在 owner 文件
 （[`../README.md`](../README.md)、`docs/`、[`../contracts/README.md`](../contracts/README.md)），
@@ -499,10 +491,9 @@ tag build 不受這條影響，照跑全套 —— 那份 image 就是要上線�
   成功結束。**逐步清單看 `ci.yml` 本身**，不抄在這裡：手抄的清單一定會落後於 `ci.yml`，
   理由同下面第 5 節的第 4 條
 - **pr-checks**（只在 PR 上跑）：三件 PR-only 的紀律檢查，三個 step：
-  - **CHANGELOG**：兩個方向。動到 `apps/`／`scripts/`／`infra/` 卻沒更新
-    `CHANGELOG.template.md` 就失敗 —— 那份紀錄是下游判斷「同步要做什麼」的唯一依據；
-    反過來動到根目錄的 `CHANGELOG.md`（下游的那一份）也失敗。
-    純重構或真的要改那份種子檔時，可在 PR 標題加 `[skip changelog]` 放行
+  - **CHANGELOG**：動到 `apps/`／`scripts/`／`infra/` 卻沒更新 `CHANGELOG.md` 就失敗。
+    漏寫沒有症狀 —— 程式碼照樣進去，只是「這個版本改了什麼」少一筆。
+    純重構可在 PR 標題加 `[skip changelog]` 放行
   - **驗收條件**（**draft 期間跳過**）：`make check-acceptance` 確認每條驗收條件
     都指向存在的測試；純文件等無行為變更的改動可在 PR 標題加 `[skip acceptance]`，
     規則見〈常用指令〉。draft 期間要看那盞紅綠燈就自己跑 `make check-acceptance`
@@ -572,7 +563,7 @@ tag build 不受這條影響，照跑全套 —— 那份 image 就是要上線�
 2. **規則可以重複一行，理由只寫一次。**「改了 schema 要跑 `make gen-types`」該出現在動作發生
    的每個位置；但「為什麼契約要進版控」只寫在 [`../contracts/README.md`](../contracts/README.md)。
 3. **不寫這個 repo 自己的演進史。**「以前是…改成…」一律只留在
-   [`../CHANGELOG.template.md`](../CHANGELOG.template.md)。
+   [`../CHANGELOG.md`](../CHANGELOG.md)。
    這條**不包含**「為什麼不用另一種做法」—— 那是上面那個標準，要保留。
    只清「我們變過」，不清「我們考慮過」。
 4. **可由指令取得的清單不抄進文件。** 例如 `make help` 已列出全部指令，文件只解釋

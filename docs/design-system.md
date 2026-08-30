@@ -369,7 +369,7 @@ vendor 的名字只能出現在 `primitives.css`。少了那條限制，模組 C
 
 導入完成後**有三處文件會變成不實敘述，而且沒有任何檢查器看得到**：這一節開頭那句
 「這個模板出廠沒有導入任何 DS」、[`TEMPLATE.md`](../TEMPLATE.md) §3 的視覺敘述，
-以及 [`CHANGELOG.template.md`](../CHANGELOG.template.md)（要記一筆：主題名稱、
+以及 [`CHANGELOG.md`](../CHANGELOG.md)（要記一筆：主題名稱、
 `DEFAULT_THEME` 改了沒）。
 
 
