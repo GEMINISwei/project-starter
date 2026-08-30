@@ -13,17 +13,16 @@
 
 ### 變更
 
-- **修掉 concurrency 讓 `ready_for_review` 的補跑機制失效的洞。** `push` 與「按下
-  Ready for review」幾乎同時發生時，兩個事件各開一個 run（SHA 與建立時間完全相同），
-  而它們原本落在同一個 concurrency 群組裡，互砍只活一個。活下來的如果是 push 那個
-  （啟動時 PR 還是 draft），`deploy-config`／`e2e`／`security` 就全部 skipped ——
-  **而這個 SHA 之後不會再有任何事件，補跑機制就此消失**。skipped 對 required status
-  check 算通過，所以 PR 頁面是綠的、看不出那三個從來沒跑過。
-  做法是 `concurrency.group` 加上 `github.event.action`。**省分鐘數的效果沒有丟**：
-  連續 push 的 action 都是 `synchronize`，仍然同組互砍。
-  人手動操作幾乎不會踩到（推完再切到瀏覽器按 ready，中間隔了幾秒到幾分鐘），
-  但 agent 幾乎必然踩到 —— `AGENTS.md` 的流程就是「draft PR → 實作 → 取消 draft」，
-  而腳本會把 `git push` 與 `gh pr ready` 連著跑。實際發生在 PR #14 上。
+- **新增 `draft-gated-jobs` job，把「draft 期間跳過的三個 job 從來沒補跑過」從沉默變成紅燈。**
+  `deploy-config`／`e2e`／`security` 在 draft 上跳過，靠 `ready_for_review` 事件補跑 ——
+  而那個補跑會被 push 撞掉。實測到**兩種**成因不同、結果相同的壞法：PR #14 是兩個 run
+  都建立、被 concurrency 互砍掉一個；PR #15 是第二個 run 壓根沒被建立。兩種都讓那三個
+  停在 skipped，而 **skipped 對 required status check 算通過** —— PR 頁面是綠的，
+  看不出它們從來沒跑過。
+  因為成因不只一種，這裡不去修 race，改成**檢查結果**：PR 已經 ready 卻還有 skipped
+  就紅燈，並告訴你推個空 commit 重新觸發。判斷用的是**當下**的 draft 狀態（`gh pr view`），
+  不是事件 payload —— payload 記的是事件發生當時，讀它會跟著一起被騙過去。
+  `.github/rulesets/main.json` 同步加入這個 context，**要重新匯入 GitHub 才生效**。
 
 - **`ci.yml` 補上 `workflow_dispatch`。** 原本想「對現在的 `main` 重跑一次完整 CI」
   沒有入口 —— 只能 re-run 一個舊 run，而那跑的是舊 SHA，答不了那個問題
