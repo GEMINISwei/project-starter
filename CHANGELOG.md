@@ -13,6 +13,18 @@
 
 ### 變更
 
+- **`ci.yml` 補上 `workflow_dispatch`。** 原本想「對現在的 `main` 重跑一次完整 CI」
+  沒有入口 —— 只能 re-run 一個舊 run，而那跑的是舊 SHA，答不了那個問題
+  （merge 那一輪刻意不重跑測試）。**六個測試 job 的 `if` 也一起放行**：它們原本只認
+  `pull_request` 與 `tag`，只加 `on:` 的話手動觸發會得到一個「所有 job 都 skipped」的空 run，
+  而那個畫面看起來像成功。`pr-checks` 刻意不放行（它讀 PR 標題與描述，手動觸發時沒有）。
+
+- **新增 [`.github/SECURITY.md`](.github/SECURITY.md)。** repo 是 public，而回報漏洞原本
+  沒有任何指定管道。它**刻意不寫人名或信箱**，走 GitHub 的 repo 相對入口，
+  所以複製到下游之後回報會進到下游自己的 repo，不會誤送到模板維護者。
+  代價是那個「Report a vulnerability」按鈕要開 repo 的 Private vulnerability reporting
+  才會出現 —— 開關列進 `TEMPLATE.md` 第 5a 步（原本三件變四件）。
+
 - **`publish` 為兩個 image 產生 build provenance attestation。** 補的是 `deploy.yml`
   信任鏈裡唯一一段靠推論撐著的地方：它等 CI 綠燈、篩 `event == push`，然後在主機上
   pull `sha-<short>` —— 但 tag 是可以被重指的，任何拿得到 `packages: write` 的東西都能
