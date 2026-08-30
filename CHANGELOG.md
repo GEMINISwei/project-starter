@@ -13,6 +13,22 @@
 
 ### 變更
 
+- **整份讀過 `AGENTS.md` 與 `README.md`，修掉五處。** 其中兩處是前兩次整理自己造成的：
+  - `AGENTS.md` 寫「相依升級**三條**規則」，而 `development.md` 那一節已經改成四條。
+  - `README.md` 的文件地圖把 `ci-cd.md` 留在 `downstream.md` 原本那個位置（緊接
+    `TEMPLATE.md`）。那個位置是給「開案後的一次性決定」的，`ci-cd.md` 是永久文件，
+    移到 `development.md` 後面 —— 它本來就是從那份拆出來的。
+  - `README.md`〈機制〉那段列了四樣東西，然後說「**這兩項**已由 module registry 啟用」。
+    指的是 WebSocket 與 push，但三層 token（樣式層）與設定頁（一般前端模組）夾在中間，
+    而它們根本不走 registry。拆成兩段。
+  - `AGENTS.md` 的 draft PR 流程列了「空 commit」卻沒說要帶那個 skip 標記。
+    對只讀這一份的 agent 來說，那是每個 PR 都會白跑一輪 CI 的漏洞。**連同它的反面一起補**
+    ——「在別的 commit 內文提到這個標記時不要寫出字面值」。`development.md` 早就寫了那條
+    警告，但寫在 `development.md`：這個 PR 的第一個 commit 就是因為內文解釋那個標記而
+    把自己整輪 CI 跳掉的，症狀是 PR 上一個 check 都沒有。既然實測會踩，
+    就該寫在 agent 真的會讀的那一份。
+  - `AGENTS.md` 的 e2e 那條指向〈規格與測試的三層〉，改指真正的 owner 小節〈e2e 的範圍〉。
+
 - **整份讀過 `docs/` 六份文件，修掉 15 處殘留與不一致。** 全部是檢查器守不到的類別 ——
   `check-docs` 驗的是路徑、錨點與識別字存不存在，驗不到「這句話描述的東西已經不是這樣了」：
   - **`operations.md` 的 Session 撤銷表殘留 MongoDB 用語**：`auth_version` 寫成存在

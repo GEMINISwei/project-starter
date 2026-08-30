@@ -50,7 +50,11 @@
   可執行、違反會紅燈）、功能級（PR 描述的驗收條件）、實作級（測試）。
   分界與「為什麼不引入 BDD 工具鏈」見
   [`docs/development.md`](docs/development.md#規格與測試的三層)。
-- **先開 draft PR，再寫程式**：開分支 → 空 commit → draft PR 只填「這個 PR 做什麼」與
+- **先開 draft PR，再寫程式**：開分支 → 空 commit（**commit message 帶 `[skip ci]`** ——
+  那一刻的 tree 跟 `main` 位元組相同，跑一輪的資訊量是零。**但在別的 commit 裡「提到」
+  這個標記時不要寫出字面值**，GitHub 掃的是整段 message 不是只有第一行，內文提到它會
+  把那個 commit 自己也跳過，症狀是 PR 上一個 check 都沒有 —— 不是紅燈，是空的，
+  看起來像 Actions 壞了。要提就寫成「skip ci 標記」）→ draft PR 只填「這個 PR 做什麼」與
   「驗收條件」→ **動手之前把驗收條件裡模糊的地方問掉，答案改寫回驗收條件**（不是留在
   對話裡）→ 寫測試看它紅 → 實作到綠 → 取消 draft。功能級規格的價值在動手之前，
   落點就必須在動手之前存在。**一條驗收條件寫不出對應的測試名稱，代表它還沒被想清楚 ——
@@ -69,7 +73,7 @@
   「這條為什麼 vitest 或 pytest 測不到」—— 答不出來就寫在那一層。
   它是唯一能量到「可見測試逐一寫綠、組合起來卻是壞的」的層，agent 自己寫就沒有那個
   獨立性了。範圍與已知缺口見
-  [`docs/development.md`](docs/development.md#規格與測試的三層)。
+  [`docs/development.md`](docs/development.md#e2e-的範圍)。
 - **不留未使用的匯出**。只在自己檔案裡用到的函式與常數不要 `export`；
   `npm run check:deadcode` 會擋。例外寫在 `apps/web/knip.ts` 且**每條都要附理由**。
 
@@ -104,7 +108,7 @@
   `v<APP_VERSION>`；三者由 `make check-version` 守（在 `deploy-config` job 裡）。
   發版 PR 要改哪四樣見 [`docs/operations.md`](docs/operations.md#發版與回滾)。
 - **升級相依遇到 peer 擋住時，停在最新的相容版並就地寫下移除條件**，不要用
-  `--force`／`--legacy-peer-deps` 繞過。三條規則見
+  `--force`／`--legacy-peer-deps` 繞過。四條規則見
   [`docs/development.md`](docs/development.md#相依升級紀律)。
 
 ## 容易踩的地方
