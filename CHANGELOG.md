@@ -13,6 +13,17 @@
 
 ### 變更
 
+- **新增 `draft-gated-jobs` job，把「draft 期間跳過的三個 job 從來沒補跑過」從沉默變成紅燈。**
+  `deploy-config`／`e2e`／`security` 在 draft 上跳過，靠 `ready_for_review` 事件補跑 ——
+  而那個補跑會被 push 撞掉。實測到**兩種**成因不同、結果相同的壞法：PR #14 是兩個 run
+  都建立、被 concurrency 互砍掉一個；PR #15 是第二個 run 壓根沒被建立。兩種都讓那三個
+  停在 skipped，而 **skipped 對 required status check 算通過** —— PR 頁面是綠的，
+  看不出它們從來沒跑過。
+  因為成因不只一種，這裡不去修 race，改成**檢查結果**：PR 已經 ready 卻還有 skipped
+  就紅燈，並告訴你推個空 commit 重新觸發。判斷用的是**當下**的 draft 狀態（`gh pr view`），
+  不是事件 payload —— payload 記的是事件發生當時，讀它會跟著一起被騙過去。
+  `.github/rulesets/main.json` 同步加入這個 context，**要重新匯入 GitHub 才生效**。
+
 - **`ci.yml` 補上 `workflow_dispatch`。** 原本想「對現在的 `main` 重跑一次完整 CI」
   沒有入口 —— 只能 re-run 一個舊 run，而那跑的是舊 SHA，答不了那個問題
   （merge 那一輪刻意不重跑測試）。**六個測試 job 的 `if` 也一起放行**：它們原本只認

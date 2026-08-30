@@ -34,7 +34,8 @@
           { "context": "security" },
           { "context": "api-types-up-to-date" },
           { "context": "pr-checks" },
-          { "context": "e2e" }
+          { "context": "e2e" },
+          { "context": "draft-gated-jobs" }
         ]
       }
     }

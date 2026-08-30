@@ -741,6 +741,76 @@ jobs:
   #
   # **下游沒有要用 registry 的話，可以整個刪掉這個 job**（連同 deploy.yml）——
   # `make prod` 那條本機建置的路徑完全不依賴它。
+  # ── draft 期間跳過的那三個，PR 一旦 ready 就必須真的跑過 ──────────────────
+  #
+  # **這個 job 存在的理由是：`ready_for_review` 的補跑機制會被 race 掉，而且沒有紅燈。**
+  #
+  # 機制本身沒問題（單獨按 ready 時新的 run 會建立、三個 job 真的執行），
+  # 壞的是它跟 push 撞在一起的時候 —— 而那不是罕見操作，腳本化的流程就是
+  # `git push` 接著 `gh pr ready`（AGENTS.md 規定的 draft PR 流程正是如此）。
+  # 實測過**兩種**壞法，成因不同但結果一樣：
+  #
+  #   PR #14  兩個 run 都建立了，被 concurrency 互砍掉一個（活下來的是 push 那個，
+  #           它啟動時 PR 還是 draft）
+  #   PR #15  第二個 run **壓根沒有被建立**
+  #
+  # 兩種都讓那三個 job 停在 skipped，而 **skipped 對 required status check 算通過** ——
+  # PR 頁面是綠的、mergeStateStatus 是 CLEAN，看不出它們從來沒跑過。
+  #
+  # 所以這裡不去修 race（成因不只一種，修一種不夠），改成**檢查結果**：
+  # 不管為什麼跳過，PR 已經 ready 卻還是 skipped 就紅燈。
+  #
+  # **要問「現在」的 draft 狀態，不能看事件 payload。** payload 記的是事件發生當下的
+  # 狀態，而這個 job 要擋的正是「事件發生時還是 draft、之後才 ready」那條路徑 ——
+  # 讀 payload 的話它會跟著一起被騙過去。
+  #
+  # 殘留的窗口：ready 按得比這個 job 執行還晚、而且那次 ready 又剛好沒生出 run。
+  # 前者要幾十秒、後者只在與 push 相撞時發生，兩者同時成立的組合實務上碰不到。
+  draft-gated-jobs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [deploy-config, e2e, security]
+    # always()：三個 needs 在 draft 上是 skipped，不寫的話這個 job 會跟著 skip，
+    # 而那正好是它要偵測的狀態。
+    if: always() && github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: 確認三個 job 真的在這個 commit 上跑過
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          # 用 env 傳，不要內插進 run: 的腳本字串 —— 比照 pr-checks 的作法。
+          RESULT_DEPLOY_CONFIG: ${{ needs.deploy-config.result }}
+          RESULT_E2E: ${{ needs.e2e.result }}
+          RESULT_SECURITY: ${{ needs.security.result }}
+        run: |
+          results="deploy-config=${RESULT_DEPLOY_CONFIG} e2e=${RESULT_E2E} security=${RESULT_SECURITY}"
+
+          draft="$(gh pr view "$PR_NUMBER" --repo "$REPO" --json isDraft --jq .isDraft)"
+          if [ "$draft" = "true" ]; then
+            echo "PR 仍是 draft，這三個跳過是預期的：${results}"
+            exit 0
+          fi
+
+          skipped=""
+          for pair in $results; do
+            case "$pair" in
+              *=skipped) skipped="${skipped} ${pair%%=*}" ;;
+            esac
+          done
+
+          if [ -n "$skipped" ]; then
+            echo "::error::PR 已經 ready，但這些 job 從來沒有在這個 commit 上跑過：${skipped}"
+            echo "::error::多半是 push 與「按下 Ready for review」撞在一起，補跑的那個 run 沒生出來。"
+            echo "::error::推一個 commit（空的也行）重新觸發即可：git commit --allow-empty -m 'ci: 重新觸發' && git push"
+            exit 1
+          fi
+
+          echo "三個 job 都在這個 commit 上跑過：${results}"
+
   publish:
     needs: [api, web, deploy-config, security, api-types-up-to-date, e2e]
     # PR 不推 image：fork 來的 PR 拿不到 packages: write，而且未經審查的分支
