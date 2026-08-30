@@ -47,9 +47,9 @@ else
     done
 
     while :; do
-        printf '資料庫帳號 [app]: '
+        printf '資料庫帳號 [admin]: '
         read -r postgres_user
-        postgres_user="${postgres_user:-app}"
+        postgres_user="${postgres_user:-admin}"
         case "$postgres_user" in
             *[!A-Za-z0-9._~-]*) echo "資料庫帳號只能包含英文字母、數字、.、_、~、-" ;;
             *) break ;;
