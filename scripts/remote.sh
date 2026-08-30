@@ -39,14 +39,6 @@ offer_push() {
     local name="$1" branch
     branch="$(git branch --show-current)"
 
-    # template 是「拉更新的上游」，不是要推上去的地方。而且下游是 clone 來的、歷史相通，
-    # push 會真的快轉成功 —— 把專案自己的 commit 寫進模板，而且不會有任何錯誤訊息。
-    # 這個名稱在 docs/downstream.md 與 AGENTS.md 都是有定義的約定，所以直接依名稱擋。
-    if [ "$name" = "template" ]; then
-        echo "template 是拉更新用的上游，不從這裡推上去。"
-        return
-    fi
-
     # detached HEAD 時 --show-current 是空字串，推一個空分支名會變成看不懂的錯。
     if [ -z "$branch" ]; then
         echo "目前是 detached HEAD，先切到一個分支再推。"
