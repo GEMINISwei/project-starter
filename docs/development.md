@@ -314,6 +314,11 @@ CI 的 `pr-checks` 會擋。
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)，版號採
 [語意化版本](https://semver.org/lang/zh-TW/)。
 
+**變更紀錄只有一份，刻意不拆成「模板的」與「專案的」兩份。** 拆開是為了讓模板與用它開出來
+的專案能持續寫進同一條血脈而不衝突 —— 但快照模式下同一時間只有一個 owner
+（見 [`../TEMPLATE.md`](../TEMPLATE.md) 第 0 節），拆開就只剩成本：`make check-version`
+要先判斷「這個 repo 是模板還是新專案」，CI 的守衛也要往兩個方向各擋一次。
+
 ### 分支保護與 CI 的紅綠燈
 
 「PR 送出前必須通過 `make check`」與整套 CI，**沒有任何東西讓它變成強制** ——
