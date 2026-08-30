@@ -102,8 +102,13 @@ fi
 
 if [ "$failed" -ne 0 ]; then
     echo >&2
-    echo "CI 與本機指令／分支保護對不上。動過 ruleset 的話要重新匯入 GitHub 才會生效：" >&2
-    echo "  gh api --method POST repos/{owner}/{repo}/rulesets --input $RULESET" >&2
+    echo "CI 與本機指令／分支保護對不上。動過 ruleset 的話要重新匯入 GitHub 才會生效。" >&2
+    # **給 PUT 不是 POST。** 這段訊息印出來的時機必定是「ruleset 已經存在、而且剛被改過」，
+    # 也就是唯一需要更新的情境 —— POST 是建立，會在 GitHub 上多出第二個同名 ruleset，
+    # 兩個都 active、兩份規則疊加，而且沒有任何地方會提示你有兩份。
+    # 首次匯入的 POST 寫在 docs/development.md 的〈匯入 ruleset〉。
+    echo "  id=\$(gh api repos/{owner}/{repo}/rulesets --jq '.[]|select(.name==\"main\")|.id')" >&2
+    echo "  gh api --method PUT repos/{owner}/{repo}/rulesets/\"\${id}\" --input $RULESET" >&2
     exit 1
 fi
 

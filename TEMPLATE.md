@@ -143,6 +143,10 @@ query suite 選 **Default**。四個開關的意思與為什麼不要 advanced s
 gh api --method PUT repos/{owner}/{repo}/private-vulnerability-reporting
 ```
 
+那行 `POST` 是**首次匯入**用的（開案時正是首次）。日後改過 `main.json` 要改用 `PUT`
+更新既有那一份，否則會多出第二個同名 ruleset —— 指令與症狀見
+[`docs/development.md`](docs/development.md#匯入-ruleset)。
+
 **ruleset 那一行不是選配的。** `ci.yml` 讓 merge 到 `main` 那一輪不重跑測試，靠的就是它的
 strict 政策（分支必須是最新才能 merge）—— 沒匯入的話那個前提不成立，而且**不會有任何紅燈**。
 細節見 [`docs/development.md`](docs/development.md#分支保護)。

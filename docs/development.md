@@ -355,6 +355,20 @@ ruleset 之外還有兩層，**兩層都不是伺服器端強制，這一點不�
 gh api --method POST repos/{owner}/{repo}/rulesets --input .github/rulesets/main.json
 ```
 
+**這一行只適用第一次。** `POST` 是「建立」，之後每次改過 `main.json` 都要改用 `PUT`
+更新既有那一份，先查出它的 id：
+
+```bash
+id=$(gh api repos/{owner}/{repo}/rulesets --jq '.[]|select(.name=="main")|.id')
+gh api --method PUT repos/{owner}/{repo}/rulesets/"${id}" --input .github/rulesets/main.json
+```
+
+**改過之後再 `POST` 一次的話，GitHub 會多出第二個同名的 `main` ruleset** ——
+名稱不要求唯一，兩個都是 active、兩個都生效。症狀很惡劣：required checks 看起來是對的
+（新的那份確實有你剛加的 job），但舊的那份還在，兩份規則疊加，之後想調鬆任何一條時
+你改到其中一個、另一個繼續擋著，**而且沒有任何地方會提示你有兩份**。
+數量確認：`gh api repos/{owner}/{repo}/rulesets --jq '.[].name'` 應該只有一個 `main`。
+
 它要求 `main` 只能經 PR 進入、禁止 force push 與刪除，並把**所有會在 PR 上跑的 job**
 列為必要檢查；完整名單以 ruleset 與 [`ci.yml`](../.github/workflows/ci.yml) 為準。
 `publish` 與 `pushed-via-pr` 不在裡面 —— 它們只在 push 上跑，PR 上不存在，列進去會讓每個 PR
