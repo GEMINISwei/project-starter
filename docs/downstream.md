@@ -287,9 +287,9 @@ OS 層的 CVE 最多會延後一個月修補，期間完全沒有症狀。理由
 那是 `make init` 產生的預設值，零動作。
 
 **但這管不到 GitHub 那一側。** `publish` job 的觸發條件是 push 到 `main`，跟你有沒有
-填 `IMAGE_REGISTRY` 無關；它第一步就檢查 repository secret
-`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` 在不在，沒設就紅燈。所以留著 CD 卻不用它並不是一個
-穩定狀態，兩條路選一條：設好那支 secret（即使暫時不部署），或照下面刪乾淨。
+填 `IMAGE_REGISTRY` 無關 —— 它不需要任何額外設定就會成功，所以留著不會紅燈，
+只會一直往 GHCR 推沒有人用的 image（外加每次 merge 的那幾分鐘 Actions 時間）。
+不打算走 registry 的話照下面刪乾淨。
 
 ### 移除 CD
 

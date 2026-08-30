@@ -25,6 +25,28 @@
 
 ### 變更
 
+- **[同步:要動手]** `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` 不再被烤進 web image。
+  這把金鑰在 Next 裡同時扛兩個需求相反的角色 —— build 期是 Server Action id 的 salt
+  （要穩定、不必保密），執行期是閉包參數的加解密金鑰（要保密、要能輪替）。綁在同一個值上的
+  結果是**秘密被寫進建置產物**：`.next/server/server-reference-manifest.json` 跟著 image 走，
+  任何拿得到 image 的人都讀得出正式環境的金鑰。現在 build 期用一個寫死的公開常數，
+  真金鑰由 compose 在執行期注入，忘了注入由 `apps/web/instrumentation.ts` 在開機時擋下來。
+  理由、四個實測結果與「為什麼不是隨機值」寫在
+  [`apps/web/Dockerfile`](apps/web/Dockerfile) 的長註解。
+
+  **下游同步後要做三件事**：
+
+  1. **刪掉 GitHub 的 repository secret `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`** ——
+     已經沒有任何 job 需要它（`publish` 那一步的存在性檢查也一併刪了）。
+  2. **如果你的 GHCR package 曾經是 public**，那些 image 裡有你的正式金鑰：
+     改回 private，並在主機 `.env` 換一把新的（`openssl rand -base64 32`）後重啟。
+  3. 下一次部署會讓所有 Server Action id 改變一次（salt 換了），使用者開著沒重載的分頁
+     按下按鈕會拿到「Server Action ... was not found on the server」，重載即可。
+     這是一次性的。
+
+  主機 `.env` 不用動（`make init` 本來就會產生這個值），但 compose 現在用 `${VAR:?}` 要求它
+  存在 —— 手寫過 `.env` 的話先確認那一行還在。
+
 - **[同步:要動手]** 模板的預設立場改成「repo 是 public」。免費方案上 public 與 private
   拿到的東西差很多（Actions 分鐘數、ruleset、secret scanning、CodeQL、environment 的
   required reviewers 五項），原本散在各處的「這是付費功能所以不預設」全部重寫。

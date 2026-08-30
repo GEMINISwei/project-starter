@@ -122,15 +122,6 @@ services:
         # 這一個移不掉（Next 把它序列化進 required-server-files.json），
         # 所以另外由 apps/web/instrumentation.ts 在開機時比對。
         UPLOAD_SIZE_LIMIT: ${UPLOAD_SIZE_LIMIT:?}
-      # Server Action id 的 hash salt。刻意走 build secret 而不是 build arg 或
-      # environment：
-      #   - 它是 SWC 的 hash salt，必須在 `next build` 執行時就存在，所以不能只給執行期
-      #     （那會變成 id 來自 build 期的隨機 salt、執行期卻用另一把 key，兩邊對不起來）。
-      #   - 走 build arg 則會把金鑰留在 `docker history` 裡，且每次 build 都噴
-      #     SecretsUsedInArgOrEnv 警告。
-      # 消費端在 apps/web/Dockerfile 的 builder stage（required=true）。
-      secrets:
-        - next_actions_key
     environment:
       # 執行期（而非 build 期）提供：這個位址只有 Next.js 的伺服器端會用到，
       # 放進 build 參數會被內嵌進 client bundle，等於公開內部拓撲。
@@ -144,6 +135,11 @@ services:
       # 這一個是拿來跟 image 裡烤的值比對的，不是拿來生效的：真正生效的是 build 期
       # 烤進去的那份，不一致時 web 會直接結束行程（見 apps/web/instrumentation.ts）。
       UPLOAD_SIZE_LIMIT: ${UPLOAD_SIZE_LIMIT:?}
+      # Server Action 閉包參數的加解密金鑰。**這是真正的那一把**，image 裡只有一個
+      # 公開的 id salt —— 兩者為什麼要分開，見 apps/web/Dockerfile 的長註解。
+      # 忘了注入不會壞掉，只會安靜地改用那個公開值加密，所以 `:?` 之外
+      # apps/web/instrumentation.ts 還會在開機時再擋一次（沒經過 compose 的跑法也擋得到）。
+      NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:?}
     depends_on:
       api:
         condition: service_healthy
@@ -188,11 +184,3 @@ volumes:
   postgres_data:
     name: ${COMPOSE_PROJECT_NAME:?}_${MODE:?}_postgres_data
 
-secrets:
-  # `environment:` 是把 .env 裡的變數當成 secret 的來源，值不會落到磁碟上，也不會進
-  # image layer —— 只在 Dockerfile 那一行 RUN 期間掛在 /run/secrets/ 底下。
-  #
-  # 注意這裡**無法**用 ${VAR:?} 的缺值保護（這個欄位要的是變數名稱，不是插值），
-  # 所以「忘了設」的把關落在 Dockerfile：required=true 擋沒給、空值檢查擋給了空字串。
-  next_actions_key:
-    environment: NEXT_SERVER_ACTIONS_ENCRYPTION_KEY

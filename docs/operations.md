@@ -113,14 +113,13 @@ registry 模式把建置移到 CI：`.github/workflows/ci.yml` 的 `publish` job
 | 主機 | `docker login ghcr.io`（唯讀 PAT） | package 設成 public 可略過 |
 | 主機 | 能免互動 `git fetch` 這個 repo 的憑證（見下） | 必要 |
 | GitHub → Environments | 建一個叫 `production` 的。**不必設 required reviewers** —— 核可靠手動觸發，見下面的「發版與回滾」（public repo 想加是免費的，算加強不算必要） | 必要 |
-| repository secret | `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` | 必要 |
 | environment secret | `DEPLOY_SSH_KEY`、`DEPLOY_SSH_KNOWN_HOSTS` | 必要 |
 | environment variable | `DEPLOY_HOST`、`DEPLOY_USER`、`DEPLOY_PATH`（**絕對路徑**，見下） | 必要 |
 | repository variable | `UPLOAD_SIZE_LIMIT` | 選用，預設 `1mb` |
 
-**`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` 一定要放 repository 層**，另外兩個放 environment 層：
-`publish` job 沒有掛 `environment:`，放進 environment 它讀不到，而症狀是 publish 直接紅燈
-說少了這個 secret。
+`DEPLOY_*` 那幾個放 environment 層。**這裡沒有任何 repository 層的 secret** ——
+`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` 曾經要放在這裡，現在它是純粹的執行期值，只存在於
+主機的 `.env`（理由見 [`../apps/web/Dockerfile`](../apps/web/Dockerfile) 的長註解）。
 
 ##### 照著跑
 
@@ -163,15 +162,8 @@ gh variable set DEPLOY_HOST --env production --body "<host>"
 gh variable set DEPLOY_USER --env production --body "<user>"
 gh variable set DEPLOY_PATH --env production --body "/srv/<專案名>"
 
-# 6. Server Action 的 salt 走 repository 層，而且**要從主機的 .env 抄過來**，
-#    不要在這裡另外產一把 —— 兩邊必須相同，理由見下面的「兩個 build 期值」。
-#    **這個 secret 已經有值時不要重設**：它是既有 image 的建置輸入，換掉的代價見
-#    下面的「兩個 build 期值」。
-ssh <user>@<host> "sed -n 's/^NEXT_SERVER_ACTIONS_ENCRYPTION_KEY=//p' /srv/<專案名>/.env" \
-  | gh secret set NEXT_SERVER_ACTIONS_ENCRYPTION_KEY
-
-# 7. 選用：build 期的上傳上限。**要與主機 .env 的值相同**，不一致的話 web 會在啟動時
-#    自己結束行程（理由見下面的「兩個 build 期值」）。不設就是預設的 1mb。
+# 6. 選用：build 期的上傳上限。**要與主機 .env 的值相同**，不一致的話 web 會在啟動時
+#    自己結束行程（理由見下面的「唯一的 build 期值」）。不設就是預設的 1mb。
 gh variable set UPLOAD_SIZE_LIMIT --body "1mb"
 
 # 8. 私鑰用完就刪，它已經在 GitHub 與主機兩邊了
@@ -188,10 +180,7 @@ gh variable list; gh variable list --env production
 真正的驗證是**跑一次**：Actions → Deploy → Run workflow，`ref` 填 `main`。
 
 **先確認 `main` 上有一次綠燈的 CI。** 部署的第二步會等那個 commit 的 CI 結論
-（見下面的「Deploy workflow 做了什麼」），而 `publish` 在 `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`
-設好之前是紅的 —— 所以**設完 secret 之後要讓 `main` 重跑一次 CI**（推一個 commit，或到
-Actions 對那次 run 按 Re-run），否則第一次部署會停在等 CI 那一步，而錯誤訊息講的是 CI，
-不會指回「你剛剛才補上那支 secret」。
+（見下面的「Deploy workflow 做了什麼」）—— 沒有的話第一次部署會停在等 CI 那一步。
 
 CI 綠燈之後，「讀出目前線上的版本」那一步會先單獨探一次 SSH，連不上就直接中止 ——
 所以金鑰或 known_hosts 設錯會在動到線上任何東西**之前**就停下來。但它排在等 CI 之後，
@@ -371,9 +360,8 @@ bash scripts/deploy.sh sha-abc1234     # 設定沒動過的時候才夠用
   可能已經動過線上狀態了，所以寧可排隊。
 - 整個 job 的上限是 **60 分鐘**，必須大於第 2 步自己的 30 分鐘。
 - **`DEPLOY_HOST`／`DEPLOY_USER`／`DEPLOY_PATH` 與兩支 SSH secret 沒有存在性檢查。**
-  漏設任何一個，訊息一律是第 4 步那句「連不上部署主機」——
-  只有 `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` 有專屬的檢查與錯誤訊息（在 `publish` job）。
-  收到那句話時，先照上面「設完確認一次」把兩層的 secret／variable 列出來看。
+  漏設任何一個，訊息一律是第 4 步那句「連不上部署主機」。
+  收到那句話時，先照上面「設完確認一次」把 environment 的 secret／variable 列出來看。
 
 #### 部署成功長什麼樣
 
@@ -471,7 +459,7 @@ DEPLOYED_AT=<UTC 時間>
 > 改用 build context 就地建一份 —— 那就完全繞過了「部署 CI 驗過的那一份」，
 > 而且看起來一切正常。
 
-#### registry 模式的兩個 build 期值
+#### registry 模式唯一的 build 期值
 
 前端絕大多數設定都已經是執行期注入（`apps/web/shared/runtime/config.ts`），
 所以同一份 image 可以部署到任何環境。剩下兩個結構上移不掉：
@@ -486,12 +474,13 @@ standalone 執行期不會重新求值 `next.config.ts`。它同時以執行期�
 > 並**讓伺服器繼續監聽**，對每個請求回 500。那個狀態下 `docker ps` 看起來是 Up，
 > 只有 healthcheck 會紅 —— 等於把可見度外包給那份 healthcheck 還在不在。
 
-**`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`** —— Server Action id 的 hash salt，
-必須在 `next build` 當下就存在。registry 模式下 image 由 CI 建，
-所以**這個值要放進 GitHub secret**，主機 `.env` 那一份在 prod 不生效（dev 仍然讀它）。
+**`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` 不再是其中之一。** 它曾經也是 build 期值
+（而且是整份清單裡唯一一個 `make check-env` 守不到的同步點），現在 image 裡只有一個
+公開的 id salt，真金鑰由 compose 在執行期注入 —— 所以它跟其他秘密一樣，只住在主機的
+`.env`，改了重啟即可。理由與實測見 [`../apps/web/Dockerfile`](../apps/web/Dockerfile) 的長註解。
 
-**這是整份環境變數清單裡唯一一個 `make check-env` 守不到的同步點**，代價要講清楚：
-換掉這個值會讓所有 Server Action id 改變，使用者開著沒重載的分頁按下按鈕會拿到
+歷史留在這裡是因為代價還在，只是換了位置：**重建 image 會讓所有 Server Action id 改變**
+（salt 是常數，但程式碼變了 id 就變），使用者開著沒重載的分頁按下按鈕會拿到
 「Server Action ... was not found on the server」。所以它設一次就不要動 ——
 輪換它跟輪換 `JWT_SECRET_KEY` 不一樣，後者只是要大家重新登入。
 

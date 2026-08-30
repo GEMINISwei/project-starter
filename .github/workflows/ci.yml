@@ -270,17 +270,12 @@ jobs:
         # compose 的變數大量使用 ${VAR:?}（缺少即中止），所以 config 驗證需要一份完整的
         # 環境變數。這些值只用來讓變數插值成立，不會真的啟動任何服務。
         #
-        # **金鑰那一欄不寫死，每次現產一把。** 這裡原本是一串 base64 字面值（解開來是
-        # `ci-only-not-a-real-key-32bytes!!`，本來就是假的），但泛型的 secret 掃描器
-        # （GitGuardian 這類）只看熵，照樣判成外洩的金鑰並寄信 —— 而這是個模板，
-        # 那串字會被**每一個下游繼承**，於是每一個 clone 出去的專案都會收到同一封誤報，
-        # 而且它們沒辦法自己修。安全性上兩者等價（建置完就丟），所以改成現產。
-        #
-        # 產生的值往 $GITHUB_ENV 送一份：底下「建置 web production image」那步要同一把，
-        # 而那裡是 action 的 `with:` 欄位，寫不了指令。
+        # **金鑰那一欄不寫死，每次現產一把。** 寫死的話那串 base64 會被泛型的 secret
+        # 掃描器（GitGuardian 這類）判成外洩的金鑰 —— 值是假的，但這是個模板，
+        # 那串字會被**每一個下游繼承**，於是每個 clone 出去的專案都收到同一封誤報。
+        # 這裡只是要讓 compose 的 `${VAR:?}` 插值成立，現產一把最省事。
         run: |
           key="$(openssl rand -base64 32)"
-          echo "FAKE_NEXT_ACTIONS_KEY=${key}" >> "$GITHUB_ENV"
           cat > .env <<'ENVEOF'
           COMPOSE_PROJECT_NAME=ci
           SYSTEM_NAME=CI
@@ -345,14 +340,13 @@ jobs:
           # build arg 只剩這一個：SYSTEM_NAME／EXPIRE_HOURS／VAPID_PUBLIC_KEY 都已經
           # 改成執行期注入（見 apps/web/shared/runtime/config.ts）。
           build-args: UPLOAD_SIZE_LIMIT=1mb
-          # 對應 Dockerfile builder stage 的 `--mount=type=secret,id=next_actions_key`。
-          # 值是「建立驗證用的 .env」那步現產的，理由寫在那裡。
-          secrets: |
-            next_actions_key=${{ env.FAKE_NEXT_ACTIONS_KEY }}
-          # scope 刻意與 publish 分開（`web-check` vs 完全不快取）。
-          # **不要把它改回跟 publish 共用** —— 這一步用的是上面那把假金鑰，
-          # 而 BuildKit 的 cache key **不包含 secret 的值**，所以共用 scope 會讓
-          # publish 直接命中這一層，把假金鑰烤進正式 image，而且完全沒有症狀。
+          # **沒有 build secret 了。** Server Action 的 id salt 現在是 Dockerfile 裡的
+          # 公開常數，金鑰改由執行期注入 —— 理由見 apps/web/Dockerfile 的長註解。
+          #
+          # scope 與 publish 分開的理由也跟著消失了（原本是怕假金鑰經由共用快取被烤進
+          # 正式 image，而 BuildKit 的 cache key 不含 secret 值）。**還是不要合併** ——
+          # 這一步 build 的是丟棄用的檢查 image，跟 publish 的產物沒有共用的必要，
+          # 分開比較好推理誰污染了誰。
           cache-from: type=gha,scope=web-check
           cache-to: type=gha,scope=web-check,mode=max
 
@@ -754,21 +748,6 @@ jobs:
           # 內建 token 就夠，不必開 PAT。權限由上面的 `packages: write` 給。
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: 確認發布用的 secret 有設
-        # 不倚賴 Dockerfile 那道空值檢查：它在 `RUN` 那層，而任何一次快取命中都會
-        # 讓整層被跳過。這一步在 docker 之前跑，沒有快取可以繞。
-        #
-        # 用 env 傳而不是直接內插進腳本：內插會把值寫進 run 的指令字串。
-        env:
-          ACTIONS_KEY: ${{ secrets.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY }}
-        run: |
-          if [ -z "$ACTIONS_KEY" ]; then
-            echo "::error::缺少 repository secret NEXT_SERVER_ACTIONS_ENCRYPTION_KEY。"
-            echo "::error::它是 Server Action id 的 hash salt，必須與部署主機 .env 的值相同。"
-            echo "::error::設定位置：Settings → Secrets and variables → Actions（**不是** environment）。"
-            exit 1
-          fi
-
       - name: 讀取 APP_VERSION
         # image 的 version label 用 APP_VERSION 而不是 git tag：tag 只有發版時才有，
         # 而 main 上的每一份 image 也該說得出自己是哪一版。
@@ -843,11 +822,6 @@ jobs:
           # .env 的 UPLOAD_SIZE_LIMIT 相同，不同的話 web 會在啟動時印出原因並結束行程
           # （apps/web/instrumentation.ts）—— 那是刻意的，見 docs/operations.md。
           build-args: UPLOAD_SIZE_LIMIT=${{ vars.UPLOAD_SIZE_LIMIT || '1mb' }}
-          # Server Action id 的 hash salt。必須是**跨版次穩定**的值，所以放 secret
-          # 而不是每次 build 讓 Next 亂數產生 —— 換了值等於讓所有沒重載的分頁
-          # 拿到「Server Action ... was not found on the server」。
-          secrets: |
-            next_actions_key=${{ secrets.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY }}
           # 理由同 api 那步：預設會掛上 inline provenance，不寫就跟文件對不起來。
           provenance: false
           # **這裡刻意沒有任何 cache 設定，api 那邊有。**

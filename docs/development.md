@@ -87,10 +87,9 @@ make init
 列在 `scripts/check-env.sh` 的 `HOST_ONLY`，只要出現在 `.env.example` 與 `init.sh` 兩處。
 **這一欄短才是常態** —— 長長一串代表 `.env` 開始承擔它不該承擔的東西。
 
-第五個同步點只有一個，而且**沒有檢查器**：走 registry 部署時
-`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` 與 `UPLOAD_SIZE_LIMIT` 要與 GitHub 那邊一致。
-理由、代價與後者的開機自檢見
-[`operations.md`](operations.md#registry-模式的兩個-build-期值)。
+第五個同步點只有一個，而且**沒有檢查器**：走 registry 部署時 `UPLOAD_SIZE_LIMIT`
+要與 GitHub 那邊的 repository variable 一致。理由、代價與它的開機自檢見
+[`operations.md`](operations.md#registry-模式唯一的-build-期值)。
 
 ### 啟動
 
@@ -536,9 +535,9 @@ tag build 不受這條影響，照跑全套 —— 那份 image 就是要上線�
   push 到 `main` 時那六個都是 skipped，image 的證據來自「同一棵 tree 在 PR 上綠過」
   （靠 ruleset 的 strict 政策撐住）。`if` 因此帶 `always()`，少了它 `main` 上會永遠不再推
   image 而且顯示 skipped —— 理由寫在那個 job 的註解上。
-  它需要 repository secret `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`，**沒設就紅燈** ——
-  而那支 secret 只有 registry 部署需要，所以不走那條路的專案要把這個 job 刪掉，
-  不是放著不管。設定見 [`operations.md`](operations.md#registry-模式build-once-deploy-anywhere)，
+  它**不需要任何 repository secret**（用內建的 `GITHUB_TOKEN` 推 GHCR）。
+  不走 registry 那條路的專案可以把這個 job 刪掉 —— 留著不會紅，只是一直推沒有人用的 image。
+  設定見 [`operations.md`](operations.md#registry-模式build-once-deploy-anywhere)，
   刪除清單見 [`downstream.md`](downstream.md#移除-cd)
 
 ### 覆蓋率門檻
