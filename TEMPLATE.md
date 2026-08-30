@@ -45,8 +45,6 @@ make dev       # 啟動開發環境（首次會建置 image，約 2–5 分鐘�
   `make check-version` 會比對它與 `CHANGELOG.md` 最上面那個版號標題（一個版號標題都
   沒有時它會略過），所以清空之後不會紅。
 
-走完這份清單之後再刪掉 `TEMPLATE.md` 本身。
-
 打開 `http://localhost:<SYSTEM_PORT>`（預設 http://localhost:3000）。系統還沒有超級管理者時
 會自動落在 `/signup`，填入 `make init` 印出的 `REGISTER_KEY` 建立第一個帳號 ——
 **這件事一個部署只能成功一次**。
@@ -111,7 +109,7 @@ cd apps/web && npm run check:tokens
 
 兩件事：分支保護要**設**，CD 要**決定**。
 
-### 5a. repo 設成 public，然後三件事一次做完
+### 5a. repo 設成 public，然後四件事一次做完
 
 **這個模板預設你的 repo 是 public**，因為免費方案上 public 與 private 拿到的東西差很多：
 
@@ -130,18 +128,23 @@ cd apps/web && npm run check:tokens
 **先確認歷史裡沒有夾帶過金鑰再轉 public** —— 公開之後就收不回來了，
 刪 commit 也沒有用（`.env*` 出廠就在 `.gitignore` 裡，正常流程不會有問題）。
 
-轉成 public 之後做這三件（`origin` 在第 1 步 `git clone` 時就綁好了）：
+轉成 public 之後做這四件（`origin` 在第 1 步 `git clone` 時就綁好了）。
+**前兩件是指令**：
 
 ```bash
 gh api --method POST repos/{owner}/{repo}/rulesets --input .github/rulesets/main.json
 gh api --method PATCH repos/{owner}/{repo} -f 'security_and_analysis[secret_scanning][status]=enabled' -f 'security_and_analysis[secret_scanning_push_protection][status]=enabled'
 ```
 
-第三件在網頁上：Settings 的安全那一頁開 **Code scanning**，選 **default setup**、
+上面那行 `POST` 是**首次匯入**用的（開案時正是首次）。日後改過 `main.json` 要改用 `PUT`
+更新既有那一份，否則會多出第二個同名 ruleset —— 指令與症狀見
+[`docs/ci-cd.md`](docs/ci-cd.md#匯入-ruleset)。
+
+**第三件在網頁上**：Settings 的安全那一頁開 **Code scanning**，選 **default setup**、
 query suite 選 **Default**。四個開關的意思與為什麼不要 advanced setup，見
 [`docs/ci-cd.md`](docs/ci-cd.md#repo-設定裡的安全掃描)。
 
-第四件是 **Private vulnerability reporting**（同一頁）。
+**第四件是 Private vulnerability reporting**（同一頁）。
 [`.github/SECURITY.md`](.github/SECURITY.md) 要人走 Security 分頁的
 「Report a vulnerability」回報，而**那個按鈕要開了這個開關才會出現** ——
 沒開的話那份文件指向一個不存在的入口，而回報的人只會改去開公開 issue。
@@ -150,10 +153,6 @@ query suite 選 **Default**。四個開關的意思與為什麼不要 advanced s
 ```bash
 gh api --method PUT repos/{owner}/{repo}/private-vulnerability-reporting
 ```
-
-那行 `POST` 是**首次匯入**用的（開案時正是首次）。日後改過 `main.json` 要改用 `PUT`
-更新既有那一份，否則會多出第二個同名 ruleset —— 指令與症狀見
-[`docs/ci-cd.md`](docs/ci-cd.md#匯入-ruleset)。
 
 **ruleset 那一行不是選配的。** `ci.yml` 讓 merge 到 `main` 那一輪不重跑測試，靠的就是它的
 strict 政策（分支必須是最新才能 merge）—— 沒匯入的話那個前提不成立，而且**不會有任何紅燈**。
@@ -166,8 +165,8 @@ strict 政策（分支必須是最新才能 merge）—— 沒匯入的話那個
 
 ### 5b. 決定要不要用內建的 CD
 
-模板附的 `.github/workflows/` 出廠是**完整的一套**：CI（lint、型別、測試、建置、部署設定
-與型別契約的檢查）加上把 image 推上 GHCR 的 `publish` job，以及手動觸發、部署到自架主機的
+模板附的 `.github/workflows/` 出廠是**完整的一套**：CI（lint、型別、測試、建置、e2e、
+相依漏洞掃描、部署設定與型別契約的檢查）加上把 image 推上 GHCR 的 `publish` job，以及手動觸發、部署到自架主機的
 `deploy.yml`（**手動那一步就是核可閘門**，理由見
 [`docs/operations.md`](docs/operations.md#發版與回滾)）。
 CI 那幾個 job 直接用就好，**要做決定的是 CD 這一段**：
@@ -224,8 +223,9 @@ make check-docs
 
 - **repo 的 Settings → General 最上面那個 `Template repository` 要打勾。**
   整個開案模式建立在它上面 —— 沒勾的話 GitHub 不會顯示 "Use this template" 按鈕，
-  而唯一的替代路徑（clone 之後 `rm -rf .git`）會讓開案的人默默拿到一份帶著模板
-  完整歷史的 repo。它跟 ruleset、secret scanning 一樣是 **GitHub 那一側的設定，
+  開案的人只能改走 clone，而那條路要自己記得 `rm -rf .git` 重開歷史；漏掉那一步
+  就默默拿到一份帶著模板完整歷史的 repo，**而且沒有任何症狀**。
+  它跟 ruleset、secret scanning 一樣是 **GitHub 那一側的設定，
   版控裡看不到、也沒有任何檢查器守得到**，所以列在這裡。
   確認方式：`gh api repos/{owner}/{repo} --jq .is_template` 要回 `true`。
 - 改動要考慮「所有未來專案都會繼承這個決定」。
