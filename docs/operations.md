@@ -713,8 +713,10 @@ Server Action）。兩種做法都會把上面「Session 撤銷」那張表變�
 
 **目前的設定假設 nginx 就是最外層。** nginx 以 `$remote_addr` **覆寫** `X-Real-IP` 與
 `X-Forwarded-For`，後端只讀 `X-Real-IP`，所以用戶端送什麼進來都會被蓋掉。
-那兩份模板共六個 proxy location 全部都要這樣寫，由 `make check-nginx` 守著 ——
-漏一個 location 不會有任何錯誤訊息，只會讓那條路徑上的人共用同一個限流 key。
+兩份模板裡**每個帶 `proxy_pass` 的 location** 都要這樣寫（目前共五個：prod 兩個、
+dev 三個，多一個 `/_next/hmr`），由 `make check-nginx` 守著 —— 漏一個 location 不會有
+任何錯誤訊息，只會讓那條路徑上的人共用同一個限流 key。**數字以檢查器為準**：
+它每次跑完都會把掃到的個數印出來（「都覆寫了（5 個）」），跟這裡對不上就是這句話過期了。
 
 **如果 nginx 前面還有一層 proxy**，直接沿用目前設定會讓 `$remote_addr` 變成那層 proxy 的位址，
 於是**所有使用者共用同一個限流 key**（一個人打爆，全站被鎖）。這時要在
