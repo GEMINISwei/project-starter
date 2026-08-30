@@ -123,7 +123,10 @@ cd apps/web && npm run check:tokens
 
 **private 不是不能用**，但上面每一列都要各自處理，作法散在
 [`docs/ci-cd.md`](docs/ci-cd.md) 的各節裡（每一節都寫了 private 的差別）。
-這裡只講 public 的路。
+**其中只有第一列是持續性費用**，其餘四項是一次性設定 —— 所以選 private 的話，
+現在就去讀〈[Actions 分鐘數與 dependabot](docs/ci-cd.md#actions-分鐘數與-dependabot)〉，
+那一節會告訴你出廠的七組 dependabot entry 要不要調。**public 的話整節跳過，不必決定。**
+底下只講 public 的路。
 
 **先確認歷史裡沒有夾帶過金鑰再轉 public** —— 公開之後就收不回來了，
 刪 commit 也沒有用（`.env*` 出廠就在 `.gitignore` 裡，正常流程不會有問題）。
