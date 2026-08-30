@@ -13,6 +13,20 @@
 
 ### 變更
 
+- **實際跑過一次 `TEMPLATE.md` 第 6 步的刪除流程，補上它漏掉的六分之三。**
+  在拋棄式 worktree 裡 `git rm TEMPLATE.md`、照那張表逐份修、再跑整排檢查器 ——
+  **核心是對的**（`check-docs` 報的就是那三份檔案七條連結，修完全綠），但驗證那一段有兩個洞：
+  - **漏了三處 `check-docs` 掃不到的提及。** 它的 `DOCS` 只含 `.md`，所以
+    `.githooks/pre-push`、`scripts/check-ci.sh` 與 `.github/workflows/ci.yml` 註解裡指著
+    `TEMPLATE.md` 的那三句**永遠不會紅**，而原本的清單只說「還有三處純文字提及」，
+    指的是三份 docs。現在六處分成兩張表列清楚。
+  - **它給的確認指令會噴四筆誤報。** `grep -rn "TEMPLATE.md"` 會命中
+    `PULL_REQUEST_TEMPLATE.md` —— 那是完全不同的檔案而且要留著。加上 `CHANGELOG.md` 的
+    十幾筆（第 1 步已經清空了），下游照著跑會看到一堆看起來要處理、實際不能動的東西。
+    指令改成排除這兩種噪音。
+  - 順帶點名 **`scripts/check-docs.sh` 那兩行不要動** —— `[ -f TEMPLATE.md ] && DOCS+=(…)`
+    正是讓「刪掉之後檢查器安靜跳過」能成立的機制，出現在 grep 結果裡很容易被順手清掉。
+
 - **整份讀過 `AGENTS.md` 與 `README.md`，修掉五處。** 其中兩處是前兩次整理自己造成的：
   - `AGENTS.md` 寫「相依升級**三條**規則」，而 `development.md` 那一節已經改成四條。
   - `README.md` 的文件地圖把 `ci-cd.md` 留在 `downstream.md` 原本那個位置（緊接
