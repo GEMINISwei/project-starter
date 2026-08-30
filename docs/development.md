@@ -46,7 +46,7 @@ git push -u origin main
 | 專案名稱 | `my-app` | 小寫英文字母或數字開頭，只能含 `a-z`、`0-9`、`-`、`_` |
 | 系統名稱 | `My App` | 不可含單引號 |
 | 系統 Port | `3000` | 1–65535 整數 |
-| 資料庫帳號 | `app` | 只能含 `A-Za-z0-9._~-` |
+| 資料庫帳號 | `admin` | 只能含 `A-Za-z0-9._~-` |
 | 資料庫密碼 | 無，必填 | 只能含 `A-Za-z0-9._~-`。這個限制不是美觀問題：它會被插進 compose 組出來的 `postgresql+asyncpg://user:pass@postgres:5432/db`，`@`／`:`／`/` 會把 URL 切在錯的地方 |
 
 資料庫名稱不另外問，直接用專案名稱。`JWT_SECRET_KEY`、`REGISTER_KEY`、
