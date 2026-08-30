@@ -10,9 +10,9 @@
 #
 # 由 `make setup` 透過 `git config core.hooksPath .githooks` 掛上。
 #
-# 三種情況裡 force push 是最嚴重的那個，而且嚴重的原因跟一般專案不同：
-# 這個 repo 會被當成模板，下游是靠 `git merge template/main` 同步的。main 一旦被改寫，
-# 每個下游的共同祖先就不見了，而那不是重跑一次指令能修的 —— 要每個下游各自處理。
+# 三種情況裡 force push 是最嚴重的那個：另外兩件的代價是「繞過 pr-checks」，補得回來；
+# main 被改寫之後，每一個已經 clone 或 fork 的人下一次拉都會撞上分岔的歷史，
+# 而那不是重跑一次指令能修的 —— 要每個人各自處理。
 set -euo pipefail
 
 readonly PROTECTED="main"
@@ -39,8 +39,8 @@ while read -r _local_ref local_sha remote_ref remote_sha; do
     # 遠端那個 commit 還在新的歷史裡嗎？不在就是改寫歷史。
     if ! git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
         echo "擋下：這是對 $PROTECTED 的 force push（遠端的 $remote_sha 不在新歷史裡）。" >&2
-        echo "  這個 repo 會被當成模板，下游靠 git merge template/main 同步 ——" >&2
-        echo "  改寫 $PROTECTED 會抹掉所有下游的共同祖先，而那要每個下游各自處理。" >&2
+        echo "  改寫 $PROTECTED 會讓每一個已經 clone 或 fork 的人撞上分岔的歷史，" >&2
+        echo "  而那要每個人各自處理，不是重跑一次指令能修的。" >&2
         blocked=1
         continue
     fi

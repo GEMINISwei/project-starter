@@ -10,12 +10,14 @@ FastAPI + Next.js 全端 monorepo 起始模板。內部自用，權利保留（�
 
 需要 Docker Desktop、`make`、`openssl`、`uv` 與 Node（版本以 [`apps/web/.nvmrc`](apps/web/.nvmrc) 為準）。
 
+在 GitHub 上按 **"Use this template"** 開一個新 repo（拿到的是一份快照，沒有共同歷史，
+之後也不會有同步 —— 理由見 [`TEMPLATE.md`](TEMPLATE.md) 第 0 節），然後：
+
 ```bash
-git clone <模板位置> my-project && cd my-project
-git remote rename origin template   # 把模板留成可持續拉更新的上游
-make init                           # 互動式產生 .env，不需要網路
-make setup                          # 安裝主機端 lint／測試／型別產生工具
-make dev                            # 啟動開發環境（首次建置 image 約 2–5 分鐘）
+git clone <你開出來的 repo> my-project && cd my-project
+make init   # 互動式產生 .env，不需要網路
+make setup  # 安裝主機端 lint／測試／型別產生工具
+make dev    # 啟動開發環境（首次建置 image 約 2–5 分鐘）
 ```
 
 打開 `http://localhost:<SYSTEM_PORT>`（預設 http://localhost:3000）。系統還沒有超級管理者時

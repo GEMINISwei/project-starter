@@ -115,7 +115,7 @@ cd apps/web && npm run check:tokens
 **先確認歷史裡沒有夾帶過金鑰再轉 public** —— 公開之後就收不回來了，
 刪 commit 也沒有用（`.env*` 出廠就在 `.gitignore` 裡，正常流程不會有問題）。
 
-轉成 public 之後，綁好 `origin`（第 1 步的 `make remote`）再做這三件：
+轉成 public 之後做這三件（`origin` 在第 1 步 `git clone` 時就綁好了）：
 
 ```bash
 gh api --method POST repos/{owner}/{repo}/rulesets --input .github/rulesets/main.json
@@ -159,13 +159,33 @@ CI 那幾個 job 直接用就好，**要做決定的是 CD 這一段**：
 要刪的話逐項清單在 [`docs/downstream.md`](docs/downstream.md#cicd)（那一節同時是日後
 反悔想加回來時的對照表）。
 
-## 6. 刪掉這份檔案
+## 6. 刪掉這份檔案，並修掉指著它的連結
 
 ```bash
 git rm TEMPLATE.md
 ```
 
-順手確認沒有其他地方還指著它：`grep -rn "TEMPLATE.md" . --exclude-dir=.git`。
+**這一步不是刪完就結束。** 有五份文件用 markdown 連結指著這份檔案，刪掉之後
+`make check-docs`（在 CI 的 `deploy-config` job 裡）會逐條列出來變紅 ——
+症狀會出現在你的第一個 PR 上，而且指向你沒動過的檔案。逐份處理：
+
+| 檔案 | 怎麼修 |
+|---|---|
+| `README.md` | 第 4 步改寫時一併處理（4 處：抬頭、Quickstart、最短路徑那段、文件地圖那一列） |
+| [`AGENTS.md`](AGENTS.md) | 「為什麼不做成可同步的上游，見 TEMPLATE.md」整句刪掉 —— 那是模板的自我說明，對你的專案沒有意義 |
+| [`docs/design-system.md`](docs/design-system.md) | 2 處指向 §3「決定視覺」。視覺在第 3 步已經定了，改成敘述你自己的決定，或整句刪掉 |
+| [`docs/downstream.md`](docs/downstream.md) | 3 處。這份文件本身要留著（它講的是開案**之後**的決定），只把指回 `TEMPLATE.md` 的連結拆掉 |
+
+還有三處是**純文字提及**（不是連結，所以 `check-docs` 不會紅，但一樣會過期）：
+[`docs/extending.md`](docs/extending.md) 與 [`docs/development.md`](docs/development.md)
+各有一句「見 `TEMPLATE.md` 第 2 步」指向範例模組，
+[`docs/architecture.md`](docs/architecture.md) 的移除模組表格列著 `TEMPLATE.md`。
+刪掉範例模組時會一起處理到，這裡順手確認：
+
+```bash
+grep -rn "TEMPLATE.md" . --exclude-dir=.git
+make check-docs
+```
 
 ---
 
@@ -174,9 +194,15 @@ git rm TEMPLATE.md
 如果你**不是**在開案，而是在維護模板這個 repo（判斷方法：`git remote -v`
 這個 repo 的 `origin` 就是模板本身）：
 
+- **repo 的 Settings → General 最上面那個 `Template repository` 要打勾。**
+  整個開案模式建立在它上面 —— 沒勾的話 GitHub 不會顯示 "Use this template" 按鈕，
+  而唯一的替代路徑（clone 之後 `rm -rf .git`）會讓開案的人默默拿到一份帶著模板
+  完整歷史的 repo。它跟 ruleset、secret scanning 一樣是 **GitHub 那一側的設定，
+  版控裡看不到、也沒有任何檢查器守得到**，所以列在這裡。
+  確認方式：`gh api repos/{owner}/{repo} --jq .is_template` 要回 `true`。
 - 改動要考慮「所有未來專案都會繼承這個決定」。
 - 每次實質改動在 [`CHANGELOG.md`](CHANGELOG.md) 留一筆。
 - 必要時升 `apps/api/app/config.py` 的 `APP_VERSION`。開發階段一律 `0.x.x`。
 
-**只有第二條有檢查器在守**（CI 的 `pr-checks` 擋漏寫與寫錯地方，`make check-version`
-擋版號對不上）。第一條與第三條靠自律。
+**只有第三條有檢查器在守**（CI 的 `pr-checks` 擋漏寫與寫錯地方，`make check-version`
+擋版號對不上）。其餘三條靠自律。

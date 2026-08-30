@@ -13,6 +13,31 @@
 
 ### 變更
 
+- **清掉舊「可同步上游」模型的五處殘留，並移除 `make remote`。** 改成 GitHub template
+  repository 之後，還有五個地方在描述已經不存在的模型，而檢查器全部抓不到（`check-docs`
+  守的是路徑與錨點存在，守不到「這段文字描述的東西已經沒了」）：`README.md` 的
+  Quickstart 教人把模板留成上游、`docs/development.md` 描述 `make remote` 對 `template`
+  這個名稱的特殊行為（`remote.sh` 裡從來沒有那段邏輯）、`.githooks/pre-push` 的註解與
+  **執行期訊息**都說下游靠 `git merge template/main` 同步、`TEMPLATE.md` 指向一個不存在的
+  步驟。連帶：
+  - 移除 `make remote` 與 `scripts/remote.sh`。快照模式下正常開案（"Use this template"
+    之後 `git clone`）`origin` 早就綁好了，它一次都不會被呼叫；剩下的退路
+    （下載 ZIP、`rm -rf .git`）用兩行標準 git 指令就夠。而它最複雜的那段
+    （判斷共同祖先、警告 unrelated histories）本來就是為了舊模型寫的。
+  - `TEMPLATE.md` 第 6 步從「順手 grep 一下」改成逐檔清單。**照原本的寫法走完清單會讓
+    下游第一個 PR 紅燈** —— `git rm TEMPLATE.md` 之後有 12 條 markdown 連結斷掉，散在
+    五個檔案，而 `check-docs` 在 CI 的 `deploy-config` job 裡。
+  - `TEMPLATE.md` 的附錄補上「repo 的 `Template repository` 開關要打勾」。整個開案模式
+    建立在它上面，而它跟 ruleset、secret scanning 一樣是 GitHub 那一側的設定 ——
+    版控裡看不到，也沒有任何檢查器守得到。
+  - `docs/downstream.md` 的標題層級改成四個主題各自 `##`（原本三個主題擠在 `CI/CD`
+    底下當 `###`），並修掉兩處指反方向的「見上一節／下一節」。標題文字沒動，
+    既有的錨點連結全部還有效。
+
+- `make init` 問資料庫帳號時的預設值從 `admin` 改成 `app`，與 `.env.example` 和
+  `docs/development.md` 的表格一致。`check-env` 比對的是變數名不是預設值，所以這三處
+  飄了沒有任何症狀。
+
 - **改用 GitHub template repository 模式，不再提供可同步的上游。** 新專案用
   "Use this template" 開出來，拿到的是一份快照：沒有共同歷史、沒有 `template` remote、
   之後也不會有同步。**所以新專案可以改任何地方**，包含 `shared/` 與組裝層。

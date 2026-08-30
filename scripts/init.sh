@@ -47,9 +47,9 @@ else
     done
 
     while :; do
-        printf '資料庫帳號 [admin]: '
+        printf '資料庫帳號 [app]: '
         read -r postgres_user
-        postgres_user="${postgres_user:-admin}"
+        postgres_user="${postgres_user:-app}"
         case "$postgres_user" in
             *[!A-Za-z0-9._~-]*) echo "資料庫帳號只能包含英文字母、數字、.、_、~、-" ;;
             *) break ;;
@@ -142,6 +142,9 @@ else
 fi
 
 # 這裡刻意不問遠端網址：本機開發測試常常不想綁任何儲存庫，而這一步跑完就該能 make dev。
+# 走到這個分支代表不是 clone 來的 —— 正常開案（"Use this template" 之後 git clone）
+# origin 早就綁好了，看不到這兩行。
 if ! git remote | grep -q .; then
-    echo "尚未綁定任何 git remote，需要時執行 make remote"
+    echo "尚未綁定任何 git remote。需要的話："
+    echo "    git remote add origin <你的 repo 網址> && git push -u origin main"
 fi
