@@ -138,7 +138,7 @@ jobs:
         # `-h 127.0.0.1` 是必要的：不帶主機時 pg_isready 走 unix socket，而那個 socket
         # 在 initdb 期間就已經在了，檢查會提早轉綠（同 compose 的 healthcheck）。
         run: |
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             docker exec postgres pg_isready -h 127.0.0.1 -U ci -d ci >/dev/null 2>&1 && \
               echo "postgres ready" && exit 0
             sleep 2
@@ -750,6 +750,12 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # 底下兩個 attest 步驟要的：id-token 用來跟 Sigstore 換一張這次 run 的短期憑證，
+      # attestations 用來把簽好的證明寫回這個 repo 的 attestation store。
+      # 兩個都是**寫入**權限，所以刻意留在這個 job 而不是提到檔案層的 permissions ——
+      # 那裡是 contents: read，其餘 job 一個都不需要這些。
+      id-token: write
+      attestations: write
     env:
       # **`sha-<short>` 的長度是跨檔案的契約，所以釘死而不是靠預設值。**
       # `deploy.yml` 由 commit SHA 推導要部署的 image tag（取前 N 碼），兩邊對不上的話
@@ -819,6 +825,7 @@ jobs:
             org.opencontainers.image.version=${{ steps.version.outputs.value }}
 
       - name: 建置並推送 api image
+        id: build-api
         uses: docker/build-push-action@v7
         with:
           context: apps/api
@@ -836,6 +843,7 @@ jobs:
           cache-from: type=gha,scope=api
 
       - name: 建置並推送 web image
+        id: build-web
         uses: docker/build-push-action@v7
         with:
           context: apps/web
@@ -861,11 +869,46 @@ jobs:
           # 只有金鑰是錯的。每次重建的那兩三分鐘，換的是「發布出去的 image
           # 一定用當下的 secret 建成」。
 
+      # ── build provenance attestation ──────────────────────────────────────
+      #
+      # **這補的是 deploy.yml 信任鏈裡唯一一段靠推論撐著的地方。** 那份 workflow 等 CI
+      # 綠燈、篩 event == push，然後在主機上 pull `sha-<short>` —— 但「這個 tag 指向的
+      # image 真的是那次 run 建出來的」原本沒有任何東西在驗。tag 是可以被重指的，
+      # 任何拿得到 packages: write 的東西都能覆蓋它，而覆蓋之後 CI 仍然是綠的。
+      #
+      # **跟 `provenance: false` 不衝突，那兩件事是分開的。** 那一行關的是 buildx 塞進
+      # image manifest 的 inline provenance（理由見上面兩個建置步驟的註解，
+      # 以及 docs/operations.md）；這裡產生的證明存在 Sigstore 的 transparency log，
+      # image 本身仍然是純 image。所以原本那個決定與它的敘述都不必改。
+      #
+      # 主體是 **digest 不是 tag**，所以一份證明涵蓋這次推出去的每一個 tag
+      # （main / sha-xxx / 1.2.3 / latest 全部指向同一份 digest）。
+      #
+      # 驗證方式（主機上或任何地方）：
+      #   gh attestation verify oci://ghcr.io/<owner>/<repo>/api:<tag> --repo <owner>/<repo>
+      - name: 產生 api image 的 build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ghcr.io/${{ github.repository }}/api
+          subject-digest: ${{ steps.build-api.outputs.digest }}
+          # 同時以 OCI referrer 的形式推回 GHCR。沒有它證明只存在 Sigstore 那一側，
+          # 而離線或受限網路的主機驗不到 —— 而那正是自架主機常見的狀態。
+          push-to-registry: true
+
+      - name: 產生 web image 的 build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-name: ghcr.io/${{ github.repository }}/web
+          subject-digest: ${{ steps.build-web.outputs.digest }}
+          push-to-registry: true
+
       - name: 印出這次推出去的 tag
         # 部署時要貼哪個字串，直接從這裡複製，不必去 registry 翻。
         run: |
-          echo "### 已發布" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
-          echo "${{ steps.meta-api.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
-          echo "${{ steps.meta-web.outputs.tags }}" >> "$GITHUB_STEP_SUMMARY"
-          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### 已發布"
+            echo '```'
+            echo "${{ steps.meta-api.outputs.tags }}"
+            echo "${{ steps.meta-web.outputs.tags }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

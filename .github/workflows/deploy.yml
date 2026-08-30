@@ -99,6 +99,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SHA: ${{ steps.target.outputs.ref }}
         run: |
+          # shellcheck disable=SC2016  # 底下 --jq 的 $runs 是 jq 的變數，單引號是對的
           for _ in $(seq 1 60); do
             # 空陣列與「跑到一半」都會讓 .conclusion 是 null，但兩者要分開講：
             # 前者多半是填錯 ref（那個 commit 沒進過 main），乾等 30 分鐘沒有意義。

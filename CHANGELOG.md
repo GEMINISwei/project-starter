@@ -13,6 +13,29 @@
 
 ### 變更
 
+- **`publish` 為兩個 image 產生 build provenance attestation。** 補的是 `deploy.yml`
+  信任鏈裡唯一一段靠推論撐著的地方：它等 CI 綠燈、篩 `event == push`，然後在主機上
+  pull `sha-<short>` —— 但 tag 是可以被重指的，任何拿得到 `packages: write` 的東西都能
+  覆蓋它，而覆蓋之後 CI 仍然是綠的。證明簽在 Sigstore 上，並以 OCI referrer 一起推回
+  GHCR（離線或受限網路的主機才驗得到）；主體是 digest 不是 tag，所以一份涵蓋那次推出去的
+  每一個 tag。驗證方式與「`deploy.sh` 還沒有自動跑它」寫在
+  [`docs/operations.md`](docs/operations.md)。
+  **`provenance: false` 沒有動** —— 那一行關的是 buildx 塞進 image manifest 的 inline
+  provenance，跟這份存在 image 外面的證明是兩件事，原本的決定與敘述都還成立。
+
+- **`make check-ci` 加上 actionlint。** 這支原本守的是「三處手抄的東西對不上」
+  （CI 內嵌指令 vs. `scripts/`、ruleset vs. job 名單），而「這份 YAML 自己就寫錯了」
+  沒有任何人在看 —— workflow 的錯誤幾乎都要推上去才會現形。走釘死版本的 docker image
+  （Docker Desktop 本來就是前置需求，而 ubuntu runner 沒有內建 actionlint），
+  本機與 CI 跑同一個版本。沒有 docker 時會明講跳過了什麼，不靜靜放行。
+  導入時它報的三條都就地處理掉了，**沒有加 `.github/actionlint.yaml` 全域抑制**：
+  `ci.yml` 的等待迴圈改用 `for _`、step summary 的五個 `>>` 收成一個區塊，
+  `deploy.yml` 那條 jq 的誤報加了一行帶理由的 `# shellcheck disable`。
+
+- `docs/downstream.md` 新增〈部署主機的架構要先決定〉。`operations.md` 早就寫了
+  「只建 linux/amd64、arm64 主機拉得下來跑不起來」的症狀，缺的是**這個決定該在什麼時機做** ——
+  選主機的時候，不是第一次部署失敗的時候。
+
 - **清掉舊「可同步上游」模型的五處殘留，並移除 `make remote`。** 改成 GitHub template
   repository 之後，還有五個地方在描述已經不存在的模型，而檢查器全部抓不到（`check-docs`
   守的是路徑與錨點存在，守不到「這段文字描述的東西已經沒了」）：`README.md` 的

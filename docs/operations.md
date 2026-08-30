@@ -503,19 +503,36 @@ standalone 執行期不會重新求值 `next.config.ts`。它同時以執行期�
 架構。**部署主機是 arm64 的話 image 拉得下來、跑不起來**，而同一台主機上 `make prod` 卻是
 好的（就地建置用的是主機自己的架構）—— 症狀不會指回這裡，所以先知道。要多平台就在那兩步
 加上 `platforms`，代價是 arm64 那一份走 QEMU 模擬，`publish` 的時間大約會變成兩到三倍，
-web image 的 `next build` 尤其慢。
+web image 的 `next build` 尤其慢。比 QEMU 划算的做法是拿 `ubuntu-24.04-arm`
+（public repo 免費）跑一個平行的 job 再合 manifest，兩份都是原生建置。
+**這個決定的時機是「選部署主機」的時候**，見
+[`downstream.md`](downstream.md#部署主機的架構要先決定)。
 
 **沒有 image 層的漏洞掃描。** `security` job 查的是 npm 與 uv 相依的已知漏洞
 （範圍見 [`development.md`](development.md#安全-advisory)），base image 裡的 OS 套件不在裡面。
 
-**沒有 provenance 與 SBOM。** 推上去的是純 image，沒有附建置來源的簽章或料件清單。
+**有 build provenance attestation，沒有 SBOM。** `publish` 為兩個 image 各產生一份
+建置來源證明（`actions/attest-build-provenance`），簽在 Sigstore 上並以 OCI referrer
+的形式一起推回 GHCR。主體是 **digest 不是 tag**，所以一份證明涵蓋那次推出去的每一個 tag。
+**沒有**料件清單（SBOM）—— 要的話在兩個建置步驟加 `sbom: true`。
 
-**這一條靠明寫維持**：`docker/build-push-action` 從 v6 起，push 時**預設**會掛上 min 模式的
-inline provenance，所以 `publish` 的兩個建置步驟都寫了 `provenance: false`。拿掉那兩行的話
-image 就不再是純 image 了，而這件事從 workflow 檔面上看不出來 —— 要翻 buildx 的指令列才知道。
+驗證一份 image 真的是這個 repo 的 CI 建出來的：
 
-要做的話：把那兩處改成 `provenance: mode=max`、加上 `sbom: true`，再給 job 一個
-id token 的權限，不會動到現有流程 —— 記得連這一節一起改。
+```bash
+gh attestation verify oci://ghcr.io/<owner>/<repo>/api:<tag> --repo <owner>/<repo>
+```
+
+**這一步補的是〈[發版與回滾](#發版與回滾)〉那條鏈裡唯一一段靠推論撐著的地方。**
+`deploy.yml` 等 CI 綠燈、篩 `event == push`，然後在主機上 pull `sha-<short>` —— 但 tag
+是可以被重指的，任何拿得到 `packages: write` 的東西都能覆蓋它，而覆蓋之後 CI 仍然是綠的。
+`deploy.sh` 目前**還沒有**自動跑這個驗證（主機要裝 `gh` 並登入），所以它現在是手動的
+一道確認；要自動化就加在 `deploy.sh` 拉 image 之後、起容器之前。
+
+**image 本身仍然是純 image。** 上面那份證明存在 image 外面，跟 buildx 的 inline
+provenance 是兩件事 —— 後者刻意關著。`docker/build-push-action` 從 v6 起 push 時**預設**
+會掛上 min 模式的 inline provenance，所以那兩個建置步驟都寫了 `provenance: false`。
+拿掉那兩行的話 image 就不再是純 image 了，而這件事從 workflow 檔面上看不出來 ——
+要翻 buildx 的指令列才知道。
 
 **`latest` 這個 tag 不是「最新的一次建置」。** 它由 `metadata-action` 的 `latest=auto`
 掛在**語意化版號**上，所以只有推 `v*` tag 才會移動；`main` 上的每一次合併都推了 image，

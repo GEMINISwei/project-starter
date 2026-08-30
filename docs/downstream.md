@@ -120,6 +120,20 @@ OS 層的 CVE 最多會延後一個月修補，期間完全沒有症狀。理由
 比較划算的順序是先回頭問「這個 repo 可以 public 嗎」，那一步同時解決分鐘數、分支保護與
 安全掃描三件事。真的要自架，至少用容器化或 ephemeral runner，不要裸機常駐。
 
+## 部署主機的架構要先決定
+
+**只在你要用內建的 CD（registry 模式）時才需要讀這一節。** `make prod` 就地建置不受影響。
+
+`publish` 出廠只建 `linux/amd64`，因為它沒有指定 `platforms`，出來的就是 runner 的原生架構。
+**部署主機是 arm64 的話 image 拉得下來、跑不起來** —— 而同一台主機上 `make prod` 卻是好的
+（就地建置用的是主機自己的架構），所以症狀不會指回 `publish`。
+
+現在 arm64 的雲端主機（Graviton、Ampere）常常比同價位的 amd64 划算，所以這不是罕見情況。
+**選主機的時候就決定**，不要等到第一次部署失敗：改法與兩種做法的取捨（QEMU 模擬
+vs. `ubuntu-24.04-arm` 平行 job）見
+[`operations.md`](operations.md#registry-模式build-once-deploy-anywhere) 那一節裡
+「只建 linux/amd64」那一段 —— 那一節是這個主題的 owner。
+
 ## 移除 CD
 
 ### 先分清楚「不啟用」與「移除」

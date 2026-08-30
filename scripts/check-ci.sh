@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 #
-# 確認 CI、本機的 check 腳本與分支保護三者沒有各自漂移。
+# 檢查 workflow 本身，以及它與本機 check 腳本、分支保護之間有沒有漂移。
 #
-# 守兩件事：
+# 守三件事：
 #
 #   1. `.github/workflows/ci.yml` 真的跑到 lint／typecheck／test／build 四支腳本裡的每一條指令。
 #   2. `.github/rulesets/main.json`（**選配**）要求的 status check，恰好是 ci.yml 裡
 #      所有會在 PR 上跑的 job。檔案不在就跳過這一半 —— 見底下。
+#   3. workflow 檔本身過得了 actionlint（表達式、`if:` 條件、action 的輸入、
+#      以及 `run:` 區塊裡的 shell）。
+#
+# 第 3 件事跟前兩件是不同層的問題，放在同一支是因為守的是同一份檔案。前兩件抓的是
+# 「三處手抄的東西對不上」，actionlint 抓的是「這份 YAML 自己就寫錯了」——
+# 而 workflow 的錯誤幾乎都要推上去才會現形，本機沒有任何東西在跑它。
 #
 # 為什麼 CI 不乾脆直接呼叫 `make lint` 那幾個 target（那樣就沒有第 1 件事要守了）：
 # 那幾支腳本一支同時跑前後端兩邊，而 CI 刻意把 api 與 web 切成兩個平行 job ——
@@ -101,4 +107,35 @@ if [ "$failed" -ne 0 ]; then
     exit 1
 fi
 
+# --- 3. workflow 檔本身過得了 actionlint ---
+
+# **版本釘死**：actionlint 每次升級都可能多報幾條，而那會讓一個沒動過 workflow 的 PR
+# 突然變紅。升級是刻意的動作，不是自動發生的 —— 沒有任何檢查器在比對這個版本，
+# 跟 apps/web/Dockerfile 的 ARG NODE_VERSION 同一類（見 docs/development.md）。
+readonly ACTIONLINT_IMAGE="rhysd/actionlint:1.7.12"
+
+# 走 docker 而不是要求主機裝 actionlint：這個 repo 本來就把 Docker Desktop 列為前置需求，
+# 而 ubuntu runner **沒有**內建 actionlint（shellcheck 有，所以 check-shell 可以直接用）。
+# 用 image 的話本機與 CI 跑的是同一個版本，不會出現「本機綠、CI 紅」。
+#
+# 沒有 docker 就跳過，比照 check-nginx 的語法檢查那一半：前兩件事是純靜態的，
+# 已經跑完了，不該因為 docker 沒開就把整支判成失敗。**訊息要明講跳過了什麼** ——
+# 靜靜跳過的檢查器等於沒有檢查器。
+if ! command -v docker >/dev/null 2>&1 || ! docker info >/dev/null 2>&1; then
+    echo "ci.yml 跑到了 check 的每一條指令，ruleset（若有）也涵蓋所有 PR 上的 job"
+    echo "actionlint 略過（沒有可用的 docker）—— CI 的 deploy-config job 會跑到"
+    exit 0
+fi
+
+# -no-color：這支的輸出會進 CI 的 log，ANSI 跳脫碼在那裡只是雜訊。
+# -oneline：一條一行，grep 得動，也不會讓錯誤訊息在 CI 的 log 裡散成三行。
+docker run --rm -v "$REPO_ROOT:/repo" --workdir /repo "$ACTIONLINT_IMAGE" -no-color -oneline || {
+    echo >&2
+    echo "actionlint 有發現（上面每一條都帶檔名與行號）。" >&2
+    echo "  誤報請在該 run: 區塊加一行 # shellcheck disable=SCxxxx 並寫明理由，" >&2
+    echo "  不要加 .github/actionlint.yaml 全域抑制 —— 那會連同類的真問題一起關掉。" >&2
+    exit 1
+}
+
 echo "ci.yml 跑到了 check 的每一條指令，ruleset（若有）也涵蓋所有 PR 上的 job"
+echo "workflow 檔通過 actionlint（${ACTIONLINT_IMAGE}）"
