@@ -13,6 +13,20 @@
 
 ### 變更
 
+- **結掉「dependabot 的取捨要不要做成開案流程的一步」這個待續問題：不加。**
+  那個決定其實是「是不是 private」的下游 —— `dependabot.yml` 的成本只有 Actions 分鐘數
+  一種，而 public 無限、private 才是整個帳號每月 2000 分鐘共用。`TEMPLATE.md` §5a
+  已經在強迫做 public/private 的決定了，再加一步等於要 public 專案決定一件對他們
+  成本為零的事。改成把 §5a 那句模糊的指路（「作法散在 `ci-cd.md` 的各節裡」）
+  **指名〈Actions 分鐘數與 dependabot〉** —— 那是五列裡唯一有持續性費用的一條，
+  其餘四項都是一次性設定。public 的人照舊整節跳過。
+
+- **`.githooks/pre-push` 的執行期訊息點名了一個不存在的 job。** 它被擋下時說
+  「CI 的 **changelog** job 只在 PR 上跑」，但 `changelog` 早就併進 `pr-checks` 了。
+  這是**執行期訊息**，出現的時機正好是使用者被擋住、最需要正確資訊的那一刻，
+  而沒有任何檢查器看得到它（`check-shell` 驗語法，不驗訊息內容講的是不是真的）。
+  改成指 `pr-checks`，並順帶說明它涵蓋的三個檢查。
+
 - **修掉五處懸空的指路 —— 全是 `docs/ci-cd.md` 那次拆分自己留下的。** 把〈分支保護〉
   〈匯入 ruleset〉從 `development.md` 搬到 `ci-cd.md` 時，只修了 `.md` 之間的連結，
   **漏掉程式碼註解裡指向那兩節的**：`scripts/check-ci.sh` 三處、

@@ -46,7 +46,8 @@ while read -r _local_ref local_sha remote_ref remote_sha; do
     fi
 
     echo "擋下：直接 push 到 ${PROTECTED}。改推一個分支再開 PR ——" >&2
-    echo "  CI 的 changelog job 只在 PR 上跑，直接 push 會整個繞過它。" >&2
+    echo "  CI 的 pr-checks job 只在 PR 上跑（CHANGELOG、驗收條件、改到既有測試" >&2
+    echo "  三個檢查），直接 push 會整個繞過它。" >&2
     blocked=1
 done
 
