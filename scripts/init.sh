@@ -129,11 +129,9 @@ else
     git init -q -b main
     git add .
     git commit -q -m "initial commit"
-    # 走到這一支代表不是 clone 來的（clone 會帶著 .git）。這樣開出來的歷史與模板沒有共同
-    # 祖先，日後 `git merge template/main` 會直接以 refusing to merge unrelated histories
-    # 失敗 —— 而那要到第一次同步才會發現，那時專案已經長出來了。所以在這裡就講。
-    echo "已建立全新的 git 歷史（與模板沒有共同祖先）"
-    echo "若這是從模板開出來的專案、日後要拉模板更新，請改用 git clone 開案（見 README）"
+    # 走到這一支代表不是 clone 來的（clone 會帶著 .git）。這個模板是快照式的，
+    # 全新歷史正是預期結果，所以這裡只是說明，不是警告。
+    echo "已建立全新的 git 歷史"
 fi
 
 register_key="$(sed -n 's/^REGISTER_KEY=//p' .env)"

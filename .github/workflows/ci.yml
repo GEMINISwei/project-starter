@@ -476,8 +476,7 @@ jobs:
           fi
 
           echo "::error::這個 PR 動到 apps/、scripts/ 或 infra/，但沒有更新 CHANGELOG.template.md。"
-          echo "::error::請補一筆條目，開頭帶同步影響標記並寫明**下游同步時需要做什麼**"
-          echo "::error::（標記的意思見 CHANGELOG.template.md 檔頭，make check-version 會擋）。"
+          echo "::error::請補一筆條目說明改了什麼（格式見 CHANGELOG.template.md 檔頭）。"
           echo "::error::純重構或不影響下游時，在 PR 標題加上 [skip changelog]。"
           exit 1
 

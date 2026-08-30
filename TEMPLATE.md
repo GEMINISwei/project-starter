@@ -4,7 +4,24 @@
 `git rm TEMPLATE.md`——留著它只會讓後續開發的人以為自己還在模板裡。
 
 長期有效的規則不在這裡：開發規則見 [`AGENTS.md`](AGENTS.md)，
-同步紀律見 [`docs/downstream.md`](docs/downstream.md)。
+開案之後的一次性決定見 [`docs/downstream.md`](docs/downstream.md)。
+
+## 0. 這個模板是快照，不是上游
+
+**用 GitHub 的 "Use this template" 開新 repo**（或自己 clone 之後 `rm -rf .git` 重開歷史）。
+你拿到的是一份**複製品**：沒有共同歷史、沒有 `template` remote、之後也不會有同步。
+
+**所以這個 repo 裡的每一個檔案都是你的**，包含 `shared/` 與組裝層（後端 `app/`、
+前端 `config/`）—— 想改就改，不必顧慮任何上游。
+
+**代價是模板日後的修正不會流過來**，包含安全修正。這是刻意的取捨，理由是：可同步的上游
+要能成立，前提是每個專案都遵守「不要改 `shared/` 與組裝層」那條紀律 —— 而多個平行開發的
+專案幾乎必然會破壞它。破壞之後，你付了同步機制的全部成本卻拿不到好處（每次拉更新都變成
+手動解衝突）。真的有東西需要跨專案更新時，正確的作法是把它做成套件（npm／PyPI），
+而不是複製整個 repo。
+
+有需要的話，自己去模板的 CHANGELOG 讀一讀、手動搬需要的修正 —— 那是**你主動的動作**，
+不是一條要維護的管線。
 
 ## 1. 開案
 
@@ -12,22 +29,16 @@
 [`apps/web/.nvmrc`](apps/web/.nvmrc) 為準。
 
 ```bash
-git clone <模板位置> my-project
+git clone <你用 Use this template 開出來的 repo> my-project
 cd my-project
-
-# 把模板留成可持續拉更新的上游
-git remote rename origin template
 
 make init      # 互動式產生 .env（專案名、port、DB 帳密、各項祕密），不需要網路
 make setup     # 驗證 Node 版本，安裝主機端 lint／測試／型別產生工具
-make remote    # 綁定你自己的儲存庫（名稱填 origin）；只在本機試跑可以略過
 make dev       # 啟動開發環境（首次會建置 image，約 2–5 分鐘）
 ```
 
-`<模板位置>` 由提供模板的人告知，git URL 或本機路徑都可以。
-
-**不要 `rm -rf .git` 重開一段歷史。** 保留 clone 下來的歷史是同步流程唯一的前提，
-理由見 [`docs/downstream.md`](docs/downstream.md#拉模板的更新)。`make remote` 會順便檢查並提醒你。
+**開案先刪兩個檔案**：[`CHANGELOG.template.md`](CHANGELOG.template.md)（模板自己的紀錄，
+你的寫在 [`CHANGELOG.md`](CHANGELOG.md)），以及走完這份清單之後的 `TEMPLATE.md` 本身。
 
 打開 `http://localhost:<SYSTEM_PORT>`（預設 http://localhost:3000）。系統還沒有超級管理者時
 會自動落在 `/signup`，填入 `make init` 印出的 `REGISTER_KEY` 建立第一個帳號 ——
@@ -146,17 +157,9 @@ CI 那幾個 job 直接用就好，**要做決定的是 CD 這一段**：
 那是 `make init` 產生的預設值。**但它管不到 GitHub 那一側** —— 上面那個決定還是要做。
 
 要刪的話逐項清單在 [`docs/downstream.md`](docs/downstream.md#cicd)（那一節同時是日後
-反悔想加回來時的對照表）。**先刪完再走下一步** —— 下一步的「就此分家」會把
-`docs/downstream.md` 一起刪掉。
+反悔想加回來時的對照表）。
 
-## 6. 決定要不要繼續跟上游
-
-- **要繼續拉模板更新**：留著 `template` 這個 remote 與 `docs/downstream.md`，
-  之後照那份文件的紀律走（重點：不要改 `shared/` 與組裝層）。
-- **就此分家**：`git remote remove template`，並刪掉 `docs/downstream.md`
-  與 `AGENTS.md` 裡指向它的那一行。分家之後 `shared/` 就是你自己的了，隨便改。
-
-## 7. 刪掉這份檔案
+## 6. 刪掉這份檔案
 
 ```bash
 git rm TEMPLATE.md
@@ -169,13 +172,12 @@ git rm TEMPLATE.md
 ## 附錄：只有在改「模板本身」時才適用的規則
 
 如果你**不是**在開案，而是在維護模板這個 repo（判斷方法：`git remote -v`
-**沒有**一個叫 `template` 的遠端，因為你就是上游）：
+這個 repo 的 `origin` 就是模板本身）：
 
 - 改動要考慮「所有未來專案都會繼承這個決定」。
-- 每次實質改動在 [`CHANGELOG.template.md`](CHANGELOG.template.md) 留一筆，開頭帶同步影響標記
-  （`[同步:無]`／`[同步:要動手]`／`[同步:破壞性]`）並註明**下游同步時需要做什麼**。
-  根目錄的 `CHANGELOG.md` 是留給下游專案的，模板不碰它。
+- 每次實質改動在 [`CHANGELOG.template.md`](CHANGELOG.template.md) 留一筆。
+  根目錄的 `CHANGELOG.md` 是留給用這個模板開出來的專案的，模板不碰它。
 - 必要時升 `apps/api/app/config.py` 的 `APP_VERSION`。開發階段一律 `0.x.x`。
 
 **只有第二條有檢查器在守**（CI 的 `pr-checks` 擋漏寫與寫錯地方，`make check-version`
-擋漏標記與版號對不上）。第一條與第三條靠自律。
+擋版號對不上）。第一條與第三條靠自律。

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 #
-# 確認版號三者一致（APP_VERSION、CHANGELOG 的最新版號條目、發版時的 git tag），
-# 並確認模板的每一筆條目都帶同步影響標記。
+# 確認版號三者一致：APP_VERSION、CHANGELOG 的最新版號條目、發版時的 git tag。
 #
 # 這支存在的理由：`APP_VERSION` 與變更紀錄是下游判斷「落後多少、同步要做什麼」的依據
 # （見 docs/downstream.md），而三者對不上是**沒有症狀**的：CI 的 pr-checks
@@ -10,9 +9,6 @@
 # registry 模式讓這件事從紀律問題變成正確性問題：image tag 由 git tag 決定，
 # 而 image 裡的 /openapi.json 印的是 APP_VERSION。兩者不一致的話，
 # 線上跑的 v1.2.0 會自稱 1.1.0，追問題的人會被帶到錯的 commit。
-#
-# 同步影響標記併在這一支、不另開一個目標：兩件事讀的是同一份檔案、在同一個時機失效
-# （寫條目的當下），分成兩支只會多一個沒有人記得跑的指令。
 set -euo pipefail
 
 # shellcheck source=scripts/lib/common.sh
@@ -64,33 +60,6 @@ else
             echo "（這個 repo 被判定為模板本身，判準是 TEMPLATE.md 還在。" >&2
             echo "  這裡其實是下游專案的話，導入完成就該刪掉 TEMPLATE.md，見 docs/downstream.md。）" >&2
         fi
-        exit 1
-    fi
-fi
-
-# ── 同步影響標記 ──────────────────────────────────────────────────────────────
-#
-# 下游要能只讀跟自己有關的那幾筆。沒有標記的話那份 diff 得整篇讀完才知道哪些要動手，
-# 而絕大多數條目其實是「不用做什麼」—— 標記把 N 筆的閱讀量壓成需要處理的那幾筆。
-#
-# 只檢查最外層的 `- ` 條目：巢狀的細項屬於上一筆，重複標記只是噪音。
-# 檔頭（第一個 `## ` 之前）不算，那裡是說明不是條目。
-#
-# 下游把這份檔案刪掉的話就跳過 —— 那代表它不再跟模板同步，這個檢查沒有意義。
-if [ -f "$TEMPLATE_CHANGELOG" ]; then
-    unmarked="$(awk '
-        /^## / { in_entries = 1; next }
-        !in_entries { next }
-        # 用 index() 比對字面值，不用 regex：標記含多位元組字元，
-        # 而 macOS 的 awk 在非 UTF-8 locale 下對它們的 regex 行為不保證。
-        /^- / && index($0, "[同步:") == 0 { printf "  第 %d 行：%s\n", NR, $0 }
-    ' "$TEMPLATE_CHANGELOG")"
-
-    if [ -n "$unmarked" ]; then
-        echo "${TEMPLATE_CHANGELOG} 有條目沒帶同步影響標記：" >&2
-        echo "$unmarked" >&2
-        echo "每一筆要以 **[同步:無]**、**[同步:要動手]** 或 **[同步:破壞性]** 開頭，" >&2
-        echo "意思見 ${TEMPLATE_CHANGELOG} 的檔頭。" >&2
         exit 1
     fi
 fi

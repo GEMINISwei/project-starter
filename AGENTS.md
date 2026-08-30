@@ -11,11 +11,12 @@
 - [`docs/extending.md`](docs/extending.md)：**教學** —— 新增頁面／模組／權限／WS／migration／Seed
 - [`docs/operations.md`](docs/operations.md)：**運行** —— 部署、帳號初始化、Session 撤銷、限流
 - [`contracts/README.md`](contracts/README.md)：前後端型別契約怎麼產生與消費
-- [`docs/downstream.md`](docs/downstream.md)：這個 repo 被當成基底時的同步紀律
+- [`docs/downstream.md`](docs/downstream.md)：**開案後** —— 從這個模板長出新專案之後要做的一次性決定
 
-如果 `git remote -v` 有一個叫 `template` 的遠端，代表這個專案還在跟模板同步 ——
-那就**不要改 `shared/` 與組裝層**（後端 `app/`、前端 `config/`），
-要改請回模板改再拉回來，理由見 [`docs/downstream.md`](docs/downstream.md)。
+這個 repo 是 **GitHub template repository**：新專案用 "Use this template" 開出來，
+拿到的是一份**快照**，沒有共同歷史，也沒有持續同步的上游。所以**下游可以改任何地方**，
+包含 `shared/` 與組裝層 —— 那些檔案從被複製的那一刻起就屬於新專案。
+為什麼不做成可同步的上游，見 [`TEMPLATE.md`](TEMPLATE.md)。
 
 ## 硬規則
 
@@ -96,12 +97,11 @@
   以及**反方向**的一件事：`docs/development.md` 的指令表要涵蓋 `TARGETS` 裡每一支 `check-*`
   （新增一支卻沒寫進文件，那支檢查器就沒有人知道它在）。
 - **模板的 CHANGELOG 條目寫進 [`CHANGELOG.template.md`](CHANGELOG.template.md) 的
-  `## [Unreleased]`，不是根目錄的 `CHANGELOG.md`**（那一份屬於下游專案，模板不碰它，
-  CI 的 `pr-checks` 兩個方向都擋）。**每一筆條目開頭要帶同步影響標記**
-  （`[同步:無]`／`[同步:要動手]`／`[同步:破壞性]`，意思見那份檔頭），`make check-version`
-  會擋漏標記的。升 `APP_VERSION` 時把 `## [Unreleased]` 改名成該版號，發版的 git tag 則是
-  `v<APP_VERSION>`；三者同樣由 `make check-version` 守（在 `deploy-config` job 裡）。
-  發版 PR 要改哪四樣見 [`docs/operations.md`](docs/operations.md#發版與回滾)。
+  `## [Unreleased]`，不是根目錄的 `CHANGELOG.md`**（那一份是留給用這個模板開出來的專案的，
+  模板不碰它，CI 的 `pr-checks` 兩個方向都擋）。升 `APP_VERSION` 時把 `## [Unreleased]`
+  改名成該版號，發版的 git tag 則是 `v<APP_VERSION>`；三者由 `make check-version` 守
+  （在 `deploy-config` job 裡）。發版 PR 要改哪四樣見
+  [`docs/operations.md`](docs/operations.md#發版與回滾)。
 - **升級相依遇到 peer 擋住時，停在最新的相容版並就地寫下移除條件**，不要用
   `--force`／`--legacy-peer-deps` 繞過。三條規則見
   [`docs/development.md`](docs/development.md#相依升級紀律)。

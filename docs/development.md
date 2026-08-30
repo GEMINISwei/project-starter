@@ -4,8 +4,8 @@
 擴充功能的作法見 [`extending.md`](extending.md)，部署與維運見 [`operations.md`](operations.md)。
 
 > **模板本身與下游專案都適用這一份** —— 環境設置、指令、提交規範、測試與文件慣例，
-> 兩邊是同一套。在下游專案裡工作的話另外要先讀 [`downstream.md`](downstream.md)：
-> 哪些目錄不該在下游改動，以及怎麼把模板的修正拉回來。
+> 兩邊是同一套。剛從模板開出新專案的話另外看 [`downstream.md`](downstream.md)：
+> 開案後要做的一次性決定（CI/CD 留哪些、安全掃描、Actions 分鐘數）。
 > 底下只有一條**只對模板本身成立**：每一次實質改動都要在
 > [`CHANGELOG.template.md`](../CHANGELOG.template.md) 留一筆（根目錄的
 > [`CHANGELOG.md`](../CHANGELOG.md) 屬於下游專案，模板不碰它）。
@@ -38,7 +38,7 @@ make init
 它會先確認真的連得上才綁定，再依遠端目前的狀態決定下一步 —— **遠端是空的、或本機領先
 可快轉時直接問你要不要推，答 y 就推**，不必自己再下一次 `git push`；推不上去的狀態
 （落後、分岔、沒有共同祖先）則只給文字說明，不問一個註定失敗的問題。
-同一支指令跑第二次就能再綁一個（下游要拉模板更新時，名稱填 `template`）。
+同一支指令跑第二次就能再綁一個。
 
 名稱是 `template` 時**不提供 push**：那是拉更新用的上游，而下游與它歷史相通，
 推上去會快轉成功並把專案自己的 commit 寫進模板 —— 而且不會有任何錯誤訊息。
@@ -149,7 +149,6 @@ make dev
 | 類別 | 指令 |
 |---|---|
 | 初次設定 | `make init`（建立 `.env`）、`make remote`（綁定 git remote，選用）、`make setup`（主機端相依：`uv sync --frozen` + `npm ci`） |
-| 模板同步 | `make sync`（只有下游專案用得到，見 [`downstream.md`](downstream.md#拉模板的更新)） |
 | 環境 | `make dev`、`make prod`、`make deploy`、`make down`、`make logs` |
 | 資料庫 | `make psql`、`make migrate`、`make reset`、`make backup`、`make restore` |
 | 帳號 | `make create-superuser` |
@@ -311,21 +310,9 @@ review 時一眼看得出來，為它們多養一個工具與一份設定不划�
 `CHANGELOG.template.md` 的檔頭（一句話：同一個區塊有兩個 owner 的話，每次同步都衝突，
 而那份 diff 也不再讀得出「我落後多少」）。寫錯地方由 CI 的 `pr-checks` 擋。
 
-**每一筆條目開頭要帶同步影響標記**，三選一：
-
-| 標記 | 用在 |
-|---|---|
-| `[同步:無]` | 拉下來就好。**絕大多數條目是這一類** |
-| `[同步:要動手]` | 同步後要改自己的東西，條目裡要寫清楚改什麼 |
-| `[同步:破壞性]` | 不照做會壞掉（資料、部署或編譯） |
-
-`make check-version` 會擋漏標記的條目（只看最外層的 `- `，巢狀細項屬於上一筆）。
-標記存在的理由是下游的 `make sync` 靠它分堆 —— 沒有標記的話，下游得整篇讀完才知道
-哪一兩筆跟自己有關，而那個成本每次同步都要付一次。
-
-**條目只寫改了什麼與下游要做什麼。** 功能怎麼用、為什麼這樣設計，一律留在 owner 文件
+**條目只寫改了什麼。** 功能怎麼用、為什麼這樣設計，一律留在 owner 文件
 （[`../README.md`](../README.md)、`docs/`、[`../contracts/README.md`](../contracts/README.md)），
-這裡只放連結 —— 下游是靠這些條目判斷要不要同步，條目愈短，那份清單愈有用。
+這裡只放連結。
 
 **日常條目寫進 `## [Unreleased]`。** 那個標題不是版號，`make check-version` 取的是它下面
 第一個版號標題 —— 所以條目可以一直累積，不必為了讓檢查器過而先決定版號。發版時把
@@ -333,8 +320,7 @@ review 時一眼看得出來，為它們多養一個工具與一份設定不划�
 發版 PR 還要改哪幾樣見 [`operations.md`](operations.md#發版與回滾)。
 
 格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)，版號採
-[語意化版本](https://semver.org/lang/zh-TW/)：模板的 MAJOR 用在「下游同步後需要手動改
-自己的程式碼」的改動 —— 也就是整版都是 `[同步:要動手]` 以上的那種。
+[語意化版本](https://semver.org/lang/zh-TW/)。
 
 ### 分支保護
 
@@ -363,9 +349,9 @@ ruleset 之外還有兩層，**兩層都不是伺服器端強制，這一點不�
 而一個被解釋成「正常的」紅燈，等於這個 job 不存在。它的洞（刪掉 `main` 再重推）
 寫在 job 自己的註解裡。
 
-三件事裡 **force push 是唯一嚴重的**：這個 repo 被當成模板時，下游是靠
-`git merge template/main` 同步的，`main` 一旦被改寫，所有下游的共同祖先就消失，
-而那要每個下游各自處理。另外兩件的代價是「繞過 `pr-checks`」，可以補救。
+三件事裡 **force push 是唯一嚴重的**：`main` 被改寫之後，每一個已經 clone 或 fork 的人
+下一次拉都會撞上分岔的歷史，而那要每個人各自處理。另外兩件的代價是「繞過 `pr-checks`」，
+可以補救。
 
 #### 匯入 ruleset
 
