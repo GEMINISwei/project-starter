@@ -27,6 +27,7 @@ PR to `main`、每週一的排程，以及手動觸發（`workflow_dispatch`）�
 | merge 到 `main` | **只有 `pushed-via-pr` 與 `publish`** | 1 分加 `publish` |
 | push `v*` tag | 全部，加上 `publish` | |
 | 每週一排程 | 只有 `security` | 1 分 |
+| 手動觸發（`workflow_dispatch`） | 六個測試 job，`pr-checks` 除外（見下） | 約 12 分 |
 
 **merge 那一輪不重跑測試，前提是 ruleset 已經匯入。** 它的
 `strict_required_status_checks_policy` 要求「分支必須是最新的才能 merge」，所以 PR head
@@ -98,6 +99,10 @@ tag build 不受這條影響，照跑全套 —— 那份 image 就是要上線�
   attestation 的驗證方式見 [`operations.md`](operations.md#deploy-workflow-做了什麼)，
   不走 registry 那條路時的刪除清單見〈[移除 CD](#移除-cd)〉
 
+`workflow_dispatch` 是為了「對現在的 `main` 重跑一次完整 CI」而存在的 —— re-run 一個舊 run
+跑的是舊 SHA，答不了那個問題（merge 那一輪刻意不重跑測試）。六個測試 job 的 `if` 因此
+一併放行手動觸發；`pr-checks` 刻意不放行，它讀 PR 標題與描述，手動觸發時沒有那些東西。
+
 ### 調整 pr-checks 的三個 step
 
 **三個 step 各自可以拿掉，job 本身留著。** 它們守的都是紀律而不是正確性，
@@ -112,6 +117,11 @@ tag build 不受這條影響，照跑全套 —— 那份 image 就是要上線�
 **三步全刪的話整個 job 拿掉，ruleset 也要跟著拿掉 `pr-checks` 這個 context**，
 不然 `make check-ci` 會紅。
 
+留著的話，[`../.github/PULL_REQUEST_TEMPLATE.md`](../.github/PULL_REQUEST_TEMPLATE.md)
+**可以自訂，但要保留「驗收條件」與「改動到既有測試」兩段的標題與填寫格式** ——
+`check-acceptance` 與 `check-test-edits` 讀的就是那兩段，改了標題它們會安靜地
+什麼都驗不到。使用時再依這次的改動保留適用段落。
+
 **補完 PR 描述之後不要按 re-run，要推一個 commit。** 這兩步讀的 `PR_TITLE`／`PR_BODY`
 在 CI 上來自 `github.event.pull_request.body`，而**re-run 重放的是原本那份事件 payload** ——
 描述是事件發生當下的那一版，你剛剛補的段落不在裡面。症狀很像檢查器壞了：本機
@@ -120,14 +130,6 @@ tag build 不受這條影響，照跑全套 —— 那份 image 就是要上線�
 推一個 commit 產生新的 `synchronize` 事件，payload 才會帶上新的描述。
 （`draft-gated-jobs` 改讀 `gh pr view` 就是為了避開同一個坑，見上面那個 job。）
 
-留著的話，[`../.github/PULL_REQUEST_TEMPLATE.md`](../.github/PULL_REQUEST_TEMPLATE.md)
-**可以自訂，但要保留「驗收條件」與「改動到既有測試」兩段的標題與填寫格式** ——
-`check-acceptance` 與 `check-test-edits` 讀的就是那兩段，改了標題它們會安靜地
-什麼都驗不到。使用時再依這次的改動保留適用段落。
-
-`workflow_dispatch` 是為了「對現在的 `main` 重跑一次完整 CI」而存在的 —— re-run 一個舊 run
-跑的是舊 SHA，答不了那個問題（merge 那一輪刻意不重跑測試）。六個測試 job 的 `if` 因此
-一併放行手動觸發；`pr-checks` 刻意不放行，它讀 PR 標題與描述，手動觸發時沒有那些東西。
 
 ## 分支保護
 
@@ -147,7 +149,8 @@ ruleset 之外還有兩層，**兩層都不是伺服器端強制，這一點不�
 | [`../.githooks/pre-push`](../.githooks/pre-push) | 擋直接 push 到 `main`、force push 與刪除 | 本機擋得住，但 `--no-verify` 繞得過，沒跑過 `make setup` 的機器上根本不會執行 |
 | CI 的 `pushed-via-pr` job | push 到 `main` 卻查不到對應的 PR 就紅燈 | **擋不住** —— 走到那裡東西已經在 `main` 上了。它留下的是紀錄 |
 
-第一層由 `make setup` 透過 `git config core.hooksPath .githooks` 掛上。
+`pre-push`（三層裡的第二層）由 `make setup` 透過
+`git config core.hooksPath .githooks` 掛上。
 `core.hooksPath` 是 per-clone 設定、不跟著 clone 走，所以每個人都要跑過一次 `make setup`。
 已經指向別處（例如你自己裝的 husky）時 `setup` 不會覆蓋，會印一行提醒。
 
@@ -243,7 +246,7 @@ gh api --method PUT repos/{owner}/{repo}/private-vulnerability-reporting
 code scanning 對 private repo 要 GHAS，沒有的話那份 workflow 會照跑、吃完分鐘數，
 然後在上傳結果那一步 403 失敗 —— 等於在版控裡放一個固定紅的 job。
 default setup 不進版控，什麼都不會留下。
-順帶一提，它的 CodeQL 版本由 GitHub 自己維護，不會變成 dependabot 要盯的第七組 manifest。
+順帶一提，它的 CodeQL 版本由 GitHub 自己維護，不會變成 dependabot 要盯的第八組 manifest。
 
 query suite 選 **Default** 而不是 Extended／`security-and-quality`：後兩者多出來的查詢信心較低，
 第一次開就吃一堆 false positive，而那的下場是大家學會按 dismiss，等於這個掃描沒開。
@@ -271,8 +274,9 @@ query suite 選 **Default** 而不是 Extended／`security-and-quality`：後兩
 做完這兩件之後，dependabot 的成本已經從「每個 PR 兩輪完整 CI」降到「一輪」。
 那一輪仍然是它最主要的開銷，而且跟「這次有沒有東西可更新」無關，只跟開了幾個 PR 有關。
 
-[`../.github/dependabot.yml`](../.github/dependabot.yml) 出廠盯六組 manifest。
-**六組都是這個專案自己的東西**，所以「刪掉」等於「那份 manifest 從此不再有人盯版本」——
+[`../.github/dependabot.yml`](../.github/dependabot.yml) 出廠盯七組 manifest
+（`uv`、兩組 `npm`、兩個 `Dockerfile`、compose，加上 `github-actions`）。
+**七組都是這個專案自己的東西**，所以「刪掉」等於「那份 manifest 從此不再有人盯版本」——
 `Dockerfile` 的基底映像尤其危險，它沒有 `make audit`、也沒有任何紅燈會提醒。
 
 真的要省，**先調頻率而不是刪除**：三個基底映像的 entry 可以把 `schedule.interval` 從
@@ -349,16 +353,21 @@ make check-env      # IMAGE_REGISTRY／IMAGE_TAG 三處是否清得一致
 make check-docs     # 文件裡還指著 scripts/deploy.sh 的地方（operations.md 有好幾處）
 make check-shell
 make check-compose
+make check-ci       # 內含 actionlint，會抓到刪壞的 YAML
 ```
 
-**有兩步沒有檢查器在守**：`ci.yml` 裡 `publish` job 刪得乾不乾淨（YAML 少縮排一層不會有人
-告訴你，要看 Actions 頁面確認那個 job 真的不見了），以及 `Makefile` 的 `TARGETS` 有沒有
-拿掉 `deploy`（漏了不會報錯，只是 `make deploy` 會說找不到目標）。
+**有兩步沒有檢查器在守。** 一是 `Makefile` 的 `TARGETS` 有沒有拿掉 `deploy`
+（漏了不會報錯，只是 `make deploy` 會說找不到目標）。二是 `publish` job **刪得夠不夠、
+有沒有刪過頭** —— `check-ci` 的 actionlint 擋得住「刪成無效的 YAML」，但擋不住
+「順手把隔壁的 job 一起刪掉了」：那仍然是合法的 YAML，而 `check-ci` 只比對 ruleset 與
+`ci.yml` 的 job 名單一致，兩邊一起少掉一個 job 它是對得上的。
+刪完到 Actions 頁面確認剩下的 job 就是你要的那些。
 
 ## 整套都不用
 
 `.github/` 可以整個刪掉，本機的 `make check` 與其餘 `check-*` 不受影響
 （`make check-ci` 沒有 `ci.yml` 會自己跳過）。但要知道刪掉的是什麼：
-分支保護的第二、三層（`pushed-via-pr`）、`api-types-up-to-date` 那道
+ruleset 的來源檔（`.github/rulesets/main.json`）與分支保護的第三層
+（`pushed-via-pr`）、`api-types-up-to-date` 那道
 「改了 schema 忘記跑 `make gen-types`」的防線，以及 `deploy-config` 涵蓋的
 那一整塊 `make check` 碰不到的東西。`.githooks/pre-push` 不在 `.github/` 底下，會留著。
