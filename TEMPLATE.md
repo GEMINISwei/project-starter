@@ -37,8 +37,8 @@ make setup     # 驗證 Node 版本，安裝主機端 lint／測試／型別產�
 make dev       # 啟動開發環境（首次會建置 image，約 2–5 分鐘）
 ```
 
-**開案先刪兩個檔案**：[`CHANGELOG.template.md`](CHANGELOG.template.md)（模板自己的紀錄，
-你的寫在 [`CHANGELOG.md`](CHANGELOG.md)），以及走完這份清單之後的 `TEMPLATE.md` 本身。
+**開案先清空 [`CHANGELOG.md`](CHANGELOG.md)**（那是模板的歷史，留在模板 repo 上就好），
+從你自己的第一版重新寫；走完這份清單之後再刪掉 `TEMPLATE.md` 本身。
 
 打開 `http://localhost:<SYSTEM_PORT>`（預設 http://localhost:3000）。系統還沒有超級管理者時
 會自動落在 `/signup`，填入 `make init` 印出的 `REGISTER_KEY` 建立第一個帳號 ——
@@ -175,8 +175,7 @@ git rm TEMPLATE.md
 這個 repo 的 `origin` 就是模板本身）：
 
 - 改動要考慮「所有未來專案都會繼承這個決定」。
-- 每次實質改動在 [`CHANGELOG.template.md`](CHANGELOG.template.md) 留一筆。
-  根目錄的 `CHANGELOG.md` 是留給用這個模板開出來的專案的，模板不碰它。
+- 每次實質改動在 [`CHANGELOG.md`](CHANGELOG.md) 留一筆。
 - 必要時升 `apps/api/app/config.py` 的 `APP_VERSION`。開發階段一律 `0.x.x`。
 
 **只有第二條有檢查器在守**（CI 的 `pr-checks` 擋漏寫與寫錯地方，`make check-version`

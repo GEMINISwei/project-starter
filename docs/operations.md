@@ -264,7 +264,7 @@ GIT_SSH_COMMAND='ssh -o BatchMode=yes' git fetch --tags --prune origin
 
 | 改什麼 | 內容 |
 |---|---|
-| [`../CHANGELOG.template.md`](../CHANGELOG.template.md) | `## [Unreleased]` 改名成 `## [1.2.3] - <日期>`，並在上面補一個新的空 `## [Unreleased]` |
+| [`../CHANGELOG.md`](../CHANGELOG.md) | `## [Unreleased]` 改名成 `## [1.2.3] - <日期>`，並在上面補一個新的空 `## [Unreleased]` |
 | [`../apps/api/app/config.py`](../apps/api/app/config.py) | `APP_VERSION = "1.2.3"` |
 | [`../contracts/openapi.json`](../contracts/openapi.json) | 跑 `make gen-types` 產生 —— `APP_VERSION` 是 OpenAPI 的 `info.version`，改了就是改契約（見 [`../AGENTS.md`](../AGENTS.md#改動後一定要做的事)） |
 | `apps/web/shared/api/generated/schema.d.ts` | 同上，`make gen-types` 一起產出 |

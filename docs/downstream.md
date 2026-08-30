@@ -11,8 +11,8 @@ CI/CD 留哪些、安全掃描開哪些、Actions 分鐘數怎麼算。開案本
 
 **開案時先做這兩件**（`TEMPLATE.md` 的清單裡也有，這裡重述是因為漏掉不會有任何錯誤）：
 
-- 刪掉 [`../CHANGELOG.template.md`](../CHANGELOG.template.md)，在
-  [`../CHANGELOG.md`](../CHANGELOG.md) 寫你自己的紀錄。
+- 清空 [`../CHANGELOG.md`](../CHANGELOG.md) 的條目，從你自己的第一版開始寫
+  （模板的歷史留在模板 repo 上）。
 - `apps/api/app/config.py` 的 `APP_VERSION` 是**你的產品版號**了，重新從你要的起點開始。
   `make check-version` 會比對它與 `CHANGELOG.md` 最上面那個版號標題
   （還沒發過版、一個版號標題都沒有時它會略過）。

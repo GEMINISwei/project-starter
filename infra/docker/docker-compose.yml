@@ -77,7 +77,7 @@ services:
     # 新版的 server 直接讀舊的 PGDATA 會拒絕啟動（訊息是 "database files are
     # incompatible with server"）。要升級必須 `pg_dump` → 換版本 → `pg_restore`，
     # 或用 `pg_upgrade`。對已部署的下游是破壞性動作，要做的時候請當成一次獨立的改動，
-    # 並在 CHANGELOG.template.md 寫清楚升級步驟（帶 [同步:破壞性] 標記）。
+    # 並在 CHANGELOG.md 寫清楚升級步驟。
     # 這個版本號在三處出現（這裡、apps/api/Dockerfile 的 postgres-client、
     # .github/workflows/ci.yml 的「啟動 PostgreSQL」那步），要一起動 ——
     # 這一條由 `make check-compose` 擋，漏掉哪一處它會直接指出來。

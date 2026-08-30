@@ -87,7 +87,7 @@ flowchart LR
 | 設計 token 的分層、主題、導入外部 Design System、樣式層的檢查器 | [`docs/design-system.md`](docs/design-system.md) |
 | 生產部署、帳號初始化、Session 撤銷、限流、備份 | [`docs/operations.md`](docs/operations.md) |
 | 前後端型別契約怎麼產生與消費 | [`contracts/README.md`](contracts/README.md) |
-| 模板本身的變更紀錄 | [`CHANGELOG.template.md`](CHANGELOG.template.md)（下游自己的寫在 [`CHANGELOG.md`](CHANGELOG.md)） |
+| 變更紀錄 | [`CHANGELOG.md`](CHANGELOG.md) |
 
 固定依賴方向是 `app → modules → shared`，跨模組只准使用 public entry，
 由 `npm run check:architecture` 與 `tests/test_architecture.py` 靜態檢查。
