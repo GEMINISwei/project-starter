@@ -639,11 +639,32 @@ jobs:
         run: |
           # 用 commit → PR 的反查，而不是看 commit message 是不是 "Merge pull request"：
           # squash 與 rebase 合併都不會產生那種訊息，用訊息判斷會把正常流程判成違規。
-          count="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq 'length')"
-          if [ "$count" -gt 0 ]; then
-            echo "OK: 這個 commit 來自 PR"
-            exit 0
-          fi
+          #
+          # **查不到要重試，不能當場判違規。** 那個反查索引是非同步建立的：merge 完成到
+          # 它可查之間有數秒延遲（實測 merge 後 6 秒查到的仍是空陣列，重跑就有）。只打一次
+          # 的話合併動作越快越容易紅，而這個 job 的價值全部建立在「紅了就是真的有事」上面
+          # —— 理由同上面 `!github.event.created` 那一段。
+          #
+          # 重試**只針對空陣列**。API 呼叫本身失敗（private repo 少了 pull-requests: read
+          # 是 403）仍然要當場失敗：吞掉的話，一個權限設定錯誤會被說成「繞過 PR」。原本這
+          # 件事靠 `bash -e` 免費得到，有了迴圈就要自己接住 —— `count="$(...)"` 的賦值會把
+          # gh 的結束碼變成賦值本身的結束碼，不接住就會被當成「查到空」。
+          for attempt in 1 2 3 4 5; do
+            if ! count="$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/pulls" --jq 'length')"; then
+              echo "::error::查詢 commit ${GITHUB_SHA} 的 PR 關聯失敗，這是 API 呼叫的問題，"
+              echo "::error::不是「沒有經過 PR」。先確認這個 job 的 pull-requests: read 權限。"
+              exit 1
+            fi
+
+            if [ "$count" -gt 0 ]; then
+              echo "OK: 這個 commit 來自 PR（第 ${attempt} 次查詢）"
+              exit 0
+            fi
+
+            if [ "$attempt" -lt 5 ]; then
+              sleep 5
+            fi
+          done
 
           echo "::error::commit $GITHUB_SHA 直接進了 main，沒有經過 PR。"
           echo "::error::CI 的 pr-checks 只在 PR 上跑，這次等於繞過了它。"
