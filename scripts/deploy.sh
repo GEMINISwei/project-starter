@@ -85,11 +85,23 @@ smoke_test() {
         echo "找不到 curl，略過對外連通性檢查" >&2
         return 0
     fi
-    if ! curl -fsS -o /dev/null --max-time 10 "http://127.0.0.1:$SYSTEM_PORT/healthz"; then
-        echo "nginx 對外沒有回應（http://127.0.0.1:$SYSTEM_PORT/healthz）" >&2
-        return 1
-    fi
-    echo "對外連通性 OK"
+    # 重試而不是打一次就定生死：`up -d` 等的是 nginx 的 depends_on 條件（web、api healthy），
+    # 條件一成立它就回來了 —— 那時 nginx 才剛被 start，展開模板、listen 起來還要一兩秒。
+    # 單發的 curl 正好撞在那個空隙上，於是「部署成功，只是慢了兩秒」被回報成失敗，
+    # 而 CD 就拿這個結束碼去觸發回滾。
+    #
+    # 只給 60 秒（wait_healthy 給 5 分鐘）：這裡等的是 nginx 自己起來，不含建置或 migration。
+    # 超過這個量級的話原因是設定錯誤或 port 被佔住，再等下去也不會變好。
+    local deadline=$(($(date +%s) + 60))
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        if curl -fsS -o /dev/null --max-time 10 "http://127.0.0.1:${SYSTEM_PORT}/healthz"; then
+            echo "對外連通性 OK"
+            return 0
+        fi
+        sleep 2
+    done
+    echo "nginx 對外沒有回應（http://127.0.0.1:${SYSTEM_PORT}/healthz），已重試 60 秒" >&2
+    return 1
 }
 
 smoke_test
