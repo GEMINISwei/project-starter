@@ -194,6 +194,8 @@ nginx 模板、任何 `scripts/*.sh` 或任何 `.md` 之後，本機補跑一次
 **沒有標記卻長得像樹的區塊會直接紅燈**，免得下一棵樹又靜靜回到零覆蓋。
 另有 `<!-- check-docs: ignore-start -->`／`ignore-end` 給「這一節的主題就是某些檔案的
 不存在」那類內容（移除模組的清單）用。
+`<!-- check-docs: residue links -->`／`residue other` 則標記 `TEMPLATE.md` 第 6 步的兩張
+殘留清單，比對「表格列的檔案」與「真的還指著它的檔案」，只在那份檔案還在時檢查。
 
 它還守一件**反方向**的事：`<!-- check-docs: commands check- -->` 標記的那個表格，
 要恰好列出 `Makefile` 的 `TARGETS` 裡每一支 `check-*`。上面那些驗的是「文件指到的東西
