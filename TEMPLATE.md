@@ -196,7 +196,7 @@ CI 那幾個 job 直接用就好，**要做決定的是 CD 這一段**：
 git rm TEMPLATE.md
 ```
 
-**這一步不是刪完就結束。** 有三份文件、七條 markdown 連結指著這份檔案，刪掉之後
+**這一步不是刪完就結束。** 有四份文件、八條 markdown 連結指著這份檔案，刪掉之後
 `make check-docs`（在 CI 的 `deploy-config` job 裡）會逐條列出來變紅 ——
 症狀會出現在你的第一個 PR 上，而且指向你沒動過的檔案。逐份處理：
 
@@ -205,6 +205,7 @@ git rm TEMPLATE.md
 | `README.md` | 第 4 步改寫時一併處理（4 處：抬頭、Quickstart、最短路徑那段、文件地圖那一列） |
 | [`AGENTS.md`](AGENTS.md) | 「為什麼不做成可同步的上游，見 TEMPLATE.md」整句刪掉 —— 那是模板的自我說明，對你的專案沒有意義 |
 | [`docs/design-system.md`](docs/design-system.md) | 2 處指向 §3「決定視覺」：〈導入外部 Design System〉的「導入完成後有三處會變成不實敘述」，與最後那一節〈用這份模板開專案時〉整節。視覺在第 3 步已經定了，改成敘述你自己的決定，或整段刪掉 |
+| [`docs/development.md`](docs/development.md) | 1 處，在〈CHANGELOG 條目〉最後那段「變更紀錄只有一份，刻意不拆成兩份」裡指向 §0。那一段回答的是「模板與下游要不要各留一份變更紀錄」—— 你的專案只有一份，那個問題不存在，整段刪掉 |
 
 **`check-docs` 只掃 `.md`，所以還有六處它不會紅。** 三處在文件裡（純文字提及，不是連結）：
 [`docs/extending.md`](docs/extending.md) 與 [`docs/development.md`](docs/development.md)
