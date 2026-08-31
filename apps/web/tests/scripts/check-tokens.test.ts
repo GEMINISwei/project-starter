@@ -414,7 +414,7 @@ describe("規則 k：語意層必須由 --ds-* 撐著", () => {
     const root = fixture({
       "app/tokens/primitives.css": `:root {\n  --ds-gray-900: #111827;\n}\n`,
       "app/themes/default.css":
-        `:root {\n  --color-scrim: light-dark(\n    rgba(17, 24, 39, 0.38),\n    rgba(0, 0, 0, 0.7));\n}\n`,
+        `:root {\n  color-scheme: dark;\n  --color-scrim: light-dark(\n    rgba(17, 24, 39, 0.38),\n    rgba(0, 0, 0, 0.7));\n}\n`,
       "modules/x/ui/x.module.css": `.a { background: var(--color-scrim); }\n`,
       "modules/x/ui/X.tsx": USES_CLASS,
     })
@@ -563,9 +563,9 @@ describe("vendor 層：外部 Design System 產出的落地處", () => {
     const root = fixture({
       "app/tokens/primitives.css": `:root {\n  --ds-gray-900: #111827;\n  --ds-white: #FFFFFF;\n}\n`,
       "app/themes/default.css":
-        `:root {\n  --color-text-body: light-dark(var(--ds-gray-900), var(--ds-white));\n}\n`,
+        `:root {\n  color-scheme: dark;\n  --color-text-body: light-dark(var(--ds-gray-900), var(--ds-white));\n}\n`,
       "app/themes/warm.css":
-        `:root[data-theme="warm"] {\n  --color-text-body: light-dark(var(--ds-gray-900), var(--ds-white));\n}\n`,
+        `:root[data-theme="warm"] {\n  color-scheme: dark;\n  --color-text-body: light-dark(var(--ds-gray-900), var(--ds-white));\n}\n`,
       "modules/x/ui/x.module.css": USES_TOKEN,
       "modules/x/ui/X.tsx": USES_CLASS,
     })
@@ -595,7 +595,7 @@ describe("規則 p：CSS 不可用 @import 拉外部資源", () => {
 })
 
 describe("規則 q：主題的三份清單必須一致", () => {
-  const THEME_CSS = `:root {\n  --color-text-body: light-dark(var(--ds-gray-900), var(--ds-white));\n}\n`
+  const THEME_CSS = `:root {\n  color-scheme: dark;\n  --color-text-body: light-dark(var(--ds-gray-900), var(--ds-white));\n}\n`
   const PRIMITIVES = `:root {\n  --ds-gray-900: #111827;\n  --ds-white: #FFFFFF;\n}\n`
 
   /** 三份清單齊全的一棵樹；`themes` 決定要放哪幾份主題檔與 import。 */
@@ -776,8 +776,8 @@ describe("規則 r：每份主題必須宣告同一組 --color-*", () => {
     const root = fixture({
       "app/tokens/primitives.css": PRIMITIVES,
       "app/themes/default.css":
-        `:root {\n  --color-text-body: ${PAIR};\n  --color-bg-app: ${PAIR};\n}\n`,
-      "app/themes/warm.css": `:root[data-theme="warm"] {\n  --color-text-body: ${PAIR};\n}\n`,
+        `:root {\n  color-scheme: dark;\n  --color-text-body: ${PAIR};\n  --color-bg-app: ${PAIR};\n}\n`,
+      "app/themes/warm.css": `:root[data-theme="warm"] {\n  color-scheme: dark;\n  --color-text-body: ${PAIR};\n}\n`,
       "modules/x/ui/x.module.css": `${USES_TOKEN}.b { background: var(--color-bg-app); }\n`,
       "modules/x/ui/X.tsx": `${USES_CLASS}export const B = () => <p className={s.b} />\n`,
     })
@@ -787,9 +787,9 @@ describe("規則 r：每份主題必須宣告同一組 --color-*", () => {
   it("兩份都完整就放行 —— 挑哪一階是各主題自己的事", () => {
     const root = fixture({
       "app/tokens/primitives.css": PRIMITIVES,
-      "app/themes/default.css": `:root {\n  --color-text-body: ${PAIR};\n}\n`,
+      "app/themes/default.css": `:root {\n  color-scheme: dark;\n  --color-text-body: ${PAIR};\n}\n`,
       "app/themes/warm.css":
-        `:root[data-theme="warm"] {\n`
+        `:root[data-theme="warm"] {\n  color-scheme: dark;\n`
         + `  --color-text-body: light-dark(var(--ds-white), var(--ds-gray-900));\n}\n`,
       "modules/x/ui/x.module.css": USES_TOKEN,
       "modules/x/ui/X.tsx": USES_CLASS,
@@ -800,8 +800,96 @@ describe("規則 r：每份主題必須宣告同一組 --color-*", () => {
   it("只有一份主題時不比對", () => {
     const root = fixture({
       "app/tokens/primitives.css": PRIMITIVES,
-      "app/themes/default.css": `:root {\n  --color-text-body: ${PAIR};\n}\n`,
+      "app/themes/default.css": `:root {\n  color-scheme: dark;\n  --color-text-body: ${PAIR};\n}\n`,
       "modules/x/ui/x.module.css": USES_TOKEN,
+      "modules/x/ui/X.tsx": USES_CLASS,
+    })
+    expect(collectTokenErrors(root)).toEqual([])
+  })
+
+  // 狀態色以前住在 `tokens/semantic.css`，值是拿深色頁底混出來的。它們現在叫
+  // `--color-*` 並住在主題層，所以這條規則自動涵蓋它們 —— 這個 case 釘住那件事。
+  it("狀態色少宣告一個也會被擋 —— 它們現在是主題契約的一部分", () => {
+    const root = fixture({
+      "app/tokens/primitives.css": `:root {\n  --ds-green-600: #5C7A52;\n  --ds-white: #FFFFFF;\n}\n`,
+      "app/themes/default.css":
+        `:root {\n  color-scheme: dark;\n`
+        + `  --color-success-fg: var(--ds-green-600);\n`
+        + `  --color-success-bg: var(--ds-white);\n}\n`,
+      "app/themes/warm.css":
+        `:root[data-theme="warm"] {\n  color-scheme: light;\n`
+        + `  --color-success-fg: var(--ds-green-600);\n}\n`,
+      "modules/x/ui/x.module.css":
+        `.a { color: var(--color-success-fg); background: var(--color-success-bg); }\n`,
+      "modules/x/ui/X.tsx": USES_CLASS,
+    })
+    expect(collectTokenErrors(root)).toContainEqual(expect.stringContaining("--color-success-bg"))
+  })
+})
+
+describe("規則 w：color-scheme 是主題介面的一部分", () => {
+  const PRIMITIVES = `:root {\n  --ds-gray-900: #111827;\n}\n`
+  const COLORS = `  --color-text-body: var(--ds-gray-900);\n`
+
+  it("主題沒有宣告 color-scheme 會被擋", () => {
+    const root = fixture({
+      "app/tokens/primitives.css": PRIMITIVES,
+      "app/themes/default.css": `:root {\n${COLORS}}\n`,
+      "modules/x/ui/x.module.css": USES_TOKEN,
+      "modules/x/ui/X.tsx": USES_CLASS,
+    })
+    expect(collectTokenErrors(root)).toContainEqual(expect.stringContaining("color-scheme"))
+  })
+
+  it("主題檔以外宣告 color-scheme 會被擋", () => {
+    const root = fixture({
+      "app/tokens/primitives.css": PRIMITIVES,
+      "app/tokens/semantic.css": `:root { color-scheme: dark; }\n`,
+      "app/themes/default.css": `:root {\n  color-scheme: dark;\n${COLORS}}\n`,
+      "modules/x/ui/x.module.css": USES_TOKEN,
+      "modules/x/ui/X.tsx": USES_CLASS,
+    })
+    expect(collectTokenErrors(root)).toContainEqual(
+      expect.stringContaining("app/tokens/semantic.css"))
+  })
+
+  it("每份主題各自宣告就放行 —— 兩份挑不同的值是正常的", () => {
+    const root = fixture({
+      "app/tokens/primitives.css": PRIMITIVES,
+      "app/themes/default.css": `:root {\n  color-scheme: dark;\n${COLORS}}\n`,
+      "app/themes/warm.css": `:root[data-theme="warm"] {\n  color-scheme: light;\n${COLORS}}\n`,
+      "modules/x/ui/x.module.css": USES_TOKEN,
+      "modules/x/ui/X.tsx": USES_CLASS,
+    })
+    expect(collectTokenErrors(root)).toEqual([])
+  })
+})
+
+describe("規則 x：原始層的陰影不可自帶色值", () => {
+  const THEME = `:root {\n  color-scheme: dark;\n  --color-shadow: var(--ds-black);\n}\n`
+  const USES_SHADOW = `.a { box-shadow: var(--shadow-sm); }\n`
+
+  it("原始層的陰影自帶色值會被擋 —— 顏色要由主題決定", () => {
+    const root = fixture({
+      "app/tokens/primitives.css":
+        `:root {\n  --ds-black: #000000;\n  --ds-shadow-1: 0 2px 6px rgba(0, 0, 0, 0.06);\n}\n`,
+      "app/tokens/semantic.css": `:root {\n  --shadow-sm: var(--ds-shadow-1);\n}\n`,
+      "app/themes/default.css": THEME,
+      "modules/x/ui/x.module.css": USES_SHADOW,
+      "modules/x/ui/X.tsx": USES_CLASS,
+    })
+    expect(collectTokenErrors(root)).toContainEqual(expect.stringContaining("--ds-shadow-1"))
+  })
+
+  it("只有幾何的陰影放行 —— 顏色從主題那一側接上", () => {
+    const root = fixture({
+      "app/tokens/primitives.css":
+        `:root {\n  --ds-black: #000000;\n  --ds-shadow-1: 0 2px 6px;\n  --ds-shadow-alpha-1: 6%;\n}\n`,
+      "app/tokens/semantic.css":
+        `:root {\n  --shadow-sm: var(--ds-shadow-1)\n`
+        + `    color-mix(in srgb, var(--color-shadow) var(--ds-shadow-alpha-1), transparent);\n}\n`,
+      "app/themes/default.css": THEME,
+      "modules/x/ui/x.module.css": USES_SHADOW,
       "modules/x/ui/X.tsx": USES_CLASS,
     })
     expect(collectTokenErrors(root)).toEqual([])
@@ -1012,7 +1100,7 @@ describe("規則 t：行內樣式的裸色值與節奏類數字", () => {
 describe("規則 u：manifest 的 theme_color 必須等於預設主題的底色", () => {
   const TREE = (themeColor: string) => ({
     "app/tokens/primitives.css": `:root {\n  --ds-gray-950: #0F1115;\n}\n`,
-    "app/themes/default.css": `:root {\n  --color-bg-app: var(--ds-gray-950);\n}\n`,
+    "app/themes/default.css": `:root {\n  color-scheme: dark;\n  --color-bg-app: var(--ds-gray-950);\n}\n`,
     "app/layout.tsx":
       `import "./tokens/primitives.css"\nimport "./themes/default.css"\nexport default null\n`,
     "app/manifest.ts": `export default () => ({ theme_color: "${themeColor}" })\n`,

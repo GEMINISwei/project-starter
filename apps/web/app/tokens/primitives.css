@@ -17,6 +17,9 @@
 :root {
   /* ---- 中性：gray（預設主題） ---- */
   --ds-white:      #FFFFFF;
+  /* 陰影的基色（由 `--color-shadow` 挑走）。放在中性線旁邊而不是自成一段：
+     它就是這條線的兩個端點之一。 */
+  --ds-black:      #000000;
   --ds-gray-75:    #F9FAFB;
   --ds-gray-100:   #F5F5F5;
   --ds-gray-300:   #D1D5DB;
@@ -37,8 +40,9 @@
   --ds-indigo-900: #312E81;
 
   /* ---- 狀態 ----
-     只有 -600 一階，深色底上的淺色底由 `semantic.css` 用 color-mix 混出來。
-     **導入 DS 時這一段刻意不接到 vendor**：狀態色跨主題共用（不隨 data-theme 變），
+     只有 -600 一階，文字與底色兩階由 `themes/*.css` 從這一階混出來 —— 混什麼、混多少
+     跟著那份主題的底色走，所以那一半是主題的事，這裡只給色相。
+     **導入 DS 時這一段刻意不接到 vendor**：狀態色的色相跨主題共用，
      接到某一套 DS 的 vendor 上，等於讓內建主題也依賴那套 DS。理由見
      `docs/design-system.md` 的「跨主題共用的東西不要接到單一 DS」。 */
   --ds-green-600:  #5C7A52;
@@ -138,12 +142,21 @@
   --ds-radius-5: 24px;
   --ds-radius-full: 999px;
 
-  /* ---- 陰影 ---- */
-  --ds-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --ds-shadow-2: 0 2px 6px rgba(0, 0, 0, 0.06);
-  --ds-shadow-3: 0 6px 20px rgba(0, 0, 0, 0.08);
-  --ds-shadow-4: 0 16px 44px rgba(0, 0, 0, 0.12);
-  --ds-shadow-up: 0 -4px 18px rgba(0, 0, 0, 0.06);
+  /* ---- 陰影 ----
+     **只有幾何與濃度，沒有顏色。** 顏色是 `--color-shadow`，由主題給 ——
+     「陰影是黑的」是亮色 UI 的假設（深色底上的黑陰影等於沒有陰影），
+     鎖在原始層的話主題換不掉它。語意層把兩者接起來，規則 x 擋這裡寫回色值。 */
+  --ds-shadow-1:  0 1px 2px;
+  --ds-shadow-2:  0 2px 6px;
+  --ds-shadow-3:  0 6px 20px;
+  --ds-shadow-4:  0 16px 44px;
+  --ds-shadow-up: 0 -4px 18px;
+
+  --ds-shadow-alpha-1:  5%;
+  --ds-shadow-alpha-2:  6%;
+  --ds-shadow-alpha-3:  8%;
+  --ds-shadow-alpha-4:  12%;
+  --ds-shadow-alpha-up: 6%;
 
   /* ---- 動態 ---- */
   --ds-ease-standard: cubic-bezier(0.4, 0.0, 0.2, 1);

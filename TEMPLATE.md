@@ -65,8 +65,8 @@ make dev       # 啟動開發環境（首次會建置 image，約 2–5 分鐘�
 模板出廠**只有一份主題**：`default`，深色的灰／靛藍。沒有明暗切換，也沒有導入任何
 外部 Design System —— 視覺是開案時要決定的事，兩條路：
 
-**只想換色調**：改 `apps/web/app/themes/default.css` 的右手邊（那 24 個 `--color-*` 是
-UI kit 認得的契約，**名字不要動**），需要新的色階就在 `app/tokens/primitives.css` 補。
+**只想換色調**：改 `apps/web/app/themes/default.css` 的右手邊（那一整組 `--color-*`
+與 `color-scheme` 是 UI kit 認得的契約，**名字不要動**），需要新的色階就在 `app/tokens/primitives.css` 補。
 底色改了要同步 `apps/web/app/manifest.ts` 的 `theme_color`（PWA 吃不到 `var()`，
 所以那是唯一一個字面值；`npm run check:tokens` 會比對它與主題底色，漏改會提醒你）。
 

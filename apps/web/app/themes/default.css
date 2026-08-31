@@ -14,6 +14,11 @@
 
 :root:not([data-theme]),
 :root[data-theme="default"] {
+  /* 原生表單控制項與捲軸只認這個屬性，沒有任何 token 管得到它 —— 所以它跟 --color-*
+     一樣是主題的一部分（規則 w 要求每份主題都宣告）。少了它，換一份亮色主題時
+     <select> 與捲軸會維持深色，而且沒有紅燈。 */
+  color-scheme: dark;
+
   /* ---- 表面 ---- */
   --color-bg-app:         var(--ds-gray-950);
   --color-surface-card:   var(--ds-gray-925);
@@ -49,6 +54,24 @@
 
   --color-focus-ring: color-mix(in srgb, var(--ds-indigo-400) 65%, transparent);
   --color-scrim:      color-mix(in srgb, var(--ds-gray-975) 72%, transparent);
+
+  /* ---- 狀態 ----
+     色相跨主題共用（成功就是綠的，`--ds-*-600` 那一階不隨 data-theme 變），
+     但**明暗是這份主題的事**：fg 往白提亮才在深色底上讀得出來，bg 拿頁面底色混出來
+     才不刺眼。兩個推導都只在深色底上成立，所以它們住在這裡而不是 semantic.css。
+     來源仍留在自己這一側的 --ds-*-600，不接 vendor（見 docs/design-system.md）。
+     對比由 tests/app/themes/contrast.test.ts 釘住，調整前先跑它。 */
+  --color-success-fg: color-mix(in srgb, var(--ds-green-600) 55%, var(--ds-white));
+  --color-success-bg: color-mix(in srgb, var(--ds-green-600) 22%, var(--ds-gray-950));
+  --color-warning-fg: color-mix(in srgb, var(--ds-amber-600) 55%, var(--ds-white));
+  --color-warning-bg: color-mix(in srgb, var(--ds-amber-600) 22%, var(--ds-gray-950));
+  --color-danger-fg:  color-mix(in srgb, var(--ds-red-600) 55%, var(--ds-white));
+  --color-danger-bg:  color-mix(in srgb, var(--ds-red-600) 22%, var(--ds-gray-950));
+  --color-info-fg:    color-mix(in srgb, var(--ds-slate-600) 55%, var(--ds-white));
+  --color-info-bg:    color-mix(in srgb, var(--ds-slate-600) 22%, var(--ds-gray-950));
+
+  /* 陰影的顏色。幾何與濃度在原始層，這裡只挑顏色 —— 亮色主題要換的正是這一個。 */
+  --color-shadow: var(--ds-black);
 
   /* ---- 邊框 ---- */
   --color-border-subtle:  var(--ds-gray-850);

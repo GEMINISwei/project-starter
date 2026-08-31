@@ -98,7 +98,7 @@ export function TextInput({
       {label && (
         <span className={styles.label}>
           {label}
-          {inputProps.required && <span style={{ color: "var(--danger-600)", marginLeft: 2 }}>*</span>}
+          {inputProps.required && <span style={{ color: "var(--color-danger-fg)", marginLeft: 2 }}>*</span>}
         </span>
       )}
       {multiline ? (
@@ -179,7 +179,7 @@ export function SelectInput({
       {label && (
         <span className={styles.label}>
           {label}
-          {selectProps.required && <span style={{ color: "var(--danger-600)", marginLeft: 2 }}>*</span>}
+          {selectProps.required && <span style={{ color: "var(--color-danger-fg)", marginLeft: 2 }}>*</span>}
         </span>
       )}
       <span className={styles.selectControl}>
@@ -291,7 +291,7 @@ export function NumberInput({
       {label && (
         <span className={styles.label}>
           {label}
-          {required && <span style={{ color: "var(--danger-600)", marginLeft: 2 }}>*</span>}
+          {required && <span style={{ color: "var(--color-danger-fg)", marginLeft: 2 }}>*</span>}
         </span>
       )}
       <input
