@@ -2,7 +2,7 @@
 #
 # 確認文件指到的檔案、錨點、識別字與目錄樹真的存在，且指令表涵蓋每一支 check-*。
 #
-# 只查五種**機械上可判定**的東西，語意正不正確仍然靠 review：
+# 只查六種**機械上可判定**的東西，語意正不正確仍然靠 review：
 #   1. 路徑：markdown 連結目標，與反引號裡含 `/` 的路徑。
 #   2. 錨點：連結目標 `#` 之後那一段，比對目標文件的標題。
 #   3. 帶點的識別字（`Xxx.yyy`，擁有者是大寫開頭）。
@@ -12,6 +12,9 @@
 #   5. 指令表：`<!-- check-docs: commands <前綴> -->` 標記的表格，要恰好列出 Makefile
 #      `TARGETS` 裡該前綴的每一個目標。這條是反方向的：漏掉一整支檢查器不會讓任何東西失敗，
 #      只是沒有人知道它在，而它守的東西就此無人聞問。
+#   6. 殘留清單：`<!-- check-docs: residue links|other -->` 標記的兩張表，要恰好列出
+#      「刪掉 TEMPLATE.md 之後要修哪些檔案」。同樣是反方向的，理由與代價見底下那一節。
+#      只在 TEMPLATE.md 還在的時候檢查。
 #
 # **標記一律要獨佔一行**（regex 錨在行首）。散文裡用反引號提到標記不算數 —— 不錨的話「同一行
 # 同時提到 ignore-start 與 ignore-end」會把 ignoring 打開卻永遠關不掉，那一行之後整份文件零覆蓋。
@@ -26,6 +29,8 @@
 #   grep -rn "docs/.*\.md" scripts .github .githooks
 # 另外兩類同樣守不到的：數量宣稱（「六個 proxy location」對不對）與執行期訊息的內容
 # （腳本印出來的那句話點名的 job／檔案還在不在）。三者都只能靠 review。
+# **數量宣稱有一個例外**：第 6 步殘留清單裡的「N 處」會驗（見底下那一節），
+# 因為那幾個數字有一份可計算的來源。沒有那種來源的數量宣稱仍然守不到。
 #
 # 整段跳過還有第二種寫法：`<!-- check-docs: ignore-start --> … <!-- check-docs: ignore-end -->`。
 # 用它之前先確認你要的不是**修文件** —— 它只為了一種情況存在：那段文字的主題就是某些檔案的
@@ -36,8 +41,9 @@ set -euo pipefail
 source "$(dirname "$0")/lib/common.sh"
 
 DOCS=(README.md AGENTS.md docs/*.md contracts/README.md)
-# TEMPLATE.md 導入後會被刪掉，還在的時候才掃。
-[ -f TEMPLATE.md ] && DOCS+=(TEMPLATE.md)
+# TEMPLATE.md 導入後會被刪掉，還在的時候才掃。底下的殘留清單檢查也用同一道門。
+readonly TEMPLATE_DOC="TEMPLATE.md"
+[ -f "$TEMPLATE_DOC" ] && DOCS+=("$TEMPLATE_DOC")
 
 # 行內出現、但不指向 repo 內任何東西的字串。**每一條都要附理由。**
 # 比照 apps/web/knip.ts 與 apps/api/pyproject.toml 的 per-file-ignores 慣例。
@@ -400,8 +406,129 @@ check_command_table() {
     return 1
 }
 
+# ── TEMPLATE.md 第 6 步的殘留清單 ─────────────────────────────────────────────
+#
+# 守的是「刪掉 TEMPLATE.md 之後要逐份修哪些檔案」那兩張表。它漂移過兩次，而且**完全沒有
+# 症狀**：清單少列一份，下游照著逐份改完仍然會紅，紅的還是清單沒提過的檔案 ——
+# 那正是第 6 步自己警告的情況。人工驗一次只能證明「當下是對的」，擋不住下一條新引用。
+#
+# **不另開一支 make check-template**：那支腳本在下游會變成新的殘留（連同 Makefile 的
+# TARGETS 與指令表三處），而那三處又得寫進第 6 步的清單裡 —— 用檢查器守清單、清單再列出
+# 檢查器，是個會自己長大的迴圈。折在這裡並沿用上面 DOCS 的 `[ -f "$TEMPLATE_DOC" ]`，
+# 下游刪掉檔案之後這一段自動停止適用，一行都不必動。
+#
+# 這支腳本自己不算殘留：第 6 步明講 DOCS 那兩行是讓整步成立的機制、不要動。
+readonly RESIDUE_SELF="scripts/check-docs.sh"
+
+# 標記之後那張表格的每一列：`檔名<TAB>宣稱的數量`（沒寫「N 處」的列數量是 `-`）。
+# 檔名取第一欄反引號裡那一段 —— 表頭與分隔列沒有反引號，會自動略過。
+residue_listed() {
+    awk -v kind="$1" '
+        $0 ~ "^[[:space:]]*<!--[[:space:]]*check-docs:[[:space:]]*residue[[:space:]]+" kind "[[:space:]]*-->" {
+            seeking = 1
+            next
+        }
+        seeking && /^\|/ {
+            in_table = 1
+            n = split($0, cells, "|")
+            if (n < 2) next
+            if (!match(cells[2], /`[^`]+`/)) next
+            file = substr(cells[2], RSTART + 1, RLENGTH - 2)
+            count = "-"
+            # 「N 處」才算數量宣稱。同一列裡的「第 4 步」不會誤中 —— 量詞不同。
+            if (match($0, /[0-9]+[[:space:]]*處/)) {
+                frag = substr($0, RSTART, RLENGTH)
+                sub(/[[:space:]]*處$/, "", frag)
+                count = frag
+            }
+            print file "\t" count
+            next
+        }
+        in_table { exit }
+    ' "$TEMPLATE_DOC"
+}
+
+# 實際會變紅的那幾條，**從上面 extract 的輸出算**，不要自己再寫一份 grep。
+#
+# 這一點是這一節唯一容易寫錯的地方：第 6 步宣稱的是「刪掉之後 check-docs 會逐條列出來」，
+# 所以能拿來比對的只有這支腳本真正會報的東西。自己寫 grep 的話會漏掉同一行被算兩次的情況
+# （`[`../TEMPLATE.md`](../TEMPLATE.md)` 連結目標與反引號路徑各中一次），而那正是 #32
+# 修掉的那一筆 —— 用第二份實作去驗第一份，等於把要守的東西複製了一份。
+residue_actual_links() {
+    local doc n
+    for doc in "${DOCS[@]}"; do
+        [ "$doc" = "$TEMPLATE_DOC" ] && continue
+        [ -f "$doc" ] || continue
+        n="$(extract "$doc" \
+            | awk -F'\t' -v t="$TEMPLATE_DOC" \
+                '$2 == "path" && ($3 == t || $3 == "../" t)' \
+            | wc -l | tr -d ' ')"
+        if [ "$n" -gt 0 ]; then
+            printf '%s\t%s\n' "$doc" "$n"
+        fi
+    done
+}
+
+# 非 .md 檔裡提到 TEMPLATE.md 的檔案。git grep 只看進版控的檔案，
+# 順帶擋掉 node_modules 與 .venv。前綴條件是為了不把 PULL_REQUEST_TEMPLATE.md 算進來。
+residue_actual_other() {
+    git grep -lE '(^|[^A-Za-z_])TEMPLATE\.md' -- ':!*.md' \
+        | grep -vx "$RESIDUE_SELF" \
+        | sort
+}
+
+check_template_residue() {
+    local failed=0 kind listed actual missing extra file count actual_links expected
+
+    # 下游刪掉之後就沒有要守的東西。有檔案卻找不到標記則是失敗 ——
+    # 「標記不見了」與「表格是對的」不能是同一個結果（同 check_command_table）。
+    [ -f "$TEMPLATE_DOC" ] || return 0
+
+    actual_links="$(residue_actual_links)"
+
+    for kind in links other; do
+        listed="$(residue_listed "$kind" | cut -f1 | sed '/^$/d' | sort)"
+        if [ -z "$listed" ]; then
+            echo "${TEMPLATE_DOC}: 找不到 <!-- check-docs: residue ${kind} --> 標記後面的表格。" >&2
+            echo "  第 6 步的殘留清單靠它守著，標記不見了等於沒有人在守。" >&2
+            failed=1
+            continue
+        fi
+
+        case "$kind" in
+            links) actual="$(cut -f1 <<< "$actual_links" | sed '/^$/d' | sort)" ;;
+            other) actual="$(residue_actual_other)" ;;
+        esac
+
+        missing="$(comm -13 <(printf '%s\n' "$listed") <(printf '%s\n' "$actual"))"
+        extra="$(comm -23 <(printf '%s\n' "$listed") <(printf '%s\n' "$actual"))"
+        if [ -n "$missing" ] || [ -n "$extra" ]; then
+            echo "${TEMPLATE_DOC}: 第 6 步的殘留清單（residue ${kind}）與實際對不上：" >&2
+            [ -n "$missing" ] && echo "  實際有、清單沒列：$(tr '\n' ' ' <<< "${missing}")" >&2
+            [ -n "$extra" ] && echo "  清單列了、實際沒有：$(tr '\n' ' ' <<< "${extra}")" >&2
+            failed=1
+        fi
+    done
+
+    # 逐筆數量。只驗有寫「N 處」的那幾列 —— 沒寫的列（AGENTS.md）只驗存在。
+    while IFS=$'\t' read -r file count; do
+        [ "$count" = "-" ] && continue
+        expected="$(awk -F'\t' -v f="$file" '$1 == f { print $2 }' <<< "$actual_links")"
+        # 檔案本身對不上的話上面那段已經報過，這裡不要再報一次同一件事。
+        [ -n "$expected" ] || continue
+        if [ "$count" != "$expected" ]; then
+            echo "${TEMPLATE_DOC}: 第 6 步說 ${file} 有 ${count} 處，實際是 ${expected} 處。" >&2
+            failed=1
+        fi
+    done < <(residue_listed links)
+
+    return "$failed"
+}
+
 command_table_failed=0
 check_command_table || command_table_failed=1
+template_residue_failed=0
+check_template_residue || template_residue_failed=1
 
 failed=0
 for doc in "${DOCS[@]}"; do
@@ -443,8 +570,12 @@ if [ "$failed" -ne 0 ]; then
     echo "文件與實際對不上。請修文件；刻意的假想範例移進圍欄程式碼區塊／ALLOW，樹狀圖見上面的訊息。" >&2
 fi
 
-if [ "$failed" -ne 0 ] || [ "$command_table_failed" -ne 0 ]; then
+if [ "$failed" -ne 0 ] || [ "$command_table_failed" -ne 0 ] \
+    || [ "$template_residue_failed" -ne 0 ]; then
     exit 1
 fi
 
 echo "文件指向的路徑、錨點與識別字都存在，目錄樹與指令表也都對得上"
+if [ -f "$TEMPLATE_DOC" ]; then
+    echo "TEMPLATE.md 第 6 步的殘留清單也對得上"
+fi
