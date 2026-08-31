@@ -17,7 +17,7 @@ app → shared
 
 <!-- check-docs: tree . -->
 ```text
-project-starter/
+<project>/
 ├── apps/
 │   ├── api/                    # FastAPI
 │   │   ├── main.py             # 進入點（uvicorn 啟動器）
