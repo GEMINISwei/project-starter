@@ -915,6 +915,52 @@ function checkThemeInterface(cssFiles, errors) {
   }
 }
 
+/**
+ * w：`color-scheme` 只能宣告在主題檔，而且每份主題都要宣告。
+ *
+ * 原生表單控制項與捲軸**只認這個屬性**，沒有任何 token 管得到它。它以前寫死在
+ * `tokens/semantic.css` 的 `:root` —— 那等於把「這個 app 是深色的」擺在主題介面外面：
+ * 換一份亮色主題時 `--color-*` 全部換掉了，`<select>` 與捲軸仍然是深的，
+ * 而規則 r 只比對 `--color-*`，這件事不會有任何紅燈。
+ *
+ * 值刻意不驗：`light dark` 是合法且有意義的寫法（同一份主題支援兩軌），
+ * 限成 light／dark 二選一等於先把那條路堵死。
+ */
+function checkColorScheme(cssFiles, errors) {
+  for (const file of cssFiles) {
+    const declared = /(?:^|[\s;{])color-scheme\s*:/.test(file.text)
+    if (!file.rel.startsWith(`${THEME_DIR}/`)) {
+      if (declared) {
+        errors.push(`${file.rel}: color-scheme 只能宣告在 ${THEME_DIR}/ 底下 ——`
+          + " 它是主題介面的一部分，不是全站常數")
+      }
+      continue
+    }
+    if (declared) continue
+    errors.push(`${file.rel}: 沒有宣告 color-scheme —— 原生表單控制項與捲軸只認它，`
+      + "少了這一行，換到這份主題時它們會維持上一份主題的明暗")
+  }
+}
+
+/**
+ * x：原始層的陰影不可自帶色值。
+ *
+ * `--ds-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.05)` 把「陰影是黑的」鎖在原始層，
+ * 而那是**亮色 UI 的假設** —— 深色底上的黑陰影等於沒有陰影。主題換不掉它：
+ * `--color-*` 那組名字裡本來沒有陰影的槽位。幾何與濃度留在原始層，
+ * 顏色走主題的 `--color-shadow`，語意層把兩者接起來。
+ */
+function checkShadowColors(cssFiles, errors) {
+  for (const file of cssFiles) {
+    if (!TOKEN_FILE.test(file.rel)) continue
+    for (const { token, value, no } of eachDeclaration(file)) {
+      if (!/^--ds-shadow-/.test(token) || !LITERAL_COLOR.test(value)) continue
+      errors.push(`${file.rel}:${no}: ${token} 不可自帶色值 —— 陰影顏色由主題的`
+        + " --color-shadow 決定，這裡只放幾何")
+    }
+  }
+}
+
 /** 每個索引落在第幾行。行號要靠絕對位置算，因為 `style={{…}}` 常常跨行。 */
 function lineIndex(text) {
   const starts = [0]
@@ -1130,6 +1176,8 @@ export function collectTokenErrors(base) {
   checkThemeLists(base, cssFiles, errors)
   checkTokenFileLoading(base, cssFiles, errors)
   checkThemeInterface(cssFiles, errors)
+  checkColorScheme(cssFiles, errors)
+  checkShadowColors(cssFiles, errors)
   checkInlineStyles(tsFiles, errors)
   checkManifestThemeColor(base, cssFiles, errors)
   return errors

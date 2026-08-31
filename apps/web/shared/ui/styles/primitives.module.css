@@ -117,13 +117,13 @@
 }
 
 .buttonError {
-  color: var(--danger-600);
-  border-color: color-mix(in srgb, var(--danger-600) 35%, transparent);
+  color: var(--color-danger-fg);
+  border-color: color-mix(in srgb, var(--color-danger-fg) 35%, transparent);
 }
 
 .buttonSuccess {
-  color: var(--success-600);
-  border-color: color-mix(in srgb, var(--success-600) 35%, transparent);
+  color: var(--color-success-fg);
+  border-color: color-mix(in srgb, var(--color-success-fg) 35%, transparent);
 }
 
 .buttonPrimary {
@@ -132,8 +132,8 @@
 }
 
 .buttonWarning {
-  color: var(--warning-600);
-  border-color: color-mix(in srgb, var(--warning-600) 35%, transparent);
+  color: var(--color-warning-fg);
+  border-color: color-mix(in srgb, var(--color-warning-fg) 35%, transparent);
 }
 
 .buttonLarge {
@@ -303,7 +303,7 @@ textarea.input {
 }
 
 .inputError {
-  border-color: var(--danger-600);
+  border-color: var(--color-danger-fg);
 }
 
 .input:focus,
@@ -362,7 +362,7 @@ textarea.input {
 .fieldError {
   font-family: var(--font-sans);
   font-size: var(--fs-xs);
-  color: var(--danger-600);
+  color: var(--color-danger-fg);
 }
 
 .overlay {
@@ -459,31 +459,31 @@ textarea.input {
 }
 
 .notifySuccess {
-  border-color: color-mix(in srgb, var(--success-600) 35%, transparent);
-  border-left: var(--border-width-accent) solid var(--success-600);
-  background: var(--success-100);
-  color: var(--success-600);
+  border-color: color-mix(in srgb, var(--color-success-fg) 35%, transparent);
+  border-left: var(--border-width-accent) solid var(--color-success-fg);
+  background: var(--color-success-bg);
+  color: var(--color-success-fg);
 }
 
 .notifyError {
-  border-color: color-mix(in srgb, var(--danger-600) 35%, transparent);
-  border-left: var(--border-width-accent) solid var(--danger-600);
-  background: var(--danger-100);
-  color: var(--danger-600);
+  border-color: color-mix(in srgb, var(--color-danger-fg) 35%, transparent);
+  border-left: var(--border-width-accent) solid var(--color-danger-fg);
+  background: var(--color-danger-bg);
+  color: var(--color-danger-fg);
 }
 
 .notifyInfo {
-  border-color: color-mix(in srgb, var(--info-600) 35%, transparent);
-  border-left: var(--border-width-accent) solid var(--info-600);
-  background: var(--info-100);
-  color: var(--info-600);
+  border-color: color-mix(in srgb, var(--color-info-fg) 35%, transparent);
+  border-left: var(--border-width-accent) solid var(--color-info-fg);
+  background: var(--color-info-bg);
+  color: var(--color-info-fg);
 }
 
 .notifyWarning {
-  border-color: color-mix(in srgb, var(--warning-600) 35%, transparent);
-  border-left: var(--border-width-accent) solid var(--warning-600);
-  background: var(--warning-100);
-  color: var(--warning-600);
+  border-color: color-mix(in srgb, var(--color-warning-fg) 35%, transparent);
+  border-left: var(--border-width-accent) solid var(--color-warning-fg);
+  background: var(--color-warning-bg);
+  color: var(--color-warning-fg);
 }
 
 .notifyIcon {
@@ -614,7 +614,7 @@ textarea.input {
 .errorState {
   padding: var(--space-10) var(--space-6);
   text-align: center;
-  color: var(--danger-600);
+  color: var(--color-danger-fg);
 }
 
 .dialogForm {

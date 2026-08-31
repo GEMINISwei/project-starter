@@ -62,11 +62,11 @@
 }
 
 .itemError {
-  color: var(--danger-600);
+  color: var(--color-danger-fg);
 }
 
 .itemError:hover {
-  background: color-mix(in srgb, var(--danger-600) 8%, transparent);
+  background: color-mix(in srgb, var(--color-danger-fg) 8%, transparent);
 }
 
 .itemIcon {

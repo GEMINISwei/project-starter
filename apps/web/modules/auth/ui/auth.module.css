@@ -78,12 +78,12 @@
 .errorBanner {
   width: 100%;
   padding: var(--space-3) var(--space-4);
-  background: var(--danger-100);
-  border: var(--border-width-hairline) solid var(--danger-600);
+  background: var(--color-danger-bg);
+  border: var(--border-width-hairline) solid var(--color-danger-fg);
   border-radius: var(--radius-sm);
   font-family: var(--font-sans);
   font-size: var(--fs-sm);
-  color: var(--danger-600);
+  color: var(--color-danger-fg);
   line-height: var(--lh-snug);
   margin-bottom: var(--space-1);
 }

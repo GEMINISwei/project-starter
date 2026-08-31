@@ -59,7 +59,7 @@
 
 .permissionError {
   margin-top: var(--space-1);
-  color: var(--danger-600);
+  color: var(--color-danger-fg);
   font-size: var(--fs-xs);
 }
 

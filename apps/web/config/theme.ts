@@ -6,8 +6,9 @@
  * `ThemeName`、在**兩個進入點**（`app/layout.tsx` 與 `app/global-error.tsx`）各加一行 import，
  * 然後改 `DEFAULT_THEME`。
  *
- * 明暗不在這裡，因為**沒有明暗**：這個模板是單一深色色調，`color-scheme` 固定在
- * `app/tokens/semantic.css`。要第二種色調就是多一份主題，理由見 docs/design-system.md。
+ * 明暗不在這裡，因為**沒有明暗**：這個模板是單一深色色調。`color-scheme` 是每份主題
+ * 各自宣告的（`app/themes/*.css`，規則 w 在守）—— 它跟 `--color-*` 一樣屬於主題介面，
+ * 原生表單控制項與捲軸只認它。要第二種色調就是多一份主題，理由見 docs/design-system.md。
  */
 
 /** 可用的主題，對應 `app/themes/<name>.css`。 */

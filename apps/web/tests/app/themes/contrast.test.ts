@@ -20,9 +20,16 @@ type Color = { red: number; green: number; blue: number; alpha: number }
 const TOKEN_DIR = "app/tokens"
 const THEME_DIR = "app/themes"
 
-/** 收集一份 CSS 裡所有 `--x: value;` 宣告。 */
+/**
+ * 收集一份 CSS 裡所有 `--x: value;` 宣告。
+ *
+ * **註解要先剝掉。** 值的正規式跨得過換行，所以註解裡示範用的
+ * `--ds-indigo-600: var(--<上游的名字>)` 會從那裡一路吃到下一個分號 ——
+ * 中間那幾個宣告就安靜地不存在了。症狀是解析時「找不到 --ds-white」，
+ * 看起來像 token 沒宣告，實際上是被一段說明文字吃掉的。
+ */
 function declarationsIn(file: string, into: Map<string, string>) {
-  const source = readFileSync(path.resolve(file), "utf8")
+  const source = readFileSync(path.resolve(file), "utf8").replace(/\/\*[\s\S]*?\*\//g, "")
   for (const match of source.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)) {
     into.set(match[1], match[2].trim())
   }
@@ -144,6 +151,20 @@ const TEXT_ON_SURFACE: ReadonlyArray<[text: string, surface: string]> = [
   ["--color-text-muted", "--color-surface-hover"],
 ]
 
+/**
+ * 狀態色的文字與它自己的底。
+ *
+ * 這四組以前住在 `app/tokens/semantic.css`，明度是拿深色頁底推導出來的
+ * （`color-mix(… , var(--ds-gray-950))`），所以主題換不掉，也沒有任何測試在看。
+ * 搬進主題層之後它們就是普通的 `--color-*`：每份主題各給一次，這裡各問一次。
+ */
+const STATUS_PAIRS: ReadonlyArray<[text: string, surface: string]> = [
+  ["--color-success-fg", "--color-success-bg"],
+  ["--color-warning-fg", "--color-warning-bg"],
+  ["--color-danger-fg", "--color-danger-bg"],
+  ["--color-info-fg", "--color-info-bg"],
+]
+
 describe.each(themeFiles)("%s 的對比", (themeFile) => {
   const declarations = baseDeclarations()
   declarationsIn(path.join(THEME_DIR, themeFile), declarations)
@@ -157,6 +178,13 @@ describe.each(themeFiles)("%s 的對比", (themeFile) => {
 
   it.each(TEXT_ON_SURFACE)("%s 在 %s 上至少 4.5:1", (text, surface) => {
     expect(contrast(resolve(text), resolve(surface))).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it("狀態色的文字在自己的底上至少 4.5:1", () => {
+    for (const [text, surface] of STATUS_PAIRS) {
+      const ratio = contrast(resolve(text), resolve(surface))
+      expect(ratio, `${text} 在 ${surface} 上`).toBeGreaterThanOrEqual(4.5)
+    }
   })
 
   it("控制項邊界與 focus ring 在卡片上至少 3:1", () => {

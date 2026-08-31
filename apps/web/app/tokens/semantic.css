@@ -7,25 +7,14 @@
  *
  * 顏色不在這裡，在 `themes/*.css`：它是唯一會隨主題變動的類別。 */
 
-/* 這個模板是**單一深色色調**，所以 `color-scheme` 固定成 dark，沒有切換。
-   它不能省：原生表單控制項與捲軸只認這個屬性 —— 少了它，深色底上的 <select>
-   與捲軸會維持亮色，那是最容易被漏掉的一半。 */
-:root { color-scheme: dark; }
+/* `color-scheme` 不在這裡，在 `themes/*.css`：原生表單控制項與捲軸只認它，而「這個 app
+   是深色還是亮色」是那一份主題的事。寫在這一層等於把它擺在主題介面外面 —— 換一份亮色
+   主題時 --color-* 全換了，<select> 與捲軸仍然是深的，而且沒有任何紅燈。規則 w 在守。
+
+   狀態色也不在這裡（以前在）：色相確實跨主題共用，但它的明暗是拿頁面底色推導出來的，
+   那一半只在深色底上成立。四組現在是 `--color-*-fg`／`--color-*-bg`，住在 themes/。 */
 
 :root {
-  /* ---- 狀態色 ----
-     **不隨主題變**（成功就是綠的），所以住在這裡而不是 themes/。
-     -600 是文字與圖示，-100 是它的底：深色底上直接用原本的淺色底會刺眼，
-     所以由 -600 那階和頁面底色混出來，而不是另外挑一個值 —— 換色票時它會自己跟上。 */
-  --success-600: color-mix(in srgb, var(--ds-green-600) 55%, var(--ds-white));
-  --success-100: color-mix(in srgb, var(--ds-green-600) 22%, var(--ds-gray-950));
-  --warning-600: color-mix(in srgb, var(--ds-amber-600) 55%, var(--ds-white));
-  --warning-100: color-mix(in srgb, var(--ds-amber-600) 22%, var(--ds-gray-950));
-  --danger-600:  color-mix(in srgb, var(--ds-red-600) 55%, var(--ds-white));
-  --danger-100:  color-mix(in srgb, var(--ds-red-600) 22%, var(--ds-gray-950));
-  --info-600:    color-mix(in srgb, var(--ds-slate-600) 55%, var(--ds-white));
-  --info-100:    color-mix(in srgb, var(--ds-slate-600) 22%, var(--ds-gray-950));
-
   /* ---- 間距 ----
      階號與 `shared/ui` 的 `spacing()` 是同一組數字：`spacing(4)` 會產生
      `var(--space-4)`。要調整整體疏密請改 primitives 的 --ds-space-*，不要改這裡的對應。 */
@@ -106,13 +95,21 @@
   --radius-pill:  var(--ds-radius-full);
   --radius-round: 50%;
 
-  /* ---- 陰影 ---- */
-  --shadow-xs: var(--ds-shadow-1);
-  --shadow-sm: var(--ds-shadow-2);
-  --shadow-md: var(--ds-shadow-3);
-  --shadow-lg: var(--ds-shadow-4);
+  /* ---- 陰影 ----
+     三段在這裡才接起來：幾何與濃度來自原始層，**顏色來自主題**（`--color-shadow`）。
+     顏色不能留在原始層 —— 深色底上的黑陰影等於沒有陰影，那是每份主題各自的決定，
+     而原始層換不掉（規則 x 擋 `--ds-shadow-*` 寫回色值）。 */
+  --shadow-xs: var(--ds-shadow-1)
+    color-mix(in srgb, var(--color-shadow) var(--ds-shadow-alpha-1), transparent);
+  --shadow-sm: var(--ds-shadow-2)
+    color-mix(in srgb, var(--color-shadow) var(--ds-shadow-alpha-2), transparent);
+  --shadow-md: var(--ds-shadow-3)
+    color-mix(in srgb, var(--color-shadow) var(--ds-shadow-alpha-3), transparent);
+  --shadow-lg: var(--ds-shadow-4)
+    color-mix(in srgb, var(--color-shadow) var(--ds-shadow-alpha-4), transparent);
   /* 底部導覽是唯一往上打的陰影，方向與上面那組相反，所以單獨一個。 */
-  --shadow-nav: var(--ds-shadow-up);
+  --shadow-nav: var(--ds-shadow-up)
+    color-mix(in srgb, var(--color-shadow) var(--ds-shadow-alpha-up), transparent);
 
   /* ---- 動態 ---- */
   --ease-standard: var(--ds-ease-standard);
