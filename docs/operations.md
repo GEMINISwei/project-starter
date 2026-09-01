@@ -548,7 +548,8 @@ provenance 是兩件事 —— 後者刻意關著。`docker/build-push-action` �
 掛在**語意化版號**上，所以只有推 `v*` tag 才會移動；`main` 上的每一次合併都推了 image，
 但 `latest` 不會跟著走。想拉「最新一次合併」請用 `main` 或 `sha-<short>`。
 
-**部署後只有 smoke test。** `scripts/deploy.sh` 打一次 `/healthz`，通了就算成功 ——
+**部署後只有 smoke test。** `scripts/deploy.sh` 從主機打 `/healthz`（重試到通，最多 60 秒），
+通了就算成功 ——
 沒有金絲雀、沒有指標比對，**也不會在正式環境跑 e2e**（e2e 在 CI 上對著一套隔離的 stack
 跑，見 [`development.md`](development.md#規格與測試的三層) 的「e2e 的範圍」）。
 這也是自動回滾唯一的判準，所以「回滾機制沒被觸發」不等於「這一版是好的」。

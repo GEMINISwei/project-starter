@@ -11,6 +11,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `scripts/deploy.sh` 的 smoke test 改成重試到通（最多 60 秒），不再打一次就定生死。
+  `up -d` 在 nginx 的 depends_on 條件成立時就回來，那時 nginx 才剛 start，
+  單發的 curl 會撞在它還沒 listen 的空隙上 —— 症狀是部署其實成功、卻被回報成失敗並觸發回滾。
+
 ### Changed
 
 - `color-scheme`、狀態色與陰影顏色搬進主題介面。`color-scheme` 從 `app/tokens/semantic.css`
