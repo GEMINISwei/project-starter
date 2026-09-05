@@ -158,7 +158,7 @@ services:
 
   nginx:
     container_name: ${COMPOSE_PROJECT_NAME:?}-nginx
-    image: nginx:1.31.4-alpine
+    image: nginx:1.31.5-alpine
     # 目前兩份模板都沒有用到這兩個變數，**但不要因此刪掉它們**。它們是模板的 envsubst
     # 代換面：nginx 的 entrypoint 只會換「環境裡有的」變數，而 scripts/check-nginx.sh 的
     # `envsubst '${COMPOSE_PROJECT_NAME} ${MODE}'` 清單必須跟這裡一致。
