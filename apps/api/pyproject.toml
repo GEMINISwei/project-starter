@@ -29,7 +29,7 @@ dependencies = [
     "PyJWT==2.13.0",
     "python-multipart==0.0.32",
     "bcrypt==5.0.0",
-    "pywebpush==2.4.0",
+    "pywebpush==2.5.0",
 ]
 
 # dev group 刻意用 `>=` 而不是 `==`：這些工具沒有進正式環境，跟著上游走可以早一點吃到
@@ -38,7 +38,7 @@ dependencies = [
 # 所以升級只會發生在有人明確跑 `uv lock` 的時候，那時請看一眼 diff 裡的 major。
 [dependency-groups]
 dev = [
-    "ruff>=0.16.4",
+    "ruff>=0.16.5",
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
     "pytest-cov>=7.1.0",
