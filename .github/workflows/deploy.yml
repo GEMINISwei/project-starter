@@ -1,0 +1,187 @@
+name: Deploy
+
+# 只在 GitHub 上按 Publish release 時部署; 平常 push 只跑 CI。
+# 另外可以在 Actions 頁面按 Run workflow, 重新部署一個**已經存在的** tag (回滾用)。
+# 發新版仍然走 release: 手動觸發不建 tag, 版號才不會繞過 release 的紀錄。
+#   version  決定要部署的 tag, 而且必須是 v<VERSION>, image 標籤與程式回報的版本才對得上
+#   ci       重用 ci.yml, 要部署的 commit 要通過同一套檢查
+#   build    建兩份 production image 推到 GHCR, 以 release 的 tag 標記
+#   deploy   SSH 到主機: checkout 同一個 tag → 備份 → 拉 image 並重啟 (make prod)
+#
+# 主機的首次設定與需要的 secrets 見 docs/operations.md〈自動部署〉。
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 要重新部署的 tag (必須已經存在, 例如 v0.1.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# 不取消進行中的部署: 砍在 migration 中途比多等一輪糟。
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      # 手動觸發可以選任一個 branch 上的 deploy.yml 來跑; 只認 main 上的那份,
+      # 否則改過的 workflow 不經 review 就能拿到 production 的 secrets。
+      # 輸入值一律經 env 進 shell, 不直接展開進 run (會變成指令注入)。
+      - name: 決定要部署的 tag
+        id: tag
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = workflow_dispatch ]; then
+            if [ "${GITHUB_REF}" != refs/heads/main ]; then
+              echo "手動部署只能從 main 執行（目前是 ${GITHUB_REF}）" >&2
+              exit 1
+            fi
+            tag="${INPUT_TAG}"
+          else
+            tag="${GITHUB_REF_NAME}"
+          fi
+          # 先擋格式再寫進 GITHUB_OUTPUT: 夾帶換行的值能偽造其他 output。
+          if ! [[ "${tag}" =~ ^v[0-9A-Za-z._-]+$ ]]; then
+            echo "tag 格式不對：${tag}（例如 v0.1.0）" >&2
+            exit 1
+          fi
+          echo "tag=${tag}" >> "${GITHUB_OUTPUT}"
+      # 指定 refs/tags/: tag 不存在 (或填成 branch 名稱) 時在這裡就失敗。
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ steps.tag.outputs.tag }}
+      # 比對根目錄的 VERSION (整個 repo 唯一的版號); 其餘副本與它一致由 make check 的
+      # apps/api/tests/test_version.py 保證, 下面的 ci job 會跑到。
+      - name: tag 與 VERSION 一致
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [ "${TAG}" != "v${version}" ]; then
+            echo "tag 是 ${TAG}，但 VERSION 是 ${version}（要 v${version}）" >&2
+            exit 1
+          fi
+
+  ci:
+    needs: version
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: refs/tags/${{ needs.version.outputs.tag }}
+
+  build:
+    needs: [version, ci]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      api-image: ${{ steps.names.outputs.api }}
+      web-image: ${{ steps.names.outputs.web }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ needs.version.outputs.tag }}
+      # 是 build 期設定 (會烤進 image), 所以必須與主機 .env 的同一個值, 不一致時 web 開機就結束。
+      - name: 檢查 UPLOAD_SIZE_LIMIT
+        env:
+          UPLOAD_SIZE_LIMIT: ${{ vars.UPLOAD_SIZE_LIMIT }}
+        run: |
+          [ -n "${UPLOAD_SIZE_LIMIT}" ] || {
+            echo "請在 repo 的 Settings → Variables 設定 UPLOAD_SIZE_LIMIT（與主機 .env 相同）" >&2
+            exit 1
+          }
+      # GHCR 的名稱只收小寫, 帳號或 repo 名有大寫時直接用 github.repository 會被拒絕。
+      - name: image 名稱
+        id: names
+        env:
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          base="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "api=${base}-api:${TAG}" >> "${GITHUB_OUTPUT}"
+          echo "web=${base}-web:${TAG}" >> "${GITHUB_OUTPUT}"
+      - name: 登入 GHCR
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+      - uses: docker/setup-buildx-action@v4
+      # 與 ci.yml 的 images job 共用 cache scope, 剛跑完的 CI 已經把層暖好了。
+      - uses: docker/build-push-action@v7
+        with:
+          context: apps/api
+          target: base
+          push: true
+          tags: ${{ steps.names.outputs.api }}
+          cache-from: type=gha,scope=api
+      - uses: docker/build-push-action@v7
+        with:
+          context: apps/web
+          target: prod
+          build-args: UPLOAD_SIZE_LIMIT=${{ vars.UPLOAD_SIZE_LIMIT }}
+          push: true
+          tags: ${{ steps.names.outputs.web }}
+          cache-from: type=gha,scope=web
+
+  deploy:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # secrets 放在這個 environment; 要「按下 Publish 後再核准一次」就在這裡開 required reviewers。
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: 準備 SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # 主機指紋事先登記, 不用 StrictHostKeyChecking=no: 那等於誰冒充主機都收得到 token。
+          printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+      # 腳本經 SSH 的 stdin 送過去 (bash -s), token 不會出現在任一端的指令列 (ps 看得到)。
+      # 值一律 %q 轉義後才拼進腳本, 遠端固定用 bash 解讀, 不受部署帳號的登入 shell 影響。
+      #
+      # 主機上拉 image 用的是這個 job 的 GITHUB_TOKEN: job 結束就失效, 主機不必存長期的
+      # registry 憑證; 腳本結束時 logout, 也不在 ~/.docker 留下過期的 token。
+      #
+      # 備份失敗就中止: 沒有在跑的資料庫代表主機狀態不是預期的, 該由人先看過。
+      - name: 部署到主機
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.version.outputs.tag }}
+          API_IMAGE: ${{ needs.build.outputs.api-image }}
+          WEB_IMAGE: ${{ needs.build.outputs.web-image }}
+        run: |
+          {
+            echo 'set -euo pipefail'
+            printf 'cd %q\n' "${DEPLOY_PATH}"
+            echo 'git fetch --force --tags origin'
+            printf 'git checkout --detach %q\n' "refs/tags/${TAG}"
+            printf "printf '%%s' %q | docker login ghcr.io -u %q --password-stdin\n" \
+              "${GITHUB_TOKEN}" "${GITHUB_ACTOR}"
+            echo "trap 'docker logout ghcr.io > /dev/null' EXIT"
+            echo 'make db backup'
+            printf 'export API_IMAGE=%q WEB_IMAGE=%q\n' "${API_IMAGE}" "${WEB_IMAGE}"
+            echo 'make prod'
+            echo 'make prod ps'
+          } | ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" -o BatchMode=yes \
+                "${DEPLOY_USER}@${DEPLOY_HOST}" 'bash -s'

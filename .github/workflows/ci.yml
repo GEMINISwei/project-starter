@@ -1,0 +1,102 @@
+name: CI
+
+# 每個 job 跑的就是本機的 make 指令, CI 不另寫一份流程 —— 本機綠, CI 就綠。
+#   check        make check + make check contract (重產之後契約不能有 diff)
+#   integration  make check integration (拋棄式 PostgreSQL + alembic check)
+#   images       兩份 production image 建得起來, 且 web image 裡沒有真的 Server Action 金鑰
+#
+# deploy.yml 以 workflow_call 重用整份: 要部署的 commit 要先通過同一套檢查。它傳 `ref`
+# 指定那個 tag —— 手動觸發時 github.ref 是 main, 不傳的話測的會是 main 而不是要部署的版本。
+#
+# action 的版本: GitHub (actions/*) 與 Docker (docker/*) 官方的用 tag, 第三方的釘 commit SHA
+# —— tag 可以被改指向, 第三方的 tag 被改等於把任意程式碼放進 CI。兩種都由 Dependabot 升版。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/web/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: cd apps/api && uv sync --frozen
+      - run: cd apps/web && npm ci
+      - run: make check
+      - run: make check contract
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - run: cd apps/api && uv sync --frozen
+      - run: make check integration
+
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: apps/api
+          target: base
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+      - uses: docker/build-push-action@v7
+        with:
+          context: apps/web
+          target: prod
+          # Dockerfile 的 ARG 沒有預設值, 不傳的話 next.config.ts 拿到空字串會拒絕建置。
+          build-args: UPLOAD_SIZE_LIMIT=1mb
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+          load: true
+          tags: ci-web:check
+      # 真金鑰被烤進 image 時一切照常運作, 只有這裡看得到 (理由見 apps/web/Dockerfile)。
+      # 期望值從 Dockerfile 讀, 不另抄一份。
+      - name: web image 裡只有公開的 id salt
+        run: |
+          salt="$(sed -n 's/^ARG NEXT_ACTIONS_ID_SALT="\(.*\)"$/\1/p' apps/web/Dockerfile)"
+          [ -n "${salt}" ] || { echo "apps/web/Dockerfile 找不到 NEXT_ACTIONS_ID_SALT" >&2; exit 1; }
+          docker run --rm --entrypoint node -e EXPECTED_SALT="${salt}" ci-web:check -e '
+            const key = require("./.next/server/server-reference-manifest.json").encryptionKey
+            if (key !== process.env.EXPECTED_SALT) {
+              console.error("image 裡的 Server Action 金鑰不是 Dockerfile 的公開常數")
+              process.exit(1)
+            }'

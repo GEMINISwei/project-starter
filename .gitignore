@@ -1,0 +1,40 @@
+# Environment
+.env*
+# 例外: 這份是環境變數的**清單** (沒有值), 要隨專案散播。實際的 .env 由 make init 產生。
+!.env.example
+
+# 註: `contracts/openapi.json` 刻意**不**列在這裡, 它要進版控 (見 docs/architecture.md〈前後端契約〉)。
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.import_linter_cache/
+# pytest-cov 的中繼檔。
+.coverage
+.coverage.*
+
+# Node
+node_modules/
+.next/
+out/
+next-env.d.ts
+tsconfig.tsbuildinfo
+coverage/
+
+# `make db backup` 的輸出
+backups/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.code-workspace

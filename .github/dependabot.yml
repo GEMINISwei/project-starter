@@ -1,0 +1,48 @@
+# 模板裡的版本全部釘死 (image tag、action、lock 檔), 沒有升版機制的話放久了就會過時。
+# 每週一次、同一個生態系的 minor/patch 合成一個 PR; major 各自一個 PR, 要讀 changelog。
+#
+# 被 peer 擋住的 major 在這裡 ignore, 理由與移除條件寫在原處 (見 docs/development.md〈相依升級〉)。
+# 拿掉 ignore 的時機就是那裡的移除條件成立的時候。
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups:
+      actions: { patterns: ["*"] }
+
+  - package-ecosystem: uv
+    directory: /apps/api
+    schedule: { interval: weekly }
+    groups:
+      api-minor: { update-types: [minor, patch] }
+
+  - package-ecosystem: npm
+    directory: /apps/web
+    schedule: { interval: weekly }
+    groups:
+      web-minor: { update-types: [minor, patch] }
+    ignore:
+      # 見 apps/web/eslint.config.mjs 的「ESLint 卡在 9.x」。
+      - dependency-name: eslint
+        update-types: [version-update:semver-major]
+      # 見 apps/web/package.json 的 `//devDependencies`。
+      - dependency-name: typescript
+        update-types: [version-update:semver-major]
+
+  # Dockerfile 的 base image。Node 的 major 由 apps/web/.nvmrc 決定, 不讓 Dependabot 自己跳。
+  - package-ecosystem: docker
+    directories: [/apps/api, /apps/web]
+    schedule: { interval: weekly }
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+
+  # compose 裡的 postgres 與 nginx。postgres 跨 major 是資料遷移 (見 compose 檔註解), 不自動提。
+  - package-ecosystem: docker-compose
+    directory: /infra/docker
+    schedule: { interval: weekly }
+    ignore:
+      - dependency-name: postgres
+        update-types: [version-update:semver-major]

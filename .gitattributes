@@ -1,0 +1,16 @@
+# 預設交給 git 判斷, 檔案一律以 LF 進版控。
+* text=auto eol=lf
+
+# 這些檔案在 CRLF 下直接壞掉, 不能讓 Windows 的 core.autocrlf 改寫:
+# bash 會把 `\r` 當成指令的一部分 (`$'\r': command not found`), nginx 與 .env 則會多出看不見的字元。
+*.sh               text eol=lf
+Makefile           text eol=lf
+*.template         text eol=lf
+*.conf             text eol=lf
+.env.example       text eol=lf
+
+# 產生的檔案: PR 裡預設摺疊、不計入語言統計。要改請改來源再 `make gen-types`/重新 lock。
+contracts/openapi.json                         linguist-generated
+apps/web/shared/api/generated/schema.d.ts      linguist-generated
+apps/web/package-lock.json                     linguist-generated
+apps/api/uv.lock                               linguist-generated
