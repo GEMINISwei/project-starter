@@ -70,7 +70,7 @@
     "openapi-typescript": "^7.13.0",
     "typescript": "^5.9.3",
     "vite": "^8.2.2",
-    "vitest": "^4.1.10"
+    "vitest": "^5.0.4"
   },
   "//allowScripts": [
     "允許執行安裝腳本的套件 (`npm approve-scripts`)。npm 之後的版本會擋下沒列在這裡的腳本。",
