@@ -53,6 +53,9 @@ jobs:
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # CI 沒有 `make init` 產生的 .env, 拋棄式容器的名稱前綴改用 repo 名稱。
+    env:
+      COMPOSE_PROJECT_NAME: ${{ github.event.repository.name }}
     steps:
       - uses: actions/checkout@v7
         with:

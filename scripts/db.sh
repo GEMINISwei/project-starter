@@ -152,7 +152,8 @@ cmd_migration() {
     local message="$*"
     [ -n "${message}" ] || { echo "用法：make db migration \"這支 migration 在做什麼\"" >&2; exit 1; }
 
-    local container="${COMPOSE_PROJECT_NAME:-project-starter}-migration-gen"
+    require_env COMPOSE_PROJECT_NAME
+    local container="${COMPOSE_PROJECT_NAME}-migration-gen"
     require_docker
     start_throwaway_postgres "${container}"
     trap 'docker rm -f "'"${container}"'" > /dev/null 2>&1 || true' EXIT

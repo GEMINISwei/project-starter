@@ -2,7 +2,7 @@
 #
 # 備份檔的命名與挑選: `make db backup` 寫出的檔名與 `make db restore` 認得的是同一種。
 #
-#   backups/<專案>_v<版號>_<日期>_<時間>.dump   例如 backups/project-starter_v0.0.1_20261017_083553.dump
+#   backups/<專案>_v<版號>_<日期>_<時間>.dump   例如 backups/my-app_v0.0.1_20261017_083553.dump
 #
 # 版號是備份當下這份 checkout 的版本, 也就是資料表結構所屬的版本: 回滾到某一版之後只能還原
 # 那一版的備份 (新版 migration 改過的結構, 舊程式讀不了), 所以 restore 只認版號一致的檔案。
