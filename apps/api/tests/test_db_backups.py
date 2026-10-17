@@ -42,13 +42,13 @@ def make_backups(tmp_path: Path, *names: str) -> None:
 
 
 def test_backup_name_includes_project_version_and_time(tmp_path: Path) -> None:
-    assert output(tmp_path, "backup_name", "project-starter", "0.0.1", "20261017_083553") == [
-        "backups/project-starter_v0.0.1_20261017_083553.dump"
+    assert output(tmp_path, "backup_name", "my-app", "0.0.1", "20261017_083553") == [
+        "backups/my-app_v0.0.1_20261017_083553.dump"
     ]
 
 
 def test_backup_label_shows_version_date_and_time_only(tmp_path: Path) -> None:
-    file = "backups/project_starter_v0.0.1_20261017_083553.dump"
+    file = "backups/my_app_v0.0.1_20261017_083553.dump"
     assert output(tmp_path, "backup_label", file) == ["v0.0.1 2026-10-17 08:35:53"]
 
 
