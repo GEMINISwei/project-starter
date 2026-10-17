@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- `make init` 先確認 docker compose 與 docker daemon 可用，並在輸入的專案名稱已有 docker 容器或 volume 時中止。
+
 ## [0.0.1]
 
 - 初始專案：FastAPI + Next.js 全端模板，含認證、使用者與角色權限、中英雙語、Alembic migration。

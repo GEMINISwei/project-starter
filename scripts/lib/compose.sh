@@ -97,3 +97,40 @@ db_cli() {
 db_cli_tty() {
     docker exec -it -w /app "${COMPOSE_PROJECT_NAME}-api" python scripts/db.py "$@"
 }
+
+# `make init` 用: compose 外掛與 daemon 都要能用。只檢查 `docker` 指令在不在不夠 ——
+# 舊版只有 `docker-compose`、或 Docker Desktop 沒開時, 錯誤要到 `make dev` 才出現。
+require_compose() {
+    if ! docker compose version > /dev/null 2>&1; then
+        echo "缺少 docker compose（Compose v2 外掛，Docker Desktop 已內建）" >&2
+        return 1
+    fi
+    if ! docker info > /dev/null 2>&1; then
+        echo "無法連上 docker daemon：請先啟動 Docker；Linux 上確認目前帳號在 docker 群組（加入後要重新登入）" >&2
+        return 1
+    fi
+}
+
+# 用法: require_unused_project_name <專案名稱>
+#
+# 容器、volume、network 都以專案名稱為前綴, 撞名時新專案會接手舊專案的容器與資料庫 volume。
+# 以 compose 的專案標籤比對而不是名稱前綴: `my-app` 與 `my-app-2` 是兩個專案。
+# 容器含已停止的 (-a); volume 單獨也要擋 —— 容器刪了資料還在, 起來就是舊資料庫。
+# 查詢失敗時中止, 不當成沒人用: 那正是會安靜撞名的情況。
+require_unused_project_name() {
+    local name="$1" filter="label=com.docker.compose.project=$1" containers volumes
+    containers="$(docker ps -a --filter "$filter" --format '{{.Names}}')" \
+        || { echo "無法列出 docker 容器，沒辦法確認專案名稱是否已被使用" >&2; return 1; }
+    volumes="$(docker volume ls --filter "$filter" --format '{{.Name}}')" \
+        || { echo "無法列出 docker volume，沒辦法確認專案名稱是否已被使用" >&2; return 1; }
+    [ -z "${containers}${volumes}" ] && return 0
+
+    local item
+    {
+        echo "專案名稱「${name}」已有 docker 服務在使用，請換一個名稱："
+        for item in $containers; do echo "  容器    $item"; done
+        for item in $volumes; do echo "  volume  $item"; done
+        echo "確定那些已經不要了，可以先用 docker rm／docker volume rm 清掉再重跑。"
+    } >&2
+    return 1
+}
