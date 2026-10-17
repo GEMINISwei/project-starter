@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.0.3]
+
 - Deploy 的執行名稱改為顯示 `Publish`／`Pre-Release`，不再顯示 Variable 名稱。
 - 備份檔名帶上版號：`<專案>_v<版號>_<日期>_<時間>.dump`；部署改為在 checkout 新 tag 之前備份，版號才是當時線上的版本。
 - 新增 `make version`，顯示目前的版本。
