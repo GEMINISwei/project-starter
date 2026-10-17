@@ -7,10 +7,13 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # `make init` 以 `openssl rand -hex 32` 產生, 長度為 64。設下限避免有人手動填入弱金鑰。
 MIN_JWT_SECRET_LENGTH = 32
 
-# 產品版號, 也是 OpenAPI 的 `info.version`。整個 repo 的版號來源是根目錄的 VERSION,
-# 這裡是它的副本: api 的 image 在 apps/api 裡建置, 讀不到根目錄的檔案。
-# 不要手動改, 用 `make release <版號>` (一致性由 tests/test_version.py 擋)。
+# 產品版號: 跟 git tag (`v<版號>`) 與 CHANGELOG 對齊, 前端經 `GET /api/system/version` 顯示。
+# 不要手動改, 用 `make release <版號>` (與 CHANGELOG 一致由 tests/test_version.py 擋)。
 APP_VERSION = "0.0.1"
+
+# OpenAPI 的 `info.version`, 刻意不跟 APP_VERSION: 發版不該讓契約檔出現無關的 diff。
+# 契約的一般變更看 contracts/openapi.json 的 diff 就夠, 只有破壞性變更才手動 +1。
+CONTRACT_VERSION = "1"
 
 
 class AppEnv(BaseSettings):

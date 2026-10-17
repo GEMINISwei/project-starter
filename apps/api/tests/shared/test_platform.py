@@ -14,9 +14,10 @@ from fastapi import APIRouter
 from httpx import ASGITransport, AsyncClient
 
 from shared.auth.contracts import CurrentUser
+from shared.auth.tokens import create_token
 from shared.http.errors import BaseError, LangException, LangText
 from shared.module import ModuleManifest
-from tests.shared.minimal_app import CONTRACT_MODULE, create_minimal_app
+from tests.shared.minimal_app import CONTRACT_MODULE, MinimalEnv, create_minimal_app
 
 
 def test_platform_app_builds_without_any_module():
@@ -258,3 +259,56 @@ async def test_unhandled_exception_rolls_back_and_never_commits(
 
     assert response.status_code == 500
     assert calls == ["rollback"]
+
+
+# ── 版號 ─────────────────────────────────────────────────────────────────────
+#
+# 產品版號與 OpenAPI 的 `info.version` 是兩件事: 前者每次發版都變, 後者只在契約有破壞性變更時
+# 手動改。綁在一起的話, 每次發版 contracts/openapi.json 都會出現一筆跟契約無關的 diff。
+
+
+async def _member_resolver(username: str) -> CurrentUser | None:
+    return {
+        "id": "member",
+        "username": username,
+        "auth_version": 1,
+        # 只要求「有登入」, 所以刻意不給任何權限。
+        "permissions": [],
+        "is_disabled": False,
+    }
+
+
+@pytest_asyncio.fixture
+async def version_client():
+    application = create_minimal_app(
+        ModuleManifest("member", current_user_resolver=_member_resolver), app_version="1.2.3"
+    )
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+
+@pytest.mark.asyncio
+async def test_version_route_returns_the_app_version(version_client: AsyncClient, calls: list[str]):
+    token = create_token({"username": "member", "auth_version": 1}, MinimalEnv())
+    version_client.cookies.set("access_token", token["access_token"])
+
+    response = await version_client.get("/api/system/version")
+
+    assert response.status_code == 200
+    assert response.json() == {"version": "1.2.3"}
+
+
+@pytest.mark.asyncio
+async def test_version_route_requires_authentication(
+    version_client: AsyncClient, calls: list[str]
+):
+    response = await version_client.get("/api/system/version")
+
+    assert response.status_code == 401
+
+
+def test_openapi_version_is_independent_of_app_version():
+    openapi = create_minimal_app(app_version="1.2.3", contract_version="7").openapi()
+
+    assert openapi["info"]["version"] == "7"

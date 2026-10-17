@@ -2,11 +2,12 @@
 #
 # 發版前的版號更新: make release <版號> (例如 make release 0.0.3)
 #
-#   make release 0.0.3   把整個 repo 的版號改成 0.0.3, 重產契約, CHANGELOG 的 [Unreleased] 改成這個版號
+#   make release 0.0.3   把 APP_VERSION 改成 0.0.3, CHANGELOG 的 [Unreleased] 改成這個版號
 #
-# 整個 repo 只有一個版號, 唯一來源是根目錄的 VERSION。其餘幾份是工具或 image 要求的副本
-# (api 與 web 的 image 各自在子目錄建置, 讀不到根目錄的檔案), 由這支腳本一次改齊,
-# `make check` 的 `apps/api/tests/test_version.py` 擋住任何一份沒跟上。
+# 跟 git tag 對齊的版號只有這兩處 (前端的版號經 API 取自 APP_VERSION), 由這支腳本一起改,
+# `make check` 的 `apps/api/tests/test_version.py` 擋住兩者不一致。
+# pyproject.toml、package.json、lock 檔與 OpenAPI 的 info.version 刻意不跟發版:
+# 那些是套件與契約自己的版號, 有實際變更時才改, git 上的 diff 才有意義。
 #
 # 只改檔案, 不 commit 也不建 tag: 跑完看過 diff 再 commit, 然後照 docs/operations.md〈發版〉建 release。
 set -euo pipefail
@@ -16,13 +17,13 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 
 version="${1:-}"
-# 只收 X.Y.Z: deploy.yml 以 `v<版號>` 當 tag, 版號裡混進空白或斜線會讓 tag 與 image 標籤對不上。
+# 只收 X.Y.Z: deploy.yml 要求 tag 是 `v<版號>`, 混進空白或斜線的版號建不出合法的 tag。
 if ! [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "用法：make release <版號>，例如 make release 0.0.3" >&2
     exit 1
 fi
 
-current="$(tr -d '[:space:]' < VERSION)"
+current="$(sed -n 's/^APP_VERSION = "\(.*\)"$/\1/p' apps/api/app/config.py)"
 if [ "${version}" = "${current}" ]; then
     echo "目前已經是 ${current}" >&2
     exit 1
@@ -35,8 +36,7 @@ if [ -z "${unreleased}" ]; then
     exit 1
 fi
 
-# 每一份副本都用「只會命中那一行」的樣式改, 不做全檔取代: package-lock.json 與 uv.lock 裡
-# 滿是相依套件的 version, 寬鬆的樣式會改到別人的版號。
+# 每一處都用「只會命中那一行」的樣式改, 不做全檔取代。
 #
 # 先全部改在暫存的複本上, 每一處都改成功才一起寫回: 改到一半失敗的話, 留下「一半是新版號」的
 # repo 比整個失敗更難收拾。
@@ -61,22 +61,11 @@ replace() {
 }
 
 replace apps/api/app/config.py '^APP_VERSION = "[^"]*"' "APP_VERSION = \"${version}\""
-replace apps/api/pyproject.toml '(\[project\]\nname = "api"\nversion = )"[^"]*"' "\${1}\"${version}\""
-replace apps/api/uv.lock '(\[\[package\]\]\nname = "api"\nversion = )"[^"]*"' "\${1}\"${version}\""
-replace apps/web/package.json '(\n  "name": "web",\n  "version": )"[^"]*"' "\${1}\"${version}\""
-# package-lock.json 有兩處: 檔頭, 以及 packages."" (根套件自己)。
-replace apps/web/package-lock.json '(\n  "name": "web",\n  "version": )"[^"]*"' "\${1}\"${version}\""
-replace apps/web/package-lock.json '(\n    "": \{\n      "name": "web",\n      "version": )"[^"]*"' "\${1}\"${version}\""
 # 新版本段落插在 [Unreleased] 正下方, [Unreleased] 留著給下一版用。
 replace CHANGELOG.md '^## \[Unreleased\]\n' "## [Unreleased]\n\n## [${version}]\n"
 
 (cd "${stage}" && find . -type f) | while read -r file; do
     cp "${stage}/${file}" "${file}"
 done
-printf '%s\n' "${version}" > VERSION
-
-# 版號也是 OpenAPI 的 info.version, 契約要跟著重產。
-"$SCRIPT_DIR/gen-types.sh"
-
 echo
 echo "版號已從 ${current} 改成 ${version}。看過 git diff 之後 commit，再建 tag v${version} 的 release。"

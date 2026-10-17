@@ -15,14 +15,16 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from contextlib import asynccontextmanager
 from typing import Protocol
 
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, Depends, FastAPI, Request
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
+from pydantic import BaseModel
 from sqlalchemy import text
 
 from shared.auth.catalog import build_permission_catalog
-from shared.auth.contracts import AppEnvProtocol
+from shared.auth.contracts import AppEnvProtocol, CurrentUser
+from shared.auth.dependency import check_user_permission
 from shared.auth.permissions import BasePermission
 from shared.db.session import configure_session_factory, create_engine, session_scope
 from shared.db.table import seed_tables
@@ -157,18 +159,43 @@ def _install_health_check(application: FastAPI) -> None:
         return {"status": "ok"}
 
 
+class AppVersion(BaseModel):
+    """系統目前執行的版本。"""
+
+    version: str
+
+
+def _install_version_route(application: FastAPI, app_version: str) -> None:
+    # 前端顯示的版號以後端為準: 只有 `APP_VERSION` 跟著發版, 前端的 package.json 不跟。
+    # 要求登入: 未登入就能查到確切版本, 等於替人對照已知漏洞。
+    router = APIRouter(prefix="/system", tags=["system"])
+
+    @router.get("/version")
+    async def get_app_version_route(
+        _: CurrentUser = Depends(check_user_permission()),
+    ) -> AppVersion:
+        """取得系統目前執行的版本。"""
+        return AppVersion(version=app_version)
+
+    application.include_router(router, prefix=API_PREFIX)
+
+
 def create_platform_app(
     *,
     env: PlatformEnv,
     modules: Iterable[ModuleManifest],
     permissions: type[BasePermission],
     title: str,
-    version: str,
+    app_version: str,
+    contract_version: str,
 ) -> FastAPI:
     """組出一個掛好平台接線與指定 modules 的 app。
 
     `permissions` 是專案的權限 enum。權限目錄依**實際傳入的** modules 建立,
     所以用子集合組出來的 app (測試、停用某個 module) 只看得到那些 module 的權限。
+
+    `app_version` 是 `GET /api/system/version` 回報的產品版號, `contract_version` 是
+    OpenAPI 的 `info.version`; 兩者刻意分開, 發版才不會讓契約檔跟著變。
     """
     table_list = table_models(modules)
     resolved = tuple(modules)
@@ -176,7 +203,7 @@ def create_platform_app(
         permissions, (spec for module in resolved for spec in module.permissions)
     )
 
-    application = FastAPI(title=title, version=version, lifespan=_lifespan)
+    application = FastAPI(title=title, version=contract_version, lifespan=_lifespan)
 
     application.state.env = env
     application.state.modules = resolved
@@ -192,6 +219,7 @@ def create_platform_app(
         _validation_handler,  # type: ignore[arg-type]
     )
     _install_health_check(application)
+    _install_version_route(application, app_version)
 
     for module in resolved:
         for router in module.routers:

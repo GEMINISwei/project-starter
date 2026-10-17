@@ -28,6 +28,7 @@ export const settingsMessages = defineMessages({
     passwordSameAsCurrent: "新密碼不能與目前密碼相同",
     aboutSection: "關於",
     systemVersion: "系統版本",
+    versionUnavailable: "無法取得",
   },
   en: {
     pageTitle: "Settings",
@@ -56,5 +57,6 @@ export const settingsMessages = defineMessages({
     passwordSameAsCurrent: "The new password must differ from the current one",
     aboutSection: "About",
     systemVersion: "System version",
+    versionUnavailable: "Unavailable",
   },
 })
