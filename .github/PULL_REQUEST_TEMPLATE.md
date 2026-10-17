@@ -1,3 +1,6 @@
+<!-- PR 標題用 Conventional Commits（`feat: add product list page`）：squash merge 後它就是 main 的 commit。
+     先開 Draft，「送出前」勾完再按 Ready for review。流程見 docs/development.md#開發流程 -->
+
 ## 這個 PR 做什麼
 
 <!-- 一到三句，寫「為什麼」；「怎麼做」看 diff。 -->
