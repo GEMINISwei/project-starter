@@ -22,8 +22,14 @@ updates:
     directory: /apps/web
     schedule: { interval: weekly }
     groups:
+      # vitest 與 @vitest/* 互相把 peer 釘在同一個精確版號, 分開升的 PR 兩邊都 npm ci 不過。
+      # 放在 web-minor 前面: 套件只會進第一個符合的群組。
+      vitest: { patterns: ["vitest", "@vitest/*"] }
       web-minor: { update-types: [minor, patch] }
     ignore:
+      # 見 apps/web/package.json 的 `//devDependencies`: 跟著 .nvmrc 的 Node major 手動升。
+      - dependency-name: "@types/node"
+        update-types: [version-update:semver-major]
       # 見 apps/web/eslint.config.mjs 的「ESLint 卡在 9.x」。
       - dependency-name: eslint
         update-types: [version-update:semver-major]
