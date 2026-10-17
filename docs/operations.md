@@ -43,7 +43,7 @@ api 週期性重啟時，先懷疑記憶體上限。
 
 ### 自動部署
 
-平常 push 只跑 CI；**在 GitHub 上按 Publish release 才部署**（`.github/workflows/deploy.yml`）。
+平常 push 只跑 CI；**在 GitHub 上發布 release 才部署**（`.github/workflows/deploy.yml`）。
 
 **一個 GitHub environment 就是一套系統**，名稱的前綴決定它屬於哪一組。
 組名是名稱第一個 `-` 之前的部分，不分大小寫：
@@ -57,27 +57,40 @@ api 週期性重啟時，先懷疑記憶體上限。
 environment（見下方〈新增一套系統〉），workflow 不用改。`productionx` 這種只是開頭相同、
 沒有 `-` 分隔的名稱**不算** production 組。
 
-| 觸發 | 部署哪一組 |
+要部署哪幾組**由 repo 的 Variables 決定**（Settings → Secrets and variables → Actions → Variables），
+多組用空格分開，例如 `production staging`：
+
+| 觸發 | 部署哪些組 |
 |---|---|
-| Publish release | 固定是 production 組 |
-| Actions → Deploy → Run workflow | `target` 填的那一組（預設 `production`），`tag` 必須已經存在 |
+| 發布 release 時勾選 **Set as a pre-release** | `PRE_RELEASE_TARGETS` 的組 |
+| 發布正式版（沒有勾 pre-release），或把 pre-release 改成正式版 | `PUBLISH_TARGETS` 的組 |
+| Actions → Deploy → Run workflow | `target` 填的組（多組用空格分開），`tag` 必須已經存在 |
+
+- **兩個 Variable 各自判斷**：發布的是哪一種，就只看對應的那一個。
+- **沒設定或空白就失敗**，這次一套都不部署，執行頁面上寫明是哪一個 Variable 沒設。
+- **列出的組有任何一個找不到 environment**（例如打錯字），整次都不部署，並列出現有的組。
+- **沒列出的組不會更新**。Summary 會列出「這次沒有部署的組」，要補就對同一個 tag 按 Run workflow。
+
+先行測試的流程：發布 `v0.0.3` 時勾 pre-release → `PRE_RELEASE_TARGETS` 的組（例如 `canary`）先更新 →
+觀察沒問題後，編輯這個 release、取消勾選 pre-release → `PUBLISH_TARGETS` 的組更新。
+**兩次用的是同一個 tag**，不用改版號。驗證失敗就不要轉成正式版，修好後發下一個版號。
 
 每次部署的流程：
 
 1. 要部署的 tag 必須是 `v<APP_VERSION>`（`apps/api/app/config.py`），不一致就停。
-2. 列出 repo 裡屬於這一組的 environment；一個都沒有就停，並列出現有的組。
+2. 列出 repo 裡屬於這些組的 environment；有任何一組找不到就停，並列出現有的組。
 3. 重跑一次 CI（`ci.yml`），沒過不部署。
 4. 建兩份 production image 推到 GHCR：`ghcr.io/<帳號>/<repo>-api:<組名>` 與 `-web:<組名>`（全小寫）。
-   image 只標組名，執行中的版本看 `APP_VERSION`（設定頁顯示的就是它）；不同組用不同標籤，
-   staging 部署別的版本時不會蓋掉 production 的 image。
+   只建一次，這次部署的每一組各標一個組名。image 只標組名，執行中的版本看 `APP_VERSION`
+   （設定頁顯示的就是它）；不同組用不同標籤，先行測試的組部署新版時不會蓋掉其他組的 image。
 5. **一次一套**依序部署，每套是一個獨立的 job（`deploy (<environment>)`）：檢查 secrets →
    SSH 到主機 → `git checkout` 同一個 tag（compose 檔與 nginx 模板是從原始碼 bind mount 的）→
    `make db backup allow-fresh` → 拉 image 並重啟 → `make prod ps` → 清掉被取代的舊 image。
    **一套失敗不會中斷其他套**。
-6. 執行頁面的 **Summary** 列出每套的結果與失敗的步驟。失敗的那套點進它的 job 看 log，
-   修好之後按 **Re-run failed jobs**，只會重跑失敗的那幾套。
+6. 執行頁面的 **Summary** 列出每套的結果與失敗的步驟，以及這次沒有部署的組。失敗的那套點進它的
+   job 看 log，修好之後按 **Re-run failed jobs**，只會重跑失敗的那幾套。
 
-同一組的兩次部署會排隊依序跑；不同組（例如 production 與 staging）可以同時跑。
+一次部署可能包含好幾組，所以**整個 repo 的部署共用一個排隊群組**，依序跑。
 GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進第三個時，**原本在等的那個會被取消**。
 
 部署前的備份依主機狀態處理：
@@ -96,7 +109,7 @@ GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進�
 兩個都沒有就和以前一樣在本機建置，所以手動 `make prod` 照常可用。
 
 **首次設定**：主機上**不必**先把服務跑起來，也不在主機上建置 image。照上一節的指令做到
-`make init env` 與 `docker` 群組就停（**不要跑 `make prod`**），其餘交給第一次 Publish：
+`make init env` 與 `docker` 群組就停（**不要跑 `make prod`**），其餘交給第一次發布：
 
 - [ ] 主機的 repo 要能 `git fetch`：私有 repo 在 GitHub 的 Deploy keys 加一把**唯讀**的 key
 - [ ] 主機上開一個部署用的帳號，加進 `docker` 群組，能讀寫 repo 目錄；把它的公鑰放進
@@ -118,7 +131,7 @@ GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進�
 
   | Ref type | Name pattern | 給誰用 |
   |---|---|---|
-  | Tag | `v*` | Publish release（這時的 ref 是 tag） |
+  | Tag | `v*` | 發布 release（這時的 ref 是 tag） |
   | Branch | `main` | Run workflow（這時的 ref 是 `main`，要部署的版本由 `tag` 欄位決定） |
 
   **這兩條才是真正的安全邊界**：Run workflow 可以選任何 branch 來跑，選到的 branch 上的
@@ -132,7 +145,9 @@ GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進�
 - [ ] 第一次推上去之後，到 GHCR 的 package 設定確認 Visibility：image 裡有完整的程式碼（但沒有機密），
       **私有 repo 要設 Private**；公開 repo 的 image 內容等於原始碼，設 Public 也可以，而且免費。
       **改成 Public 之後就改不回 Private**
-- [ ] 想要「按下 Publish 之後再核准一次」：在 environment 開 Required reviewers
+- [ ] repo 的 Settings → Variables 加 `PUBLISH_TARGETS`（例如 `production`）；要用 pre-release
+      先行測試時再加 `PRE_RELEASE_TARGETS`（例如 `canary`）
+- [ ] 想要「發布之後再核准一次」：在 environment 開 Required reviewers
       （每個 environment 各自核准，一組有三套就要核准三次）
 
 第一次部署完成後，**由最初使用系統的人**進站建立超級管理者（自動落在 `/signup`，填 `.env` 的
@@ -165,7 +180,8 @@ docker builder prune
    network 都以前者為前綴），`UPLOAD_SIZE_LIMIT` 與 repo Variable 相同。
 2. GitHub 建 environment，例如 `production-system-b`，照〈首次設定〉填 secrets，並加上同樣兩條
    部署規則（tag `v*`、branch `main`）；`DEPLOY_PATH` 指向新目錄，同主機的其他 secrets 與其他套相同。
-3. 下一次 Publish（或對目前的 tag 按 Run workflow）就會部署到它。
+3. 確認它的組列在 `PUBLISH_TARGETS` 或 `PRE_RELEASE_TARGETS`（是新的組才需要加）；下一次發布
+   （或對目前的 tag 按 Run workflow）就會部署到它。
 4. 同主機有多套時，HTTPS 與網域由主機上的 reverse proxy 依網域轉到各套的 `SYSTEM_PORT`。
 
 #### 停用一套系統
@@ -177,7 +193,8 @@ docker builder prune
 停用期間，它的舊 image 可能在其他套更新之後被清掉；資料不受影響。重新啟用時對目前的 tag 按一次
 Run workflow 就會拉回來。
 
-**發版**：`make release <版號>` → 看過 diff 後 commit、push → 在 GitHub 建 release，tag 填 `v<版號>`，按 Publish。
+**發版**：`make release <版號>` → 看過 diff 後 commit、push → 在 GitHub 建 release，tag 填 `v<版號>`，按 Publish
+（要先行測試就勾 pre-release，見上方〈自動部署〉）。
 
 跟 git tag 對齊的版號只有兩處：後端的 `APP_VERSION` 與 CHANGELOG 的版本段落；只改了 api 或 web
 也一樣升這一個。前端顯示的版號經 `GET /api/system/version` 取自 `APP_VERSION`。
@@ -192,12 +209,12 @@ Run workflow 就會拉回來。
 | OpenAPI 的 `info.version`（`app/config.py` 的 `CONTRACT_VERSION`） | 契約有**破壞性**變更時手動 +1；一般變更看 `contracts/openapi.json` 的 diff |
 
 **部署到其他組，或重新部署某個版本（回滾）**：Actions → Deploy → **Run workflow**，branch 選 `main`，
-填一個已經存在的 tag（例如上一版的 `v0.1.0`）與 `target`（要部署的組，預設 `production`）。
+填一個已經存在的 tag（例如上一版的 `v0.1.0`）與 `target`（要部署的組，多組用空格分開）。
 它走同一套流程（版號檢查、CI、從那個 tag 重建這一組的 image、逐套備份與部署），只是不建新的 tag；
-發新版仍然要走 Publish release。回滾一樣是**整組一起**。也可以用指令觸發：
+發新版仍然要走發布 release。回滾一樣是**整組一起**。也可以用指令觸發：
 
 ```bash
-gh workflow run deploy.yml --ref main -f tag=v0.1.0 -f target=staging
+gh workflow run deploy.yml --ref main -f tag=v0.1.0 -f target="production staging"
 ```
 
 **migration 不會倒退**：新版改過
