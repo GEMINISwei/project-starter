@@ -8,8 +8,8 @@
 
 ```bash
 git clone <你的 repo> /srv/<專案名> && cd /srv/<專案名>
-make init env                      # 只產生 .env；主機的祕密要自己產一份，不要從開發機抄
 sudo usermod -aG docker "$USER"    # 不透過 sudo 跑 docker，做完要重新登入
+make init env                      # 只產生 .env；主機的祕密要自己產一份，不要從開發機抄
 make prod                          # 建置 image 並啟動
 ```
 
@@ -110,7 +110,7 @@ GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進�
 兩個都沒有就和以前一樣在本機建置，所以手動 `make prod` 照常可用。
 
 **首次設定**：主機上**不必**先把服務跑起來，也不在主機上建置 image。照上一節的指令做到
-`make init env` 與 `docker` 群組就停（**不要跑 `make prod`**），其餘交給第一次發布：
+`docker` 群組與 `make init env` 就停（**不要跑 `make prod`**），其餘交給第一次發布：
 
 - [ ] 主機的 repo 要能 `git fetch`：私有 repo 在 GitHub 的 Deploy keys 加一把**唯讀**的 key
 - [ ] 主機上開一個部署用的帳號，加進 `docker` 群組，能讀寫 repo 目錄；把它的公鑰放進

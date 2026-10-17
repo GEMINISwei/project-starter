@@ -36,6 +36,7 @@ make dev     # 啟動 postgres → migrate → api → web → nginx（首次建
 | api 一直重啟、`relation "users" does not exist` | migration 失敗了，`make dev logs migrate` 看原因 |
 | 容器裡 `ModuleNotFoundError` | 改了相依但 image 沒重建，重建後再 `make dev` |
 | `make init` 抱怨 Node 版本 | `nvm use` |
+| `make init` 說專案名稱已有 docker 服務在使用 | 換一個名稱；確定是不要的舊專案，就用 `docker rm`／`docker volume rm` 清掉列出的資源 |
 
 ## 指令
 

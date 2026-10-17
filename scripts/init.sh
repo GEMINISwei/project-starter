@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# 開案: 產生 .env、安裝主機端相依、建立 git 歷史。
+# 開案: 確認 docker 與專案名稱可用、產生 .env、安裝主機端相依、建立 git 歷史。
 #
 #   make init       可以重跑: 已有的 .env 與 .git 會跳過, 相依會照 lock 檔重新安裝
 #   make init env   只產生 .env (部署主機用: 那裡只跑容器, 不必裝 uv 與 Node)
@@ -12,8 +12,8 @@
 # 簽章強度。
 set -euo pipefail
 
-# shellcheck source=scripts/lib/common.sh
-source "$(dirname "$0")/lib/common.sh"
+# shellcheck source=scripts/lib/compose.sh
+source "$(dirname "$0")/lib/compose.sh"
 
 usage() {
     sed -n '/^#   make init/s/^#   //p' "$0" >&2
@@ -27,7 +27,7 @@ require_tools() {
     done
     if [ -n "$missing" ]; then
         echo "缺少必要工具：$missing" >&2
-        echo "uv 見 https://docs.astral.sh/uv/ ；node 與 npm 一起安裝。" >&2
+        echo "docker 見 https://docs.docker.com/get-docker/ ；uv 見 https://docs.astral.sh/uv/ ；node 與 npm 一起安裝。" >&2
         exit 1
     fi
 }
@@ -137,6 +137,8 @@ create_env() {
     local project_name system_name system_port db_user db_password
     printf '請輸入初始化資訊\n'
     prompt_until_valid project_name "專案名稱" "my-app" valid_project_name
+    # 一問到就查, 不必等其他問題都答完才發現要重來。
+    require_unused_project_name "$project_name"
     prompt_until_valid system_name "系統名稱" "My App" valid_system_name
     prompt_until_valid system_port "系統 Port" "3000" valid_port
     prompt_until_valid db_user "資料庫帳號" "admin" valid_db_user
@@ -206,7 +208,8 @@ print_register_key() {
 
 case "${1:-all}" in
     all)
-        require_tools openssl uv node npm
+        require_tools openssl uv node npm docker
+        require_compose
         check_node_version
         create_env
         install_deps
@@ -218,7 +221,8 @@ case "${1:-all}" in
         echo "  make check   # 送出前的檢查"
         ;;
     env)
-        require_tools openssl
+        require_tools openssl docker
+        require_compose
         create_env
         print_register_key
         ;;
