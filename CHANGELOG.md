@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- 手動觸發的部署（回滾、補跑）執行名稱改為 `Redeploy v<版號> (<組別>)`。
+
 ## [0.0.3]
 
 - Deploy 的執行名稱改為顯示 `Publish`／`Pre-Release`，不再顯示 Variable 名稱。
