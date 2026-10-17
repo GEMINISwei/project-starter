@@ -128,8 +128,8 @@ require_unused_project_name() {
     local item
     {
         echo "專案名稱「${name}」已有 docker 服務在使用，請換一個名稱："
-        for item in $containers; do echo "  容器    $item"; done
-        for item in $volumes; do echo "  volume  $item"; done
+        for item in $containers; do echo "  Container  $item"; done
+        for item in $volumes; do echo "  Volume     $item"; done
         echo "確定那些已經不要了，可以先用 docker rm／docker volume rm 清掉再重跑。"
     } >&2
     return 1
