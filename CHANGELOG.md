@@ -4,8 +4,6 @@
 
 ## [Unreleased]
 
-- 修正 Dependabot 的 uv 更新因 `PyJWT` 大小寫與 `uv.lock` 不一致而失敗：相依名稱改用正規化的小寫。
-
 ## [0.0.1]
 
 - 初始專案：FastAPI + Next.js 全端模板，含認證、使用者與角色權限、中英雙語、Alembic migration。
