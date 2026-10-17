@@ -127,6 +127,13 @@ def test_release_triggers_once_per_publish() -> None:
     assert re.search(r"^    types: \[prereleased, released\]$", _workflow(), flags=re.MULTILINE)
 
 
+def test_ci_waits_for_tag_and_targets_checks() -> None:
+    # 兩者任一失敗都不會部署, CI 不該先跑起來白花幾分鐘。
+    match = re.search(r"^  ci:\n(.*?)(?=^  \S|\Z)", _workflow(), flags=re.MULTILINE | re.DOTALL)
+    assert match, "deploy.yml 找不到 ci job"
+    assert re.search(r"^    needs: \[version, targets\]$", match.group(1), flags=re.MULTILINE)
+
+
 def test_deploy_keeps_other_systems_going_when_one_fails() -> None:
     # 預設的 fail-fast 會取消同組其他還在跑的系統, 可能砍在 migration 中途。
     assert re.search(r"^\s+fail-fast: false$", _deploy_job(), flags=re.MULTILINE)
