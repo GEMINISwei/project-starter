@@ -160,7 +160,8 @@ portable_web() {
 #    那種錯測試永遠抓不到, 只有部署之後第一次讀寫那個欄位才炸。
 # CI 的 integration job 跑的就是這一段 (見 .github/workflows/ci.yml)。
 run_integration() {
-    local container="${COMPOSE_PROJECT_NAME:-project-starter}-test-postgres"
+    require_env COMPOSE_PROJECT_NAME
+    local container="${COMPOSE_PROJECT_NAME}-test-postgres"
     require_docker
     start_throwaway_postgres "${container}"
     trap 'docker rm -f "'"${container}"'" > /dev/null 2>&1 || true' EXIT
