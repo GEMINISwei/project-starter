@@ -53,8 +53,9 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
     steps:
-      # 手動觸發可以選任一個 branch 上的 deploy.yml 來跑; 只認 main 上的那份,
-      # 否則改過的 workflow 不經 review 就能拿到 production 的 secrets。
+      # 手動觸發可以選任一個 branch 上的 deploy.yml 來跑; 只認 main 上的那份。
+      # 這段只讓選錯 branch 時早點失敗、訊息清楚: 別的 branch 上的 deploy.yml 可以把它刪掉,
+      # 真正擋住 secrets 的是 environment 的部署規則 (tag v* 與 branch main, 見 operations.md)。
       # 輸入值一律經 env 進 shell, 不直接展開進 run (會變成指令注入)。
       - name: 決定要部署的 tag
         id: tag

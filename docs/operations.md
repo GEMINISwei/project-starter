@@ -113,8 +113,19 @@ GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進�
   | `DEPLOY_KNOWN_HOSTS` | 主機指紋：`ssh-keyscan -p <port> <主機>` 的輸出，**自己比對過**再貼 |
 
   缺了必填的 secret 時，那套系統在連上主機之前就會失敗，log 裡寫明缺了哪幾個。
-- [ ] 在 environment 的 **Deployment branches and tags** 選 Selected，只允許 tag `v*`：
-      就算 workflow 被改壞，其他 ref 也拿不到這套系統的 secrets
+- [ ] 在 environment 的 **Deployment branches and tags** 選 **Selected branches and tags**，
+      按 Add deployment branch or tag rule 加兩條：
+
+  | Ref type | Name pattern | 給誰用 |
+  |---|---|---|
+  | Tag | `v*` | Publish release（這時的 ref 是 tag） |
+  | Branch | `main` | Run workflow（這時的 ref 是 `main`，要部署的版本由 `tag` 欄位決定） |
+
+  **這兩條才是真正的安全邊界**：Run workflow 可以選任何 branch 來跑，選到的 branch 上的
+  `deploy.yml` 就是會執行的那份，workflow 裡「只能從 main 執行」的檢查可以在那個 branch 上被刪掉；
+  environment 的規則由 GitHub 判斷，其他 ref 拿不到這套系統的 secrets。少了 `main` 那條，
+  回滾與部署到其他組會在 deploy job 被 GitHub 擋下（environment protection rules）。
+  `main` 要有 ruleset（見 [`development.md`](development.md)），它上面的 `deploy.yml` 才一定經過 PR。
 - [ ] repo 的 Settings → Variables 加 `UPLOAD_SIZE_LIMIT`，與主機 `.env` 的**同一個值**
       （會在 build 時烤進 image，不一致時 web 開機就結束）。它放在 repo 層級，因為同一份 image
       給組裡每套系統用，**每套系統的 `.env` 都要是這個值**
@@ -152,8 +163,8 @@ docker builder prune
 1. 主機上 clone 到新的目錄，例如 `/srv/system-b`，`make init env`。`.env` 的
    `COMPOSE_PROJECT_NAME`、`SYSTEM_PORT` **不可以與同主機的其他套重複**（容器、volume、
    network 都以前者為前綴），`UPLOAD_SIZE_LIMIT` 與 repo Variable 相同。
-2. GitHub 建 environment，例如 `production-system-b`，照〈首次設定〉填 secrets；
-   `DEPLOY_PATH` 指向新目錄，同主機的其他 secrets 與其他套相同。
+2. GitHub 建 environment，例如 `production-system-b`，照〈首次設定〉填 secrets，並加上同樣兩條
+   部署規則（tag `v*`、branch `main`）；`DEPLOY_PATH` 指向新目錄，同主機的其他 secrets 與其他套相同。
 3. 下一次 Publish（或對目前的 tag 按 Run workflow）就會部署到它。
 4. 同主機有多套時，HTTPS 與網域由主機上的 reverse proxy 依網域轉到各套的 `SYSTEM_PORT`。
 
