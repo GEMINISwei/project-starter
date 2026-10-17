@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 
-from app.config import APP_VERSION, env
+from app.config import APP_VERSION, CONTRACT_VERSION, env
 from app.permissions import Permission
 from app.registry import ENABLED_MODULES
 from shared.module import ModuleManifest
@@ -16,7 +16,8 @@ def create_app(modules: tuple[ModuleManifest, ...] = ENABLED_MODULES) -> FastAPI
         modules=modules,
         permissions=Permission,
         title=env.project_name or "API",
-        version=APP_VERSION,
+        app_version=APP_VERSION,
+        contract_version=CONTRACT_VERSION,
     )
 
 

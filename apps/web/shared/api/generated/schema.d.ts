@@ -101,6 +101,26 @@ export interface paths {
         patch: operations["update_role_route_api_roles__id__patch"];
         trace?: never;
     };
+    "/api/system/version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get App Version Route
+         * @description 取得系統目前執行的版本。
+         */
+        get: operations["get_app_version_route_api_system_version_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users/": {
         parameters: {
             query?: never;
@@ -280,6 +300,14 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * AppVersion
+         * @description 系統目前執行的版本。
+         */
+        AppVersion: {
+            /** Version */
+            version: string;
+        };
         /** BootstrapStatus */
         BootstrapStatus: {
             /** Available */
@@ -769,6 +797,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_app_version_route_api_system_version_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AppVersion"];
                 };
             };
         };

@@ -4,6 +4,7 @@
 #
 #   make db psql                 進入資料庫 (psql)
 #   make db backup               備份到 ./backups/<資料庫>_<時間>.dump
+#   make db backup allow-fresh   同上, 但全新主機 (還沒有資料 volume) 時略過 (部署用)
 #   make db restore [檔案]       還原; 不帶檔案時列出 ./backups/ 讓你選
 #   make db reset                清空資料並重建結構與初始資料 (dev only)
 #   make db migrate              對運行中的環境套用未執行的 migration
@@ -40,9 +41,35 @@ cmd_psql() {
         psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}"
 }
 
+# 資料 volume 的名稱是 compose 檔裡的 `<專案>_<MODE>_postgres_data`; dev 與 prod 都算,
+# 一台主機只跑一種模式, 哪一種有資料都不是全新主機。
+#
+# 先把清單存下來再比對, 不直接接 `| grep -q`: grep 提早結束會讓 docker 收到 SIGPIPE, 在 pipefail
+# 下整條管線算失敗, 經過 `!` 就變成「全新主機」—— 有資料的主機會安靜地略過備份。
+# docker 本身失敗要明確 exit: 這個函式在 `if` 條件裡被呼叫, 那裡 `set -e` 不生效, 不攔的話
+# 空清單同樣會被當成全新主機。
+is_fresh_host() {
+    require_env COMPOSE_PROJECT_NAME
+    local volumes
+    volumes="$(docker volume ls -q)" || { echo "無法列出 docker volume" >&2; exit 1; }
+    ! grep -qxE "${COMPOSE_PROJECT_NAME}_(production|development)_postgres_data" <<< "${volumes}"
+}
+
 # custom 格式 (-Fc) 本身有壓縮, 還原時 pg_restore 能自己處理外鍵順序。
 # 先寫到暫存檔再改名: 中途失敗時 backups/ 裡不會留下一份看起來完整的壞檔。
+#
+# allow-fresh 給 deploy.yml 用, 讓第一次部署不必先在主機上把服務跑起來。只放行「資料 volume
+# 根本不存在」: volume 在但資料庫沒在跑, 代表主機狀態不是預期的, 照樣中止, 留給人先看過。
 cmd_backup() {
+    local mode="${1:-}"
+    case "${mode}" in
+        ''|allow-fresh) ;;
+        *) usage ;;
+    esac
+    if [ "${mode}" = allow-fresh ] && is_fresh_host; then
+        echo "還沒有任何資料（第一次部署），略過備份"
+        return 0
+    fi
     require_running
     mkdir -p backups
     local dest
@@ -129,7 +156,7 @@ action="${1:-}"
 shift || true
 case "${action}" in
     psql)      cmd_psql ;;
-    backup)    cmd_backup ;;
+    backup)    cmd_backup "$@" ;;
     restore)   cmd_restore "$@" ;;
     reset)     cmd_reset ;;
     migrate)   cmd_migrate ;;

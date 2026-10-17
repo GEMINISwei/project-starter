@@ -44,16 +44,29 @@ api 週期性重啟時，先懷疑記憶體上限。
 
 平常 push 只跑 CI；**在 GitHub 上按 Publish release 才部署**（`.github/workflows/deploy.yml`）：
 
-1. 要部署的 tag 必須是 `v<VERSION>`（根目錄的 `VERSION`），不一致就停。
+1. 要部署的 tag 必須是 `v<APP_VERSION>`（`apps/api/app/config.py`），不一致就停。
 2. 重跑一次 CI（`ci.yml`），沒過不部署。
-3. 建兩份 production image 推到 GHCR：`ghcr.io/<帳號>/<repo>-api:<tag>` 與 `-web:<tag>`（全小寫）。
+3. 建兩份 production image 推到 GHCR：`ghcr.io/<帳號>/<repo>-api:latest` 與 `-web:latest`（全小寫）。
+   image 只標 `latest`，執行中的版本看 `APP_VERSION`（設定頁顯示的就是它）。
 4. SSH 到主機：`git checkout` 同一個 tag（compose 檔與 nginx 模板是從原始碼 bind mount 的）→
-   `make db backup` → 拉 image 並重啟 → `make prod ps`。
+   `make db backup allow-fresh` → 拉 image 並重啟 → `make prod ps` → 清掉被取代的舊 image。
+
+部署前的備份依主機狀態處理：
+
+| 主機狀態 | 處理 |
+|---|---|
+| 資料庫在跑 | 照常備份 |
+| 連資料 volume 都沒有（全新主機） | 沒有東西可備份，略過，直接部署 |
+| 有資料 volume，但資料庫沒在跑 | 主機狀態不是預期的，**中止**，先上主機看過 |
+
+清舊 image 只清這個 repo 的（以 `org.opencontainers.image.source` 標籤辨認）、已經沒有容器在用的，
+不碰主機上其他專案的 image。
 
 主機上 shell 有 `API_IMAGE` 與 `WEB_IMAGE` 時，`make prod` 改成拉 image、不在主機上建置；
 兩個都沒有就和以前一樣在本機建置，所以手動 `make prod` 照常可用。
 
-**首次設定**（先照上一節把主機手動跑起來一次，CD 預期資料庫已經在跑，備份不了就中止）：
+**首次設定**：主機上**不必**先把服務跑起來，也不在主機上建置 image。照上一節的指令做到
+`make init env` 與 `docker` 群組就停（**不要跑 `make prod`**），其餘交給第一次 Publish：
 
 - [ ] 主機的 repo 要能 `git fetch`：私有 repo 在 GitHub 的 Deploy keys 加一把**唯讀**的 key
 - [ ] 主機上開一個部署用的帳號，加進 `docker` 群組，能讀寫 repo 目錄；把它的公鑰放進
@@ -76,18 +89,39 @@ api 週期性重啟時，先懷疑記憶體上限。
       **改成 Public 之後就改不回 Private**
 - [ ] 想要「按下 Publish 之後再核准一次」：在 `production` environment 開 Required reviewers
 
+第一次部署完成後，**由最初使用系統的人**進站建立超級管理者（自動落在 `/signup`，填 `.env` 的
+`REGISTER_KEY`，見〈[第一個超級管理者](#第一個超級管理者)〉）。這是系統初始化的一環，部署流程刻意不代建。
+
+主機以前手動 `make prod` 建過 image 的話，那些 image 與建置快取 CD 用不到，
+部署成功後可以清掉（`<專案名>` 是 `.env` 的 `COMPOSE_PROJECT_NAME`）：
+
+```bash
+docker image rm <專案名>-api:latest <專案名>-web:latest
+```
+
+```bash
+docker builder prune
+```
+
 主機拉 image 用的是那次 job 的 `GITHUB_TOKEN`，job 結束就失效，主機不存長期的 registry 憑證；
 部署結束時會 `docker logout ghcr.io`，主機上手動登入的 GHCR 也會一起登出。
 
 **發版**：`make release <版號>` → 看過 diff 後 commit、push → 在 GitHub 建 release，tag 填 `v<版號>`，按 Publish。
 
-整個 repo（api、web）只有一個版號，唯一來源是根目錄的 `VERSION`；只改了 api 或 web 也一樣升這一個。
-`make release` 會一起改掉其餘副本（`APP_VERSION`、`package.json`、`pyproject.toml` 與兩份 lock 檔）、
-重產契約，並把 CHANGELOG 的 `[Unreleased]` 改成這個版號。不要手動改任何一份副本，
-`make check` 會擋下不一致（`apps/api/tests/test_version.py`）。
+跟 git tag 對齊的版號只有兩處：後端的 `APP_VERSION` 與 CHANGELOG 的版本段落；只改了 api 或 web
+也一樣升這一個。前端顯示的版號經 `GET /api/system/version` 取自 `APP_VERSION`。
+`make release` 會改 `APP_VERSION`，並把 CHANGELOG 的 `[Unreleased]` 改成這個版號；不要手動改，
+`make check` 會擋下兩者不一致（`apps/api/tests/test_version.py`）。
+
+其餘的版號**刻意不跟發版**，有實際變更時才改，git 上的 diff 才代表真的有東西變了：
+
+| 版號 | 什麼時候改 |
+|---|---|
+| `pyproject.toml`、`uv.lock`、`package.json`、`package-lock.json` 的專案版號 | 那個套件本身有變更時才改，不跟發版 |
+| OpenAPI 的 `info.version`（`app/config.py` 的 `CONTRACT_VERSION`） | 契約有**破壞性**變更時手動 +1；一般變更看 `contracts/openapi.json` 的 diff |
 
 **重新部署某個版本（回滾）**：Actions → Deploy → **Run workflow**，branch 選 `main`，填一個已經存在的 tag
-（例如上一版的 `v0.1.0`）。它走同一套流程（版號檢查、CI、建 image、備份、部署），只是不建新的 tag；
+（例如上一版的 `v0.1.0`）。它走同一套流程（版號檢查、CI、從那個 tag 重建 `latest`、備份、部署），只是不建新的 tag；
 發新版仍然要走 Publish release。**migration 不會倒退**：新版改過
 資料表的話，舊程式可能讀不了新結構，這時要用部署前的備份 `make db restore`（會失去備份之後的資料）。
 

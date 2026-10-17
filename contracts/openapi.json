@@ -1,6 +1,20 @@
 {
   "components": {
     "schemas": {
+      "AppVersion": {
+        "description": "系統目前執行的版本。",
+        "properties": {
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "AppVersion",
+        "type": "object"
+      },
       "BootstrapStatus": {
         "properties": {
           "available": {
@@ -693,7 +707,7 @@
   },
   "info": {
     "title": "openapi-export",
-    "version": "0.0.1"
+    "version": "1"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -1065,6 +1079,28 @@
         "summary": "Update Role Route",
         "tags": [
           "roles"
+        ]
+      }
+    },
+    "/api/system/version": {
+      "get": {
+        "description": "取得系統目前執行的版本。",
+        "operationId": "get_app_version_route_api_system_version_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppVersion"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get App Version Route",
+        "tags": [
+          "system"
         ]
       }
     },
