@@ -1,16 +1,25 @@
 name: Deploy
+run-name: >-
+  Deploy ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+  → ${{ github.event_name == 'release' && 'production' || inputs.target }}
 
 # 只在 GitHub 上按 Publish release 時部署; 平常 push 只跑 CI。
-# 另外可以在 Actions 頁面按 Run workflow, 重新部署一個**已經存在的** tag (回滾用)。
+# 另外可以在 Actions 頁面按 Run workflow, 把一個**已經存在的** tag 部署到指定的組 (回滾、staging)。
 # 發新版仍然走 release: 手動觸發不建 tag, 版號才不會繞過 release 的紀錄。
 #   version  決定要部署的 tag, 而且必須是 v<APP_VERSION>, 程式回報的版本才對得上 release
+#   targets  決定要部署的組, 列出 repo 裡屬於這一組的 environment (一個 environment = 一套系統)
 #   ci       重用 ci.yml, 要部署的 commit 要通過同一套檢查
-#   build    建兩份 production image 推到 GHCR, 一律標成 latest
-#   deploy   SSH 到主機: checkout 同一個 tag → 備份 → 拉 image 並重啟 (make prod) → 清掉舊 image
+#   build    建兩份 production image 推到 GHCR, 標成組名 (例如 :production)
+#   deploy   每套系統各一個 job, 依序 SSH 到主機: checkout 同一個 tag → 備份 → 拉 image 並重啟
+#            (make prod) → 清掉舊 image
+#   summary  在執行頁面的 Summary 列出每套系統的結果
 #
-# image 只標 latest, 不標版號: 主機永遠跑最近一次部署的那份, 版號由 APP_VERSION 回報。
+# 組名 = environment 名稱第一個 `-` 之前的部分: `production` 與 `production-*` 是 production 組。
+# 新增一套系統只要建一個符合命名的 environment, 不必改這個檔。Publish 固定部署 production 組。
+#
+# 一組裡的系統永遠跑同一版, 所以 image 只標組名、不標版號: 版號由 APP_VERSION 回報。
 # 回滾 (Run workflow) 會從舊 tag 重建一次, 所以不需要在 GHCR 或主機上留舊版 image。
-# 兩次部署不會互相蓋掉 latest: 下面的 concurrency 讓它們依序跑完。
+# 不同組用不同標籤, staging 部署別的版本時不會蓋掉 production 正在用的 image。
 #
 # 主機的首次設定與需要的 secrets 見 docs/operations.md〈自動部署〉。
 on:
@@ -19,16 +28,22 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 要重新部署的 tag (必須已經存在, 例如 v0.1.0)
+        description: 要部署的 tag (必須已經存在, 例如 v0.1.0)
         required: true
+        type: string
+      target:
+        description: 要部署的組 (environment 名稱第一個 - 之前的部分, 例如 production、staging)
+        required: true
+        default: production
         type: string
 
 permissions:
   contents: read
 
+# 同一組的兩次部署會互相蓋掉組名標籤, 所以依序跑; 不同組互不影響, 可以同時跑。
 # 不取消進行中的部署: 砍在 migration 中途比多等一輪糟。
 concurrency:
-  group: deploy-production
+  group: deploy-${{ github.event_name == 'release' && 'production' || inputs.target }}
   cancel-in-progress: false
 
 jobs:
@@ -77,6 +92,44 @@ jobs:
             exit 1
           fi
 
+  targets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      target: ${{ steps.list.outputs.target }}
+      environments: ${{ steps.list.outputs.environments }}
+    steps:
+      # 挑選腳本取自這份 workflow 所在的 commit, 不是要部署的 tag: 回滾到比這個功能還舊的 tag
+      # 時, 那個 tag 裡沒有這支腳本。
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+      # environment 名稱經 jq 轉成一行 JSON 才寫進 GITHUB_OUTPUT, 夾帶換行也偽造不了其他 output。
+      - name: 列出這一組的 environment
+        id: list
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INPUT_TARGET: ${{ inputs.target }}
+        run: |
+          if [ "${GITHUB_EVENT_NAME}" = workflow_dispatch ]; then
+            target="${INPUT_TARGET}"
+          else
+            target=production
+          fi
+          names="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/environments" \
+            --jq '.environments[].name')"
+          selected="$(.github/scripts/deploy-targets.sh "${target}" <<< "${names}")"
+          {
+            echo "### 部署到 ${target} 組（依序）"
+            sed 's/^/- /' <<< "${selected}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+          echo "target=${target}" >> "${GITHUB_OUTPUT}"
+          echo "environments=$(jq -R -s -c 'split("\n") | map(select(length > 0))' <<< "${selected}")" \
+            >> "${GITHUB_OUTPUT}"
+
   ci:
     needs: version
     uses: ./.github/workflows/ci.yml
@@ -84,7 +137,7 @@ jobs:
       ref: refs/tags/${{ needs.version.outputs.tag }}
 
   build:
-    needs: [version, ci]
+    needs: [version, targets, ci]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -99,6 +152,7 @@ jobs:
         with:
           ref: refs/tags/${{ needs.version.outputs.tag }}
       # 是 build 期設定 (會烤進 image), 所以必須與主機 .env 的同一個值, 不一致時 web 開機就結束。
+      # 放在 repo 層級: 同一份 image 給組裡每套系統用, 各套不能有不同的值。
       - name: 檢查 UPLOAD_SIZE_LIMIT
         env:
           UPLOAD_SIZE_LIMIT: ${{ vars.UPLOAD_SIZE_LIMIT }}
@@ -111,10 +165,12 @@ jobs:
       # source 是 OCI 標準的來源標籤: 主機清舊 image 時只認這個標籤, 不碰別的專案的 image。
       - name: image 名稱
         id: names
+        env:
+          TARGET: ${{ needs.targets.outputs.target }}
         run: |
           base="ghcr.io/${GITHUB_REPOSITORY,,}"
-          echo "api=${base}-api:latest" >> "${GITHUB_OUTPUT}"
-          echo "web=${base}-web:latest" >> "${GITHUB_OUTPUT}"
+          echo "api=${base}-api:${TARGET}" >> "${GITHUB_OUTPUT}"
+          echo "web=${base}-web:${TARGET}" >> "${GITHUB_OUTPUT}"
           echo "source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}" >> "${GITHUB_OUTPUT}"
       - name: 登入 GHCR
         env:
@@ -140,16 +196,43 @@ jobs:
           labels: org.opencontainers.image.source=${{ steps.names.outputs.source }}
           cache-from: type=gha,scope=web
 
+  # 每套系統一個 job, job 名稱是 `deploy (<environment>)`, 失敗的那套可以單獨 Re-run。
+  # 一次一套: 同一台主機上的多套系統同時備份、拉 image、跑 migration 會互搶資源。
+  # fail-fast 關掉: 預設會在一套失敗時取消其他還在跑的, 可能砍在 migration 中途。
   deploy:
-    needs: [version, build]
+    needs: [version, targets, build]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # secrets 放在這個 environment; 要「按下 Publish 後再核准一次」就在這裡開 required reviewers。
-    environment: production
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        environment: ${{ fromJSON(needs.targets.outputs.environments) }}
+    # 每套系統的 secrets 放在它自己的 environment; 要「按下 Publish 後再核准一次」就在那裡開
+    # required reviewers。
+    environment: ${{ matrix.environment }}
     permissions:
       contents: read
       packages: read
     steps:
+      # 剛建好、還沒填 secrets 的 environment 在這裡就停, 不必等 SSH 報出看不懂的錯。
+      - name: 檢查 secrets
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          ENVIRONMENT: ${{ matrix.environment }}
+        run: |
+          missing=()
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_PATH DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS; do
+            [ -n "${!name}" ] || missing+=("${name}")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "environment ${ENVIRONMENT} 缺少 secrets：${missing[*]}" >&2
+            exit 1
+          fi
       - name: 準備 SSH
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -164,13 +247,17 @@ jobs:
       # 值一律 %q 轉義後才拼進腳本, 遠端固定用 bash 解讀, 不受部署帳號的登入 shell 影響。
       #
       # 主機上拉 image 用的是這個 job 的 GITHUB_TOKEN: job 結束就失效, 主機不必存長期的
-      # registry 憑證; 腳本結束時 logout, 也不在 ~/.docker 留下過期的 token。
+      # registry 憑證。登入資訊寫在這次部署自己的暫存目錄 (DOCKER_CONFIG), 結束就刪:
+      # 同一個部署帳號在主機上跑多套系統, 共用 ~/.docker 的話一套的 logout 會讓另一套拉不到
+      # image, 也會順手登出主機上手動登入的 GHCR。cli-plugins 要接回去, 使用者層級安裝的
+      # docker compose 才找得到。
       #
       # 備份失敗就中止: 有資料 volume 卻沒有在跑的資料庫, 代表主機狀態不是預期的, 該由人先看過。
       # 全新主機 (連資料 volume 都沒有) 沒有東西可備份, allow-fresh 讓第一次部署直接過。
       #
-      # 最後清掉被 latest 取代、已經沒有容器在用的舊 image。只清懸空 (沒有標籤) 而且帶這個 repo
+      # 最後清掉被取代、已經沒有容器在用的舊 image。只清懸空 (沒有標籤) 而且帶這個 repo
       # 來源標籤的: 不用 `prune -a`, 那會連主機上其他專案還沒在跑的 image 一起刪。
+      # 同主機的其他套系統還在用的舊 image 不算沒人用, 輪到它們更新後才會被清掉。
       - name: 部署到主機
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -185,12 +272,14 @@ jobs:
         run: |
           {
             echo 'set -euo pipefail'
+            echo 'DOCKER_CONFIG="$(mktemp -d)"; export DOCKER_CONFIG'
+            echo 'trap "rm -rf \"\${DOCKER_CONFIG}\"" EXIT'
+            echo '[ ! -d ~/.docker/cli-plugins ] || ln -s ~/.docker/cli-plugins "${DOCKER_CONFIG}/cli-plugins"'
             printf 'cd %q\n' "${DEPLOY_PATH}"
             echo 'git fetch --force --tags origin'
             printf 'git checkout --detach %q\n' "refs/tags/${TAG}"
             printf "printf '%%s' %q | docker login ghcr.io -u %q --password-stdin\n" \
               "${GITHUB_TOKEN}" "${GITHUB_ACTOR}"
-            echo "trap 'docker logout ghcr.io > /dev/null' EXIT"
             echo 'make db backup allow-fresh'
             printf 'export API_IMAGE=%q WEB_IMAGE=%q\n' "${API_IMAGE}" "${WEB_IMAGE}"
             echo 'make prod'
@@ -199,3 +288,39 @@ jobs:
               "label=org.opencontainers.image.source=${IMAGE_SOURCE}"
           } | ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" -o BatchMode=yes \
                 "${DEPLOY_USER}@${DEPLOY_HOST}" 'bash -s'
+
+  # 一組有好幾套系統時, 一張表看出哪套失敗、停在哪一步, 再到那套的 job 按 Re-run。
+  # filter=latest: Re-run 失敗的 job 後, 表上是每套最新一次的結果。
+  summary:
+    needs: [version, targets, deploy]
+    if: ${{ always() && needs.targets.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    steps:
+      - name: 彙總各系統的結果
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.version.outputs.tag }}
+          TARGET: ${{ needs.targets.outputs.target }}
+        run: |
+          rows="$(gh api --paginate \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?filter=latest" \
+            --jq '.jobs[] | select(.name | startswith("deploy (")) |
+              ((.steps // []) | map(select(.conclusion == "failure")) | .[0].name // "") as $step |
+              "| \(.name | ltrimstr("deploy (") | rtrimstr(")")) | " +
+              (if .conclusion == "success" then "✅ 成功"
+               elif .conclusion == "failure" then "❌ 失敗於「\($step)」"
+               else "⚪ \(.conclusion // .status)" end) +
+              " | [log](\(.html_url)) |"')"
+          {
+            echo "### ${TAG} → ${TARGET} 的部署結果"
+            if [ -z "${rows}" ]; then
+              echo "沒有任何系統開始部署（前面的步驟沒有通過）。"
+            else
+              echo '| 系統 | 結果 | |'
+              echo '|---|---|---|'
+              echo "${rows}"
+            fi
+          } >> "${GITHUB_STEP_SUMMARY}"

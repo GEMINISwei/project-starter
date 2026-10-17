@@ -45,7 +45,7 @@ missing_tool() {
 lint_shell() {
     command -v shellcheck > /dev/null 2>&1 || { missing_tool shellcheck; return; }
     # -x: 跟著 `source` 進 lib/, 被引用的函式與變數才不會被當成未定義。
-    shellcheck -x scripts/*.sh scripts/lib/*.sh
+    shellcheck -x scripts/*.sh scripts/lib/*.sh .github/scripts/*.sh
 }
 
 # 用 .env.example 展開 dev 與 prod 兩組 compose: 抓 YAML 與錨點寫錯, 也抓「compose 用了
