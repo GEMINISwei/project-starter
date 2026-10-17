@@ -1,7 +1,7 @@
 name: Deploy
 run-name: >-
   Deploy ${{ inputs.tag || github.event.release.tag_name }}
-  → ${{ inputs.target || (github.event.release.prerelease && 'PRE_RELEASE_TARGETS' || 'PUBLISH_TARGETS') }}
+  → ${{ inputs.target || (github.event.release.prerelease && 'Pre-Release' || 'Publish') }}
 
 # 只在 GitHub 上發布 release 時部署; 平常 push 只跑 CI。要部署哪些組由 repo 的 Variables 決定:
 #   發布 pre-release                         → PRE_RELEASE_TARGETS 的組
@@ -15,7 +15,7 @@ run-name: >-
 #   targets  決定要部署的組, 列出 repo 裡屬於這些組的 environment (一個 environment = 一套系統)
 #   ci       重用 ci.yml, 要部署的 commit 要通過同一套檢查
 #   build    建兩份 production image 推到 GHCR, 每個要部署的組各標一個組名 (例如 :production)
-#   deploy   每套系統各一個 job, 依序 SSH 到主機: checkout 同一個 tag → 備份 → 拉 image 並重啟
+#   deploy   每套系統各一個 job, 依序 SSH 到主機: 備份 → checkout 同一個 tag → 拉 image 並重啟
 #            (make prod) → 清掉舊 image
 #   summary  在執行頁面的 Summary 列出每套系統的結果
 #
@@ -292,6 +292,8 @@ jobs:
       #
       # 備份失敗就中止: 有資料 volume 卻沒有在跑的資料庫, 代表主機狀態不是預期的, 該由人先看過。
       # 全新主機 (連資料 volume 都沒有) 沒有東西可備份, allow-fresh 讓第一次部署直接過。
+      # 備份在 checkout 新 tag 之前: 備份檔名的版號取自這份 checkout, 這時它還是線上正在跑的版本,
+      # 也就是這份資料的結構所屬的版本。回滾到那一版後, make db restore 才找得到它。
       #
       # 最後清掉被取代、已經沒有容器在用的舊 image。只清懸空 (沒有標籤) 而且帶這個 repo
       # 來源標籤的: 不用 `prune -a`, 那會連主機上其他專案還沒在跑的 image 一起刪。
@@ -314,11 +316,11 @@ jobs:
             echo 'trap "rm -rf \"\${DOCKER_CONFIG}\"" EXIT'
             echo '[ ! -d ~/.docker/cli-plugins ] || ln -s ~/.docker/cli-plugins "${DOCKER_CONFIG}/cli-plugins"'
             printf 'cd %q\n' "${DEPLOY_PATH}"
+            echo 'make db backup allow-fresh'
             echo 'git fetch --force --tags origin'
             printf 'git checkout --detach %q\n' "refs/tags/${TAG}"
             printf "printf '%%s' %q | docker login ghcr.io -u %q --password-stdin\n" \
               "${GITHUB_TOKEN}" "${GITHUB_ACTOR}"
-            echo 'make db backup allow-fresh'
             printf 'export API_IMAGE=%q WEB_IMAGE=%q\n' "${API_IMAGE}" "${WEB_IMAGE}"
             echo 'make prod'
             echo 'make prod ps'

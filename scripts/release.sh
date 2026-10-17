@@ -23,7 +23,7 @@ if ! [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     exit 1
 fi
 
-current="$(sed -n 's/^APP_VERSION = "\(.*\)"$/\1/p' apps/api/app/config.py)"
+current="$(app_version)"
 if [ "${version}" = "${current}" ]; then
     echo "目前已經是 ${current}" >&2
     exit 1

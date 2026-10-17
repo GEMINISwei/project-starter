@@ -4,7 +4,7 @@
 # 新增指令 = 加一支 scripts/<name>.sh (記得 chmod +x) 並把 <name> 加進 TARGETS;
 # 新增子指令 = 改那支腳本的 case, Makefile 不用動。
 
-TARGETS = init dev prod db check gen-types release
+TARGETS = init dev prod db check gen-types release version
 
 .DEFAULT_GOAL := help
 .PHONY: help $(TARGETS)

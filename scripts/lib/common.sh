@@ -89,6 +89,18 @@ require_env() {
     fi
 }
 
+# 這份 checkout 的版號 (`apps/api/app/config.py` 的 APP_VERSION, 不帶 v)。
+# 部署主機 checkout 的就是正在跑的 tag, 所以在主機上這也是線上的版本。
+app_version() {
+    local version
+    version="$(sed -n 's/^APP_VERSION = "\(.*\)"$/\1/p' "$REPO_ROOT/apps/api/app/config.py")"
+    if [ -z "$version" ]; then
+        echo "在 apps/api/app/config.py 找不到 APP_VERSION" >&2
+        return 1
+    fi
+    printf '%s\n' "$version"
+}
+
 # 破壞性操作前的 y/N 確認。
 confirm() {
     local ans

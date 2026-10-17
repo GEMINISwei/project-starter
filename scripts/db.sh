@@ -3,9 +3,9 @@
 # 資料庫操作: make db <子指令>
 #
 #   make db psql                 進入資料庫 (psql)
-#   make db backup               備份到 ./backups/<資料庫>_<時間>.dump
+#   make db backup               備份到 ./backups/<專案>_v<版號>_<日期>_<時間>.dump
 #   make db backup allow-fresh   同上, 但全新主機 (還沒有資料 volume) 時略過 (部署用)
-#   make db restore [檔案]       還原; 不帶檔案時列出 ./backups/ 讓你選
+#   make db restore [檔案]       還原目前版本 (make version) 的備份; 不帶檔案時列出讓你選
 #   make db reset                清空資料並重建結構與初始資料 (dev only)
 #   make db migrate              對運行中的環境套用未執行的 migration
 #   make db migration "說明"     依 model 的變更產生一支 migration (不需要啟動環境)
@@ -18,6 +18,8 @@ set -euo pipefail
 source "$(dirname "$0")/lib/compose.sh"
 # shellcheck source=scripts/lib/pg.sh
 source "$(dirname "$0")/lib/pg.sh"
+# shellcheck source=scripts/lib/backups.sh
+source "$(dirname "$0")/lib/backups.sh"
 
 load_env
 
@@ -71,42 +73,64 @@ cmd_backup() {
         return 0
     fi
     require_running
-    mkdir -p backups
-    local dest
-    dest="backups/${POSTGRES_DB}_$(date +%Y%m%d_%H%M%S).dump"
+    mkdir -p "${BACKUP_DIR}"
+    local version dest
+    version="$(app_version)"
+    dest="$(backup_name "${COMPOSE_PROJECT_NAME}" "${version}" "$(date +%Y%m%d_%H%M%S)")"
     docker exec -e PGPASSWORD="${POSTGRES_PASSWORD:-}" "${COMPOSE_PROJECT_NAME}-postgres" \
         pg_dump -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -Fc --no-owner --no-acl > "${dest}.partial"
     mv "${dest}.partial" "${dest}"
     echo "已備份：${dest}"
 }
 
+# 從清單選一份這個版本的備份, 選中的路徑寫到 stdout (清單與提示走 stderr, 才能被 $() 接住)。
+choose_backup() {
+    local version="$1" backups=() line i
+    while IFS= read -r line; do backups+=("${line}"); done < <(list_backups "${version}")
+    if [ "${#backups[@]}" -eq 0 ]; then
+        echo "${BACKUP_DIR}/ 裡沒有 v${version} 的備份（只列出與 make version 一致的版本）" >&2
+        exit 1
+    fi
+    echo "v${version} 的備份（新到舊）：" >&2
+    for i in "${!backups[@]}"; do
+        printf '  %d) %s\n' "$((i + 1))" "$(backup_label "${backups[$i]}")" >&2
+    done
+    printf '選擇編號：' >&2
+    read -r i
+    # 先擋非數字與 0: 陣列索引是算術運算, `0` 會變成 -1 選到最舊的那份。
+    if ! [[ "${i}" =~ ^[1-9][0-9]*$ ]] || [ "${i}" -gt "${#backups[@]}" ]; then
+        echo "無效的編號" >&2
+        exit 1
+    fi
+    printf '%s\n' "${backups[$((i - 1))]}"
+}
+
+# 只接受目前版本的備份: 回滾後的舊程式讀不了新版 migration 改過的結構,
+# 要還原別版的備份就先部署回那一版。
 cmd_restore() {
     require_running
-    local file="${1:-}"
+    local version file="${1:-}" file_version
+    version="$(app_version)"
     if [ -z "${file}" ]; then
-        local backups=()
-        while IFS= read -r line; do backups+=("${line}"); done < <(ls -1t backups/*.dump 2>/dev/null)
-        if [ "${#backups[@]}" -eq 0 ]; then
-            echo "backups/ 裡沒有備份，請先 make db backup" >&2
-            exit 1
-        fi
-        echo "可用的備份（新到舊）："
-        local i
-        for i in "${!backups[@]}"; do printf '  %d) %s\n' "$((i + 1))" "${backups[$i]}"; done
-        printf '選擇編號：'
-        read -r i
-        file="${backups[$((i - 1))]:-}"
-        [ -n "${file}" ] || { echo "無效的編號" >&2; exit 1; }
+        file="$(choose_backup "${version}")"
     fi
     [ -f "${file}" ] || { echo "找不到檔案：${file}" >&2; exit 1; }
+    if ! file_version="$(backup_version "${file}")"; then
+        echo "無法從檔名判斷 ${file} 的版本（應為 <專案>_v<版號>_<日期>_<時間>.dump）" >&2
+        exit 1
+    fi
+    if [ "${file_version}" != "${version}" ]; then
+        echo "這是 v${file_version} 的備份，目前版本是 v${version}（make version）；先部署回 v${file_version} 再還原" >&2
+        exit 1
+    fi
 
-    confirm "將以 ${file} 取代 ${POSTGRES_DB} 目前的資料，確定？"
+    confirm "將以 $(backup_label "${file}") 的備份取代 ${POSTGRES_DB} 目前的資料，確定？"
     # --clean --if-exists: 取代而不是疊加, 否則撞 duplicate key 只成功一半。
     # 只用 -i 不用 -t: pseudo-TTY 會對二進位串流做換行轉換, 備份檔會在中途被改壞。
     docker exec -i -e PGPASSWORD="${POSTGRES_PASSWORD:-}" "${COMPOSE_PROJECT_NAME}-postgres" \
         pg_restore -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" --clean --if-exists --no-owner --no-acl \
         < "${file}"
-    echo "還原完成：${file}"
+    echo "還原完成：$(backup_label "${file}")"
 }
 
 cmd_reset() {
