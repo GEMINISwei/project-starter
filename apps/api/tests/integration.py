@@ -3,7 +3,7 @@
 **這是「測試安靜地停止測任何東西」的防線。** 幾個 fixture 都在連不上 PostgreSQL 時
 `pytest.skip`, 那是本機開發需要的; 但 CI 上那批測試守著整個 repo 風險最高的幾條保證 ——
 `cast` 的空頭支票 (各模組的 `tests/modules/<name>/test_model.py`)、游標分頁的 tie-breaker
-不變條件、bootstrap 的併發與交易回滾。而 skip 的 exit code 是 0: 資料庫沒起來、
+不變條件、密碼撤銷的併發與交易。而 skip 的 exit code 是 0: 資料庫沒起來、
 連線字串打錯、等待迴圈提早放行, 整批測試消失而所有燈都是綠的。
 
 覆蓋率也當不了代理指標 —— `pyproject.toml` 的 `fail_under` 刻意訂到「本機完全沒有

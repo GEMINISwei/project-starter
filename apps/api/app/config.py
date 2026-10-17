@@ -40,8 +40,6 @@ class AppEnv(BaseSettings):
     jwt_algorithm: Literal["HS256"] = "HS256"
     # 要強制全站重新登入時 +1 (與 APP_VERSION 脫鉤)。
     token_version: str = "1"  # noqa: S105 —— 這是版本計數器, 名字裡的 token 讓 bandit 誤判成密碼
-    # 空字串代表停用「以系統密碼註冊超級管理者」的路徑 (見 modules.users.bootstrap.signup_user)。
-    register_key: str = ""
 
 
 def _load_env() -> AppEnv:

@@ -15,19 +15,6 @@
         "title": "AppVersion",
         "type": "object"
       },
-      "BootstrapStatus": {
-        "properties": {
-          "available": {
-            "title": "Available",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "available"
-        ],
-        "title": "BootstrapStatus",
-        "type": "object"
-      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -347,51 +334,6 @@
           "is_disabled"
         ],
         "title": "RoleUpdate",
-        "type": "object"
-      },
-      "SignupRequest": {
-        "properties": {
-          "nickname": {
-            "minLength": 1,
-            "title": "Nickname",
-            "type": "string"
-          },
-          "password": {
-            "minLength": 8,
-            "title": "Password",
-            "type": "string"
-          },
-          "register_key": {
-            "minLength": 1,
-            "title": "Register Key",
-            "type": "string"
-          },
-          "username": {
-            "minLength": 1,
-            "title": "Username",
-            "type": "string"
-          }
-        },
-        "required": [
-          "username",
-          "password",
-          "nickname",
-          "register_key"
-        ],
-        "title": "SignupRequest",
-        "type": "object"
-      },
-      "SignupResponse": {
-        "properties": {
-          "id": {
-            "title": "Id",
-            "type": "string"
-          }
-        },
-        "required": [
-          "id"
-        ],
-        "title": "SignupResponse",
         "type": "object"
       },
       "UserCreate": {
@@ -1265,28 +1207,6 @@
         ]
       }
     },
-    "/api/users/bootstrap-status": {
-      "get": {
-        "description": "還能不能用系統密碼建立第一個超級管理者。公開端點, 不需認證。",
-        "operationId": "get_bootstrap_status_route_api_users_bootstrap_status_get",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BootstrapStatus"
-                }
-              }
-            },
-            "description": "Successful Response"
-          }
-        },
-        "summary": "Get Bootstrap Status Route",
-        "tags": [
-          "users"
-        ]
-      }
-    },
     "/api/users/login": {
       "post": {
         "operationId": "user_login_route_api_users_login_post",
@@ -1449,47 +1369,6 @@
           }
         },
         "summary": "Change Own Password Route",
-        "tags": [
-          "users"
-        ]
-      }
-    },
-    "/api/users/signup": {
-      "post": {
-        "operationId": "signup_user_route_api_users_signup_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SignupRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SignupResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Signup User Route",
         "tags": [
           "users"
         ]

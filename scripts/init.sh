@@ -157,7 +157,6 @@ create_env() {
     # 資料庫名稱跟著專案名走, 不另外問 —— 一個 compose 專案就是一個資料庫。
     set_env_value "$draft" POSTGRES_DB "$project_name"
     set_env_value "$draft" JWT_SECRET_KEY "$(openssl rand -hex 32)"
-    set_env_value "$draft" REGISTER_KEY "$(openssl rand -hex 32)"
     set_env_value "$draft" NEXT_SERVER_ACTIONS_ENCRYPTION_KEY "$(openssl rand -base64 32)"
     mv "$draft" .env
     trap - EXIT
@@ -196,16 +195,6 @@ init_git() {
     fi
 }
 
-print_register_key() {
-    local register_key
-    register_key="$(sed -n 's/^REGISTER_KEY=//p' .env)"
-    if [ -n "$register_key" ]; then
-        echo "註冊代碼（首次於 /signup 建立超級管理者用）：$register_key"
-    else
-        echo "註冊代碼已清空，請用 make db superuser 建立超級管理者"
-    fi
-}
-
 case "${1:-all}" in
     all)
         require_tools openssl uv node npm docker
@@ -214,17 +203,16 @@ case "${1:-all}" in
         create_env
         install_deps
         init_git
-        print_register_key
         echo
         echo "完成。接著："
-        echo "  make dev     # 啟動開發環境（首次建置 image 約 2–5 分鐘）"
+        echo "  make dev            # 啟動開發環境（首次建置 image 約 2–5 分鐘）"
+        echo "  make db superuser   # 啟動後建立第一個超級管理者（網頁上沒有註冊入口）"
         echo "  make check   # 送出前的檢查"
         ;;
     env)
         require_tools openssl docker
         require_compose
         create_env
-        print_register_key
         ;;
     *) usage ;;
 esac
