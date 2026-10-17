@@ -156,8 +156,9 @@ jobs:
             split("\n") | map(select(length > 0) | split("\t") | {group: .[0], environment: .[1]})
             | {include: .}' <<< "${selected}")" >> "${GITHUB_OUTPUT}"
 
+  # 等 version 與 targets 都通過才跑: tag 或要部署的組不對時一套都不會部署, 先跑 CI 只是白花時間。
   ci:
-    needs: version
+    needs: [version, targets]
     uses: ./.github/workflows/ci.yml
     with:
       ref: refs/tags/${{ needs.version.outputs.tag }}
