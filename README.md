@@ -12,17 +12,6 @@ make init    # 產生 .env（金鑰自動產生）並安裝相依
 make dev     # 啟動開發環境（首次建置約 2–5 分鐘）
 ```
 
-打開 http://localhost:3000，第一次會落在 `/signup`，填 `make init` 印出的 `REGISTER_KEY`
-建立第一個帳號。其他指令：
-
-```bash
-make init env                                # 部署主機用：只產生 .env
-make dev  [up|down|logs [服務]|ps]           # prod 同一組子指令
-make db   psql|backup|restore|reset|migrate|migration "說明"|superuser
-make check [lint|types|test|build|portable|integration|contract]   # 不帶參數 = 送出前的完整檢查
-make gen-types                               # 改過後端 schema 後重產前端型別
-```
-
 ## 包含什麼
 
 | | |
