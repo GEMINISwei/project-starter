@@ -1,7 +1,16 @@
 name: Deploy
+# 執行列表上的名稱, 括號裡是這次部署的組。手動觸發 (回滾、補跑) 標成 Redeploy, 與發布 release
+# 的部署一眼分開:
+#   發布 release   Deploy v0.0.3 (production)     組名取自 PUBLISH_TARGETS / PRE_RELEASE_TARGETS
+#   Run workflow   Redeploy v0.0.1 (production)   組名取自輸入的 target
+# Variable 沒設定時這次部署會失敗, 名稱上直接標出缺的是哪一個。
 run-name: >-
-  Deploy ${{ inputs.tag || github.event.release.tag_name }}
-  → ${{ inputs.target || (github.event.release.prerelease && 'Pre-Release' || 'Publish') }}
+  ${{ format('{0} {1} ({2})',
+  github.event_name == 'workflow_dispatch' && 'Redeploy' || 'Deploy',
+  inputs.tag || github.event.release.tag_name,
+  inputs.target || (github.event.release.prerelease
+  && (vars.PRE_RELEASE_TARGETS || 'PRE_RELEASE_TARGETS 未設定')
+  || (vars.PUBLISH_TARGETS || 'PUBLISH_TARGETS 未設定'))) }}
 
 # 只在 GitHub 上發布 release 時部署; 平常 push 只跑 CI。要部署哪些組由 repo 的 Variables 決定:
 #   發布 pre-release                         → PRE_RELEASE_TARGETS 的組
