@@ -84,8 +84,9 @@ environment（見下方〈新增一套系統〉），workflow 不用改。`produ
    只建一次，這次部署的每一組各標一個組名。image 只標組名，執行中的版本看 `APP_VERSION`
    （設定頁顯示的就是它）；不同組用不同標籤，先行測試的組部署新版時不會蓋掉其他組的 image。
 5. **一次一套**依序部署，每套是一個獨立的 job（`deploy (<environment>)`）：檢查 secrets →
-   SSH 到主機 → `git checkout` 同一個 tag（compose 檔與 nginx 模板是從原始碼 bind mount 的）→
-   `make db backup allow-fresh` → 拉 image 並重啟 → `make prod ps` → 清掉被取代的舊 image。
+   SSH 到主機 → `make db backup allow-fresh`（在 checkout 之前，備份檔才會標上線上那一版的版號）→
+   `git checkout` 同一個 tag（compose 檔與 nginx 模板是從原始碼 bind mount 的）→ 拉 image 並重啟 →
+   `make prod ps` → 清掉被取代的舊 image。
    **一套失敗不會中斷其他套**。
 6. 執行頁面的 **Summary** 列出每套的結果與失敗的步驟，以及這次沒有部署的組。失敗的那套點進它的
    job 看 log，修好之後按 **Re-run failed jobs**，只會重跑失敗的那幾套。
@@ -219,6 +220,8 @@ gh workflow run deploy.yml --ref main -f tag=v0.1.0 -f target="production stagin
 
 **migration 不會倒退**：新版改過
 資料表的話，舊程式可能讀不了新結構，這時要用部署前的備份 `make db restore`（會失去備份之後的資料）。
+部署前的備份標的是當時線上的版本，所以回滾到 `v0.1.0` 後，`make version` 是 `v0.1.0`，
+`make db restore` 列出的就是 `v0.1.0` 時留下的備份。
 
 ### 可觀測性只到 stdout
 
@@ -316,10 +319,15 @@ API 是**單一 Python 行程**（沒有 workers，compose 也沒有 replica）�
 ## 備份與還原
 
 ```bash
-make db backup                  # 備份到 ./backups/<資料庫>_<時間>.dump
-make db restore                 # 列出 ./backups/ 的備份，選一個並確認後還原
-make db restore backups/x.dump  # 直接指定檔案
+make version                    # 目前的版本，例如 v0.0.2
+make db backup                  # 備份到 ./backups/<專案>_v<版號>_<日期>_<時間>.dump
+make db restore                 # 列出目前版本的備份，選一個並確認後還原
+make db restore backups/x.dump  # 直接指定檔案（版本必須與 make version 一致）
 ```
+
+清單只列出與 `make version` 一致的備份，新到舊，例如 `1) v0.0.2 2026-10-17 08:35:53`。
+**還原只接受目前版本的備份**：別版的資料表結構可能跟目前的程式對不上，要還原別版的備份就先部署回那一版。
+檔名沒有版號的舊備份不會列出，真的要用時自己改名成上面的格式。
 
 還原會**取代備份裡有的資料表**（`pg_restore --clean`）；備份之後才新建的表不會被刪掉。
 `backups/` 只在這台機器上，**正式環境要自己安排排程與異地保存**，並定期實際還原一次 ——

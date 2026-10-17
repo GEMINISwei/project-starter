@@ -47,6 +47,7 @@ make dev  [up|down|logs [服務]|ps]           # prod 同一組子指令（prod 
 make db   psql|backup|restore [檔案]|reset|migrate|migration "說明"|superuser
 make check [lint|types|test|build|portable|integration|contract]   # 不帶參數 = 前五項，送出前跑
 make gen-types                               # 改過後端 schema／權限／語系後必跑
+make version                                 # 目前的版本（APP_VERSION）
 ```
 
 實作在 `scripts/<指令>.sh`，可以直接執行（`./scripts/db.sh backup`）。新增子指令＝改那支腳本的
