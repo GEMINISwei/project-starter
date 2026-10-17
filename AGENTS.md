@@ -22,6 +22,9 @@
 
 ## 寫程式
 
+- **開發流程：Feature Branch → Draft PR → Incremental Commits → Code Review → Squash Merge**。
+  不直接 push `main`；PR 標題用 Conventional Commits，因為 squash 後它就是 `main` 的 commit
+  （[說明](docs/development.md#開發流程)）。
 - **動手前先寫驗收條件，每條對應一個測試名稱**；寫不出測試名稱的那條就是要先問清楚的地方
   （[說明](docs/development.md#驗收條件與測試名稱)）。
 - **先寫測試**。`actions.ts` 與 `ui/*.tsx` 不寫執行期測試；畫面有分支時抽進 `capabilities.ts` 再測。

@@ -1,6 +1,6 @@
 # 開發指南
 
-本機環境、指令、測試策略與程式碼風格。擴充功能見 [`extending.md`](extending.md)，
+本機環境、指令、測試策略、開發流程與程式碼風格。擴充功能見 [`extending.md`](extending.md)，
 部署與維運見 [`operations.md`](operations.md)。
 
 ## 開發環境
@@ -146,18 +146,45 @@ PR 描述的每條驗收條件後面接一個測試名稱。**寫不出測試名
 覆蓋率門檻（`pyproject.toml` 的 `fail_under`、`vitest.config.ts` 的 `thresholds`）是**防退步的地板，
 不是目標**。
 
+## 開發流程
+
+每個改動都走同一條路，`main` 只透過 PR 前進：
+
+```text
+Feature Branch → Draft PR → Incremental Commits → Code Review → Squash Merge
+```
+
+1. **Feature Branch**：從最新的 `main` 開分支，命名 `<type>/<kebab-case>`（`feat/product-list`）。
+   不直接 push `main`。一個分支只做一件事，做到一半發現別的問題就另開分支，不要順手塞進來。
+2. **Draft PR**：分支第一次 push 就開 Draft PR（`gh pr create --draft`），先照模板寫「這個 PR
+   做什麼」與[驗收條件](#驗收條件與測試名稱)。動手前就把方向攤開，方向錯了在寫程式之前就會被看到。
+3. **Incremental Commits**：小步提交、常常 push，每個 commit 是一個說得清楚的步驟
+   （例：先補測試、再實作、再整理）。這些 commit 的訊息會併進 squash 後的內文，所以寫成
+   「做了什麼、為什麼」，不要一路 `wip`、`fix`。
+4. **Code Review**：`make check` 綠、模板的「送出前」勾完、整份 diff 自己讀過一次，才按
+   **Ready for review**。回應 review 用新的 commit，不要 force push 改寫已經被看過的歷史，
+   reviewer 才看得出這一輪改了什麼。CI 綠、意見都處理完才合併。
+5. **Squash Merge**：一律 **Squash and merge**，`main` 上一個 PR 一個 commit。squash 後的標題就是
+   `main` 的 commit 標題，所以 **PR 標題**要符合下面的 commit 格式。合併後刪除分支。
+
+GitHub 端要設定一次，流程才不是靠自覺：
+
+- [ ] Settings → General → Pull Requests：只勾 **Allow squash merging**，預設訊息選
+  **Pull request title and commit details**，並勾 **Automatically delete head branches**
+- [ ] Settings → Rules：替 `main` 建 ruleset，開 **Require a pull request before merging**，
+  並把 CI 的三個 job（`check`、`integration`、`images`）設成 **required status check**
+
 ## 提交與 CI
 
-- Commit：[Conventional Commits](https://www.conventionalcommits.org/zh-hant/v1.0.0/)，
-  `<type>: <祈使句>`（`feat: add product list page`）
-- 分支：`<type>/<kebab-case>`（`feat/product-list`）
+- PR 標題與 commit：[Conventional Commits](https://www.conventionalcommits.org/zh-hant/v1.0.0/)，
+  `<type>: <祈使句>`（`feat: add product list page`）。PR 標題是硬規定（squash 後留在 `main`），
+  分支上的 commit 建議照寫。
 - 送出前通過 `make check`，實質改動在 [`CHANGELOG.md`](../CHANGELOG.md) 的 `## [Unreleased]` 留一筆。
 
 CI（`.github/workflows/ci.yml`）跑的就是本機指令：`check`（`make check` 與
 `make check contract`）、`integration`（`make check integration`）、`images`（兩份 production image
 建得起來，且 web image 裡沒有真的 Server Action 金鑰）。**本機綠，CI 就綠。** 部署另由
-`deploy.yml` 在 Publish release 時執行，見 [`operations.md`](operations.md#自動部署)。 要擋 merge 的話，到 GitHub 的 Settings → Rules 把這三個 job
-設成 required status check。
+`deploy.yml` 在 Publish release 時執行，見 [`operations.md`](operations.md#自動部署)。
 
 ### 相依升級
 
