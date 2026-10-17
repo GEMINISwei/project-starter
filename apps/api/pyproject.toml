@@ -16,8 +16,9 @@ dependencies = [
     "asyncpg==0.32.0",
     "pydantic-settings==2.15.0",
     # 用 PyJWT 而非 python-jose: 只簽 HS256, 後者會拉進用不到的非對稱加密鏈 (含帶著
-    # timing attack advisory 的 ecdsa)。
-    "PyJWT==2.13.0",
+    # timing attack advisory 的 ecdsa)。套件名寫正規化的小寫: Dependabot 的 uv 更新器拿這裡的
+    # 字面名稱去比對 uv.lock (一律小寫), 大小寫不同會找不到而整批更新失敗。
+    "pyjwt==2.13.0",
     "python-multipart==0.0.32",
     "bcrypt==5.0.0",
     # 是正式環境相依: compose 的 migrate service 用 api image 跑 `alembic upgrade head`。
