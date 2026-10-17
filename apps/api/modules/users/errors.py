@@ -5,11 +5,6 @@ class UserError(BaseError):
     NOT_FOUND = LangText(zh="用戶不存在", en="User Not Found")
     USERNAME_EXISTS = LangText(zh="帳號已存在", en="Username Already Exists")
     INVALID_CREDENTIALS = LangText(zh="帳號或密碼錯誤", en="Invalid Username or Password")
-    REGISTER_KEY_MISMATCH = LangText(zh="系統密碼錯誤", en="Register Key Mismatch")
-    BOOTSTRAP_ALREADY_COMPLETED = LangText(
-        zh="系統已完成初始化，無法再次建立超級管理者",
-        en="Bootstrap Already Completed",
-    )
     CANNOT_DISABLE_SUPER = LangText(zh="無法停用超級管理者帳號", en="Cannot Disable Super Admin")
     CANNOT_DISABLE_SELF = LangText(zh="無法停用自己的帳號", en="Cannot Disable Self")
     CURRENT_PASSWORD_MISMATCH = LangText(zh="目前密碼錯誤", en="Current Password Is Incorrect")

@@ -4,7 +4,7 @@
 
 範例一律照抄現成模組，兩邊都從 **roles** 開始（標準的 CRUD：列表、建立、修改、停用）：
 後端 `apps/api/modules/roles/`、前端 `apps/web/modules/roles/`。需要更進一步的寫法時再參考
-users：關聯表與篩選（`model.py`）、依授權模型拆檔（`service.py`／`account.py`／`bootstrap.py`）。
+users：關聯表與篩選（`model.py`）、依授權模型拆檔（`service.py`／`account.py`／`superuser.py`）。
 
 ## 新增一個功能模組
 

@@ -139,26 +139,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/users/bootstrap-status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Bootstrap Status Route
-         * @description 還能不能用系統密碼建立第一個超級管理者。公開端點, 不需認證。
-         */
-        get: operations["get_bootstrap_status_route_api_users_bootstrap_status_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/users/login": {
         parameters: {
             query?: never;
@@ -243,23 +223,6 @@ export interface paths {
         patch: operations["change_own_password_route_api_users_me_password_patch"];
         trace?: never;
     };
-    "/api/users/signup": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Signup User Route */
-        post: operations["signup_user_route_api_users_signup_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/users/{id}": {
         parameters: {
             query?: never;
@@ -307,11 +270,6 @@ export interface components {
         AppVersion: {
             /** Version */
             version: string;
-        };
-        /** BootstrapStatus */
-        BootstrapStatus: {
-            /** Available */
-            available: boolean;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -441,22 +399,6 @@ export interface components {
             name: string;
             /** Permissions */
             permissions: components["schemas"]["Permission"][];
-        };
-        /** SignupRequest */
-        SignupRequest: {
-            /** Nickname */
-            nickname: string;
-            /** Password */
-            password: string;
-            /** Register Key */
-            register_key: string;
-            /** Username */
-            username: string;
-        };
-        /** SignupResponse */
-        SignupResponse: {
-            /** Id */
-            id: string;
         };
         /** UserCreate */
         UserCreate: {
@@ -890,26 +832,6 @@ export interface operations {
             };
         };
     };
-    get_bootstrap_status_route_api_users_bootstrap_status_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BootstrapStatus"];
-                };
-            };
-        };
-    };
     user_login_route_api_users_login_post: {
         parameters: {
             query?: never;
@@ -1036,39 +958,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserToken"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    signup_user_route_api_users_signup_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SignupRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SignupResponse"];
                 };
             };
             /** @description Validation Error */

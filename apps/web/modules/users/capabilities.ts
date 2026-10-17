@@ -76,7 +76,7 @@ export function canResetPassword(user: UserInfo, roles: RoleInfo[]) {
   return !isSuperAdminUser(user, roles)
 }
 
-/** 這個角色能不能指派: 啟用中、不是超級管理者角色 (超管只能由 bootstrap 或 CLI 產生)。 */
+/** 這個角色能不能指派: 啟用中、不是超級管理者角色 (超管只能由 CLI 產生)。 */
 export function isAssignableRole(role: RoleInfo) {
   return !role.is_disabled && !hasAllPermission(role.permissions)
 }

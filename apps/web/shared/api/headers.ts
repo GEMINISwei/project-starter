@@ -25,10 +25,10 @@ export type RequestHeaderOptions = {
   /**
    * 進來這個請求時 nginx 帶上的用戶端 IP (`X-Real-IP`), 原樣往後端傳。
    *
-   * **少了這一行, 後端的登入/註冊限流就完全失去意義。** 那兩條端點是 Server Action 呼叫的,
+   * **少了這一行, 後端的登入限流就完全失去意義。** 登入是 Server Action 呼叫的,
    * 由 Next 伺服器端直接連 `api:8000` —— 後端看到的 peer address 是 web 這個容器, 全站共用
-   * 同一個值。結果是 signup 的限流變成「整個部署每小時 5 次」, 而 login 的 key 退化成只剩帳號,
-   * 剛好變成它想避免的「可以被拿來惡意鎖定他人」。
+   * 同一個值。結果是只看 IP 的那層變成「整個部署共用一份額度」, 而 IP + 帳號那層的 key
+   * 退化成只剩帳號, 剛好變成它想避免的「可以被拿來惡意鎖定他人」。
    *
    * 轉傳的值是 nginx 以 `$remote_addr` **覆寫**過的 (見 infra/nginx/), 偽造不了。
    * 後端 `shared/http/rate_limit.py` 的 `client_ip()` 讀同一個 header。

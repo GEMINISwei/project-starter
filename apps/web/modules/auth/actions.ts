@@ -4,7 +4,7 @@ import { apiPost } from "@/shared/api/request.server"
 import { type ActionFormData, getActionFormString } from "@/shared/api/action-form-data"
 import { setAccessTokenCookie } from "@/shared/session/access-token.server"
 import { withoutAccessToken } from "@/shared/session/token-response"
-import type { LoginFormValues, SignupFormValues } from "./types"
+import type { LoginFormValues } from "./types"
 
 export async function loginUser(formData: ActionFormData<LoginFormValues>) {
   const values: LoginFormValues = {
@@ -27,18 +27,4 @@ export async function loginUser(formData: ActionFormData<LoginFormValues>) {
   }
 
   return withoutAccessToken(res)
-}
-
-export async function signupUser(formData: ActionFormData<SignupFormValues>) {
-  const values: SignupFormValues = {
-    nickname: getActionFormString(formData, "nickname"),
-    username: getActionFormString(formData, "username"),
-    password: getActionFormString(formData, "password"),
-    register_key: getActionFormString(formData, "register_key"),
-  }
-  return apiPost({
-    url: "/users/signup",
-    auth: "none",
-    data: values,
-  })
 }

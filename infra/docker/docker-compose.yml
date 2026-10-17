@@ -23,8 +23,6 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?}
       EXPIRE_HOURS: ${EXPIRE_HOURS:?}
       TOKEN_VERSION: ${TOKEN_VERSION:-1}
-      # `:-` 而不是 `:?`: 空值代表停用 bootstrap。
-      REGISTER_KEY: ${REGISTER_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

@@ -31,7 +31,7 @@ export default function LoginForm({ reason }: LoginFormProps) {
 
   const fieldState = { disabled: isPending, showError: isSubmit }
 
-  // 寫值 + 關掉錯誤提示。同 SignupForm。
+  // 寫值 + 關掉錯誤提示。
   function handleChange(field: keyof typeof values) {
     return (value: string) => {
       changeValue(field, value)

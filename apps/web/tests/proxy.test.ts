@@ -95,8 +95,8 @@ describe("proxy", () => {
   })
 
   describe("公開路由", () => {
-    it.each(["/login", "/signup"])("%s 未登入也放行", async (path) => {
-      expectPassThrough(await proxy(request(path)))
+    it("/login 未登入也放行", async () => {
+      expectPassThrough(await proxy(request("/login")))
     })
 
   })

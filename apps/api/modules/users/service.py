@@ -5,7 +5,7 @@
 可以把其他超管鎖在系統外); 指派超級管理者角色。
 
 使用者對自己帳號的操作 (登入、改自己的密碼與個人資料) 在 `account.py`; 建立超級管理者在
-`bootstrap.py`。
+`superuser.py`。
 """
 
 from typing import Any, Literal
@@ -52,7 +52,7 @@ def _ensure_can_disable(
 async def create_user(form_data: UserCreate) -> UserOperate:
     """由超級管理者建立一般使用者。**這條路徑永遠不能建立超級管理者。**
 
-    超級管理者只能由 bootstrap 建立; 一般使用者建立流程不能繞過角色驗證。
+    超級管理者只能由 CLI 建立 (`superuser.py`); 一般使用者建立流程不能繞過角色驗證。
     """
     if await UserTable.find_detail_by_username(username=form_data.username):
         raise LangException(409, UserError.USERNAME_EXISTS)
@@ -168,7 +168,7 @@ async def disable_user(current_user: CurrentUser, target_id: str) -> UserOperate
 async def validate_role_ids(role_ids: list[str]) -> None:
     """確認這批角色可以指派: 都存在、都沒停用、不含超級管理者角色。
 
-    **無條件拒絕帶 `Permission.ALL` 的角色**: 超級管理者只能由 bootstrap 或 CLI 產生。
+    **無條件拒絕帶 `Permission.ALL` 的角色**: 超級管理者只能由 CLI 產生。
     """
     roles = await RoleTable.find_details_by_ids(role_ids)
     if len(roles) != len(set(role_ids)):

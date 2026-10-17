@@ -31,7 +31,7 @@ async def user_db():
     """一個帶 `users` 表的真資料庫, 裡面有一位 auth_version=1 的使用者, 回傳它的 id。
 
     **fixture 不進入 session scope**: 底下併發那條測試需要每次呼叫各有自己的交易,
-    共用一個的話就退化成同一個交易裡的兩次 UPDATE (同 `test_bootstrap.py` 的 fixture)。
+    共用一個的話就退化成同一個交易裡的兩次 UPDATE。
     """
     from shared.db.table import BaseTable
 

@@ -136,7 +136,7 @@ modules/<name>/
 
 ```text
 app/
-├── (public)/              # login、signup
+├── (public)/              # login
 └── (protected)/           # layout：登入檢查
     ├── (user)/            # 使用者區：首頁、個人設定　layout：使用者外殼
     └── admin/             # 管理區：使用者、角色管理　layout：權限檢查 + 管理外殼
@@ -189,8 +189,8 @@ modules/products/
 ```
 
 - **service 長大了就依授權模型拆檔**，不要開 `services/` 子目錄。例：`modules/users/` 的
-  `service.py`（管理者對任意使用者）、`account.py`（使用者對自己的帳號）、`bootstrap.py`
-  （建立超級管理者），共用的錯誤在 `errors.py`。
+  `service.py`（管理者對任意使用者）、`account.py`（使用者對自己的帳號）、`superuser.py`
+  （建立超級管理者，只給 CLI 用），共用的錯誤在 `errors.py`。
 - 與業務無關的能力（密碼雜湊、token、權限展開）用 `shared/auth/`，不要在模組裡再寫一份。
 - `app/registry.py` 的 `ENABLED_MODULES` 是唯一啟用清單。重複的 module 名稱、router prefix、
   資料表名稱會在啟動時被拒絕（規則在 `shared/module.py`）。測試可用 `create_app(modules=...)`

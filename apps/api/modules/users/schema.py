@@ -37,20 +37,13 @@ class UserCreate(BaseModel):
 
 
 # CLI 專用 (`scripts/db.py create-superuser`), 不掛在任何端點上, 所以不會進 OpenAPI。
-# 存在的理由是讓 CLI 與 API 共用同一組 username/password 約束, 而不是各寫一套規則。
+# 存在的理由是讓 CLI 與 API 的建立使用者共用同一組 username/password 約束, 而不是各寫一套規則。
 # 不重用 UserCreate: 那個模型帶 role_ids, 而這裡的角色是固定的,
 # 收一個會被忽略的欄位遲早會有人以為它有效。
 class SuperAdminCreate(BaseModel):
     username: NonEmptyText
     password: NewPassword
     nickname: NonEmptyText
-
-
-class SignupRequest(BaseModel):
-    username: NonEmptyText
-    password: NewPassword
-    nickname: NonEmptyText
-    register_key: NonEmptyText
 
 
 class UserLogin(BaseModel):
@@ -89,15 +82,6 @@ class PasswordChange(BaseModel):
 class UserOperate(BaseModel):
     id: str
 
-
-class SignupResponse(BaseModel):
-    id: str
-
-
-class BootstrapStatus(BaseModel):
-    # True 代表「還沒有任何超級管理者, 且 REGISTER_KEY 有設定」。
-    # 前端據此決定要顯示註冊表單還是「系統已初始化」的訊息。
-    available: bool
 
 
 class UserToken(BaseModel):

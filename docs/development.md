@@ -13,8 +13,8 @@ make init    # 產生 .env（金鑰自動產生）、安裝相依、git init
 make dev     # 啟動 postgres → migrate → api → web → nginx（首次建置約 2–5 分鐘）
 ```
 
-打開 `http://localhost:{SYSTEM_PORT}`（預設 3000），第一次會落在 `/signup`，填 `make init`
-印出的 `REGISTER_KEY` 建立第一個帳號。`migrate` 停在 `Exited (0)`、`nginx` 沒有 `(healthy)`
+環境起來之後用 `make db superuser` 建立第一個帳號（網頁上沒有註冊入口），再打開
+`http://localhost:{SYSTEM_PORT}`（預設 3000）登入。`migrate` 停在 `Exited (0)`、`nginx` 沒有 `(healthy)`
 都是正常的。
 
 ### 環境變數的同步點

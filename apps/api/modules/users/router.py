@@ -9,13 +9,10 @@ from shared.auth.dependency import check_user_permission
 from shared.http.rate_limit import RateLimiter, client_ip
 from shared.http.schema import PaginationParams
 
-from . import account, bootstrap, service
+from . import account, service
 from .schema import (
-    BootstrapStatus,
     PasswordChange,
     ProfileUpdate,
-    SignupRequest,
-    SignupResponse,
     UserCreate,
     UserInfo,
     UserList,
@@ -36,7 +33,6 @@ login_limiter = RateLimiter(max_attempts=10, window_seconds=300)
 # 這一層只看 IP, 上限訂寬 (同一個 NAT 後面的整間辦公室要能正常登入),
 # 而且成功**不 reset**: 否則攻擊者用自己的帳號登入一次就能把額度洗回來。
 login_ip_limiter = RateLimiter(max_attempts=50, window_seconds=300)
-signup_limiter = RateLimiter(max_attempts=5, window_seconds=3600)
 # 以使用者 id 為 key。擋的主要是 bcrypt 的 CPU 消耗 (一個被盜的 session 不該變成 CPU
 # 消耗器), 順帶讓偷到 cookie 的人無法慢慢試舊密碼。
 password_change_limiter = RateLimiter(max_attempts=10, window_seconds=300)
@@ -48,29 +44,6 @@ async def create_user_route(
     _: CurrentUser = Depends(check_user_permission(Permission.ALL)),
 ) -> UserOperate:
     return await service.create_user(form_data=form_data)
-
-
-@router.get("/bootstrap-status")
-async def get_bootstrap_status_route(http_request: HttpRequest) -> BootstrapStatus:
-    """還能不能用系統密碼建立第一個超級管理者。公開端點, 不需認證。"""
-    # 公開端點, 所以回應只能是這一個布林值 —— 不要加上任何可用來窮舉的資訊。
-    return BootstrapStatus(
-        available=await bootstrap.bootstrap_available(http_request.app.state.env.register_key)
-    )
-
-
-@router.post("/signup")
-async def signup_user_route(
-    http_request: HttpRequest,
-    form_data: SignupRequest,
-) -> SignupResponse:
-    signup_limiter.check(client_ip(http_request))
-    result = await bootstrap.signup_user(
-        form_data=form_data,
-        expected_key=http_request.app.state.env.register_key,
-    )
-    signup_limiter.reset(client_ip(http_request))
-    return result
 
 
 @router.post("/login")

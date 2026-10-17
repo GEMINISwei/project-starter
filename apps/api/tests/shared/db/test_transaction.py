@@ -5,8 +5,7 @@
 一次, 失敗的半套資料就會留在資料庫裡; 例外被吞掉, 呼叫端還會以為成功。
 
 不需要 PostgreSQL: 請求裡的 `transaction()` 只用到 session 的 `begin_nested()`, 用假物件
-替換即可。 (真的連上資料庫的驗證由 `tests/modules/users/test_bootstrap.py` 底下標了
-`integration` 的測試負責。)
+替換即可。 (真的連上資料庫的驗證由 `test_transaction_savepoint.py` 負責。)
 """
 
 from collections.abc import Iterator

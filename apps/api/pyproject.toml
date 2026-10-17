@@ -102,7 +102,6 @@ extend-immutable-calls = [
 "migrations/versions/**" = ["E501"]
 # `__table_args__` 與 `seed_data` 是宣告式設定, 不需要 ClassVar 註記。
 "modules/**/model.py" = ["RUF012"]
-"modules/**/bootstrap_model.py" = ["RUF012"]
 
 [tool.mypy]
 python_version = "3.14"

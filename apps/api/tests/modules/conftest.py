@@ -23,7 +23,6 @@ def mock_app_env(monkeypatch: pytest.MonkeyPatch):
     # 至少 32 bytes, 理由同 tests/shared/auth/test_tokens.py 的 MockEnv。
     mock_env.jwt_secret_key = "test_secret_key_for_api_test_at_least_32_chars"
     mock_env.jwt_algorithm = "HS256"
-    mock_env.register_key = ""
 
     monkeypatch.setattr(app.state, "env", mock_env)
 
