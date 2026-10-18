@@ -45,7 +45,7 @@ make start      # 啟動 postgres → migrate → api → web → nginx（首次
 ```bash
 make init dev|prod                           # 產生 .env 並寫入 MODE；prod 只產生 .env（部署主機用）
 make start                                   # 依 .env 的 MODE 啟動
-make services [logs [服務]|down]             # 不帶參數 = 狀態與版本
+make services [volumes|logs [服務]|down]     # 不帶參數 = 版本與 MODE、服務狀態、volume；volumes = 各 volume 的容量
 make backup                                  # 資料庫與上傳檔案一起備份，期間對外服務暫停
 make db   psql|restore [檔案]|reset|migrate|migration "說明"|superuser
 make uploads restore [檔案]
