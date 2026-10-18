@@ -15,7 +15,7 @@ describe("resolveCookieSecure", () => {
     expect(resolveCookieSecure("https")).toBe(true)
   })
 
-  it("http 不加 Secure（這正是 make prod 走 nginx plain HTTP 的情況）", () => {
+  it("http 不加 Secure（這正是 MODE=production 的 make start 走 nginx plain HTTP 的情況）", () => {
     expect(resolveCookieSecure("http")).toBe(false)
   })
 
