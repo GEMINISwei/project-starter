@@ -9,8 +9,8 @@
 升 Node 時 `apps/web/Dockerfile` 的 `ARG NODE_VERSION` 要手動跟上）。
 
 ```bash
-make init    # 產生 .env（金鑰自動產生）、安裝相依、git init
-make dev     # 啟動 postgres → migrate → api → web → nginx（首次建置約 2–5 分鐘）
+make init dev   # 產生 .env（MODE=development，金鑰自動產生）、安裝相依、git init
+make start      # 啟動 postgres → migrate → api → web → nginx（首次建置約 2–5 分鐘）
 ```
 
 環境起來之後用 `make db superuser` 建立第一個帳號（網頁上沒有註冊入口），再打開
@@ -32,28 +32,37 @@ make dev     # 啟動 postgres → migrate → api → web → nginx（首次建
 
 | 症狀 | 怎麼辦 |
 |---|---|
-| `port is already allocated` | 改 `.env` 的 `SYSTEM_PORT`，`make dev down && make dev` |
-| api 一直重啟、`relation "users" does not exist` | migration 失敗了，`make dev logs migrate` 看原因 |
-| 容器裡 `ModuleNotFoundError` | 改了相依但 image 沒重建，重建後再 `make dev` |
-| `make init` 抱怨 Node 版本 | `nvm use` |
-| `make init` 說專案名稱已有 docker 服務在使用 | 換一個名稱；確定是不要的舊專案，就用 `docker rm`／`docker volume rm` 清掉列出的資源 |
+| `port is already allocated` | 改 `.env` 的 `SYSTEM_PORT`，`make services down && make start` |
+| api 一直重啟、`relation "users" does not exist` | migration 失敗了，`make services logs migrate` 看原因 |
+| 容器裡 `ModuleNotFoundError` | 改了相依但 image 沒重建，重建後再 `make start` |
+| `make init dev` 抱怨 Node 版本 | `nvm use` |
+| `make init dev` 說專案名稱已有 docker 服務在使用 | 換一個名稱；確定是不要的舊專案，就用 `docker rm`／`docker volume rm` 清掉列出的資源 |
 
 ## 指令
 
 一個主題一個指令，第二個字選動作。完整說明看 `make help`：
 
 ```bash
-make init [env]                              # env = 只產生 .env（部署主機用）
-make dev  [up|down|logs [服務]|ps [full]]    # prod 同一組子指令（prod 的 up 會重新建置 image）
-make db   psql|backup|restore [檔案]|reset|migrate|migration "說明"|superuser
+make init dev|prod                           # 產生 .env 並寫入 MODE；prod 只產生 .env（部署主機用）
+make start                                   # 依 .env 的 MODE 啟動
+make services [logs [服務]|down]             # 不帶參數 = 狀態與版本
+make backup                                  # 資料庫與上傳檔案一起備份，期間對外服務暫停
+make db   psql|restore [檔案]|reset|migrate|migration "說明"|superuser
+make uploads restore [檔案]
 make check [lint|contract|types|test|build|portable|integration]   # 不帶參數 = 前六項，送出前跑
 make gen-types                               # 改過後端 schema／權限／語系後必跑
-make version                                 # 目前的版本（APP_VERSION）
 ```
 
-實作在 `scripts/<指令>.sh`，可以直接執行（`./scripts/db.sh backup`）。新增子指令＝改那支腳本的
+**`MODE` 決定這台主機是哪種環境。** `make init dev|prod` 寫進 `.env`，只在第一次產生時決定；
+要換就刪掉 `.env` 重跑，或手動改那一行。`make start` 依它疊 dev 或 prod 的 overlay，缺少或不是
+`production`／`development` 時，碰容器的指令一律停下來。開發機要驗證 production build，就暫時改成
+`MODE=production`（volume 名稱帶著 `MODE`，開發資料不會被動到），驗完改回來。
+`MODE=production` 時擋下的指令見 [`operations.md`](operations.md#生產部署)。
+
+實作在 `scripts/<指令>.sh`，可以直接執行（`./scripts/db.sh psql`）。新增子指令＝改那支腳本的
 `case`，並在檔頭補一行 `#   make …`（`make help` 讀的就是它）；新增指令＝加一支腳本並把名稱
-加進 Makefile 的 `TARGETS`。
+加進 Makefile 的 `TARGETS`。部署與腳本自己用的指令寫成 `#   [內部] make …`，不列在 help，
+只寫在 [`operations.md`](operations.md#內部指令)。
 
 ## 測試
 

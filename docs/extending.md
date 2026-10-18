@@ -191,7 +191,7 @@ pytest，前端用只有平台 schema 的契約跑 `tsc` 與 vitest。新專案�
 ## 上傳檔案
 
 上傳的檔案（圖片、影片、文件）一律存在 api 的 **`/app/uploads/<模組>/`** 底下，例如
-`/app/uploads/products/`。那裡掛的是 uploads volume，`make backup`／`make uploads backup` 備份的就是它
+`/app/uploads/products/`。那裡掛的是 uploads volume，`make backup` 備份的就是它
 （見 [`operations.md`](operations.md#備份與還原)）。
 
 - **存到別的路徑不會有任何錯誤**：上傳、讀取都正常，但容器一重建檔案就消失，備份裡也不會有。

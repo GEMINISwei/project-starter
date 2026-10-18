@@ -8,8 +8,8 @@ FastAPI + Next.js 全端起始模板，開箱即有認證、角色權限、中�
 需要 Docker Desktop、`make`、`openssl`、`uv` 與 Node（版本見 [`apps/web/.nvmrc`](apps/web/.nvmrc)）。
 
 ```bash
-make init    # 產生 .env（金鑰自動產生）並安裝相依
-make dev     # 啟動開發環境（首次建置約 2–5 分鐘）
+make init dev   # 產生 .env（MODE=development，金鑰自動產生）並安裝相依
+make start      # 啟動開發環境（首次建置約 2–5 分鐘）
 ```
 
 ## 包含什麼
@@ -57,7 +57,7 @@ flowchart LR
 
 ## 開新專案時
 
-1. 複製這份目錄，`make init` 會順便 `git init`。
+1. 複製這份目錄，`make init dev` 會順便 `git init`。
 2. 改寫這份 README、[`LICENSE`](LICENSE) 與 `.env.example` 的 `COMPOSE_PROJECT_NAME` 預設值。
 3. 在 `apps/web/app/theme.css` 覆寫設計變數決定視覺（名字與預設值在 `shared/ui/styles/tokens.css`）。
 4. 照 [`docs/extending.md`](docs/extending.md#新增一個功能模組) 加入第一個模組。

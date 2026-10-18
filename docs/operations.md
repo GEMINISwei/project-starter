@@ -9,22 +9,34 @@
 ```bash
 git clone <你的 repo> /srv/<專案名> && cd /srv/<專案名>
 sudo usermod -aG docker "$USER"    # 不透過 sudo 跑 docker，做完要重新登入
-make init env                      # 只產生 .env；主機的祕密要自己產一份，不要從開發機抄
-make prod                          # 建置 image 並啟動
+make init prod                     # 只產生 .env（MODE=production）；主機的祕密要自己產一份，不要從開發機抄
+git checkout v<版號>               # 正式環境只從發版的 tag 啟動
+make start                         # 建置 image 並啟動
 ```
 
-部署主機只需要 Docker、`make`、`openssl`：`make init env` 不裝 uv 與 Node（那是給
+部署主機只需要 Docker、`make`、`openssl`：`make init prod` 不裝 uv 與 Node（那是給
 `make check` 用的）。
 
-**升版＝`git pull` 後再 `make prod`**（compose 檔與 nginx 模板是從原始碼 bind mount 的）。
+**升版＝`git fetch --tags && git checkout v<版號>` 後再 `make start`**（compose 檔與 nginx 模板是
+從原始碼 bind mount 的）。`MODE=production` 時 `make start` 只認停在 `v<APP_VERSION>` tag 上的
+checkout：在主機上 `git pull` 了 main 再啟動，等於上線一份沒發版、沒經過 CI 的程式碼。
 
-**一個目錄只跑一種模式。** dev 與 prod 用同一個 compose 專案名稱與容器名稱（只有資料 volume
-分開），所以在 prod 的目錄跑 `make dev down` 會停掉正式環境。同一台主機要跑多套，就各用一個目錄，
-`.env` 的 `COMPOSE_PROJECT_NAME` 與 `SYSTEM_PORT` 不重複（見〈[新增一套系統](#新增一套系統)〉）。
+**`.env` 的 `MODE` 決定這個目錄是哪種環境**（`make init prod` 寫入 `production`），一個目錄只會有
+一種。`MODE=production` 時這些指令會直接拒絕，防的是手誤，不是權限控制（能上主機的人照樣可以改 `.env`）：
+
+| 被擋的指令 | 原因 |
+|---|---|
+| `make db reset` | 清空資料 |
+| `make db migrate` | migration 由 `make start` 的 migrate 服務套用；這條路徑不會先備份 |
+| `make db migration`、`make check`、`make gen-types`、`make release`、`make init dev` | 開發機的工作 |
+
+`make services down` 在正式環境要先確認（資料留在 volume，但服務會停）。
+
+同一台主機要跑多套，就各用一個目錄，`.env` 的 `COMPOSE_PROJECT_NAME` 與 `SYSTEM_PORT` 不重複
+（見〈[新增一套系統](#新增一套系統)〉）。
 
 啟動順序是 `postgres → migrate → api → web → nginx`。api 等 migration **成功結束**才啟動，
-所以 migration 失敗時不會有服務對外開放。沒有待執行的 migration 時 `migrate` 直接結束；
-環境起著時也可以用 `make db migrate` 單獨套用。
+所以 migration 失敗時不會有服務對外開放。沒有待執行的 migration 時 `migrate` 直接結束。
 
 prod overlay 比 dev 多了 **log 上限**與**記憶體上限**（api、web 各 512M，postgres 1G）。
 api 週期性重啟時，先懷疑記憶體上限。
@@ -84,9 +96,10 @@ environment（見下方〈新增一套系統〉），workflow 不用改。`produ
    只建一次，這次部署的每一組各標一個組名。image 只標組名，執行中的版本看 `APP_VERSION`
    （設定頁顯示的就是它）；不同組用不同標籤，先行測試的組部署新版時不會蓋掉其他組的 image。
 5. **一次一套**依序部署，每套是一個獨立的 job（`deploy (<environment>)`）：檢查 secrets →
-   SSH 到主機 → `make backup allow-fresh`（資料庫與上傳檔案；在 checkout 之前，備份檔才會標上線上那一版
-   的版號）→ `git checkout` 同一個 tag（compose 檔與 nginx 模板是從原始碼 bind mount 的）→ 拉 image
-   並重啟 → `make prod ps` → 清掉被取代的舊 image → 只留最近 `BACKUP_KEEP` 組備份。
+   SSH 到主機 → `make backup allow-fresh`（資料庫與上傳檔案，期間 nginx 暫停；在 checkout 之前，
+   備份檔才會標上線上那一版的版號）→ `git checkout` 同一個 tag（compose 檔與 nginx 模板是從原始碼
+   bind mount 的）→ 拉 image 並重啟（`make start`）→ `make services` → 清掉被取代的舊 image →
+   只留最近 `BACKUP_KEEP` 組備份。
    **一套失敗不會中斷其他套**。
 6. 執行頁面的 **Summary** 列出每套的結果與失敗的步驟，以及這次沒有部署的組。失敗的那套點進它的
    job 看 log，修好之後按 **Re-run failed jobs**，只會重跑失敗的那幾套。
@@ -110,11 +123,11 @@ GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進�
 不碰主機上其他專案的 image，**也從不碰 volume**。同一台主機上其他套系統還在用的舊 image 不算沒人用，
 輪到它們更新之後才會被清掉。
 
-主機上 shell 有 `API_IMAGE` 與 `WEB_IMAGE` 時，`make prod` 改成拉 image、不在主機上建置；
-兩個都沒有就和以前一樣在本機建置，所以手動 `make prod` 照常可用。
+主機上 shell 有 `API_IMAGE` 與 `WEB_IMAGE` 時，`make start` 改成拉 image、不在主機上建置；
+兩個都沒有就在本機建置，所以手動 `make start` 照常可用（一樣要停在發版的 tag 上）。
 
 **首次設定**：主機上**不必**先把服務跑起來，也不在主機上建置 image。照上一節的指令做到
-`docker` 群組與 `make init env` 就停（**不要跑 `make prod`**），其餘交給第一次發布：
+`docker` 群組與 `make init prod` 就停（**不要跑 `make start`**），其餘交給第一次發布：
 
 - [ ] 主機的 repo 要能 `git fetch`：私有 repo 在 GitHub 的 Deploy keys 加一把**唯讀**的 key
 - [ ] 主機上開一個部署用的帳號，加進 `docker` 群組，能讀寫 repo 目錄；把它的公鑰放進
@@ -161,7 +174,7 @@ GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進�
 第一次部署完成後，在主機上用 `make db superuser` 建立超級管理者（見〈[超級管理者](#超級管理者)〉）。
 這是系統初始化的一環，部署流程刻意不代建。
 
-主機以前手動 `make prod` 建過 image 的話，那些 image 與建置快取 CD 用不到，
+主機以前手動 `make start` 建過 image 的話，那些 image 與建置快取 CD 用不到，
 部署成功後可以清掉（`<專案名>` 是 `.env` 的 `COMPOSE_PROJECT_NAME`）：
 
 ```bash
@@ -183,7 +196,7 @@ docker builder prune
 
 同一組的多套系統可以在不同主機，也可以在同一台主機的不同目錄：
 
-1. 主機上 clone 到新的目錄，例如 `/srv/system-b`，`make init env`。`.env` 的
+1. 主機上 clone 到新的目錄，例如 `/srv/system-b`，`make init prod`。`.env` 的
    `COMPOSE_PROJECT_NAME`、`SYSTEM_PORT` **不可以與同主機的其他套重複**（容器、volume、
    network 都以前者為前綴），`UPLOAD_SIZE_LIMIT` 與 repo Variable 相同。
 2. GitHub 建 environment，例如 `production-system-b`，照〈首次設定〉填 secrets，並加上同樣兩條
@@ -194,7 +207,7 @@ docker builder prune
 
 #### 停用一套系統
 
-在主機上停掉（`make prod down`，資料留在 volume）之後，下一次部署到這一組時，**這套會在備份那一步中止**
+在主機上停掉（`make services down`，資料留在 volume）之後，下一次部署到這一組時，**這套會在備份那一步中止**
 （有資料 volume 但資料庫沒在跑），不會被自動重新啟動，其他套照常更新，只是這次部署會標成失敗。
 要長期停用就刪掉或改名它的 environment（改成不屬於任何部署組的名稱），它就不會再被納入。
 
@@ -235,7 +248,7 @@ gh workflow run deploy.yml --ref main -f tag=v0.1.0 -f target="production stagin
 
 **migration 不會倒退**：新版改過
 資料表的話，舊程式可能讀不了新結構，這時要用部署前的備份 `make db restore`（會失去備份之後的資料）。
-部署前的備份標的是當時線上的版本，所以回滾到 `v0.1.0` 後，`make version` 是 `v0.1.0`，
+部署前的備份標的是當時線上的版本，所以回滾到 `v0.1.0` 後，`make services` 上方的版本是 `v0.1.0`，
 `make db restore` 列出的就是 `v0.1.0` 時留下的備份 —— **前提是它還沒被清掉**：部署後只留最近
 `BACKUP_KEEP` 組，不分版號，之後又部署過很多次的話，那一版的備份可能已經不在了。
 回滾預期只用在嚴重問題，平常部署的應該是穩定版本；真的需要長期保留某一版，自己把那組備份搬出 `backups/`。
@@ -333,21 +346,27 @@ API 是**單一 Python 行程**（沒有 workers，compose 也沒有 replica）�
 
 ## 備份與還原
 
-資料庫與上傳檔案分開備份、分開還原，`make backup` 讓兩份共用同一個檔名，只差副檔名：
+`make backup` 是唯一的備份入口，資料庫與上傳檔案一起備份，兩份共用同一個檔名，只差副檔名；
+還原則分開：
 
 ```bash
-make version                         # 目前的版本，例如 v0.0.2
-make backup                          # 兩份一起：backups/<專案>_v<版號>_<日期>_<時間>.dump 與 .tar
-make backup prune 10                 # 只留最近 10 組，同名的 .dump 與 .tar 一起刪
-make db backup                       # 只備份資料庫（.dump）
-make db restore                      # 列出目前版本的資料庫備份，選一個並確認後還原
-make db restore backups/x.dump       # 直接指定檔案（版本必須與 make version 一致）
-make uploads backup                  # 只備份上傳檔案（.tar）
+make backup                          # backups/<專案>_v<版號>_<日期>_<時間>.dump 與 .tar
+make db restore                      # 列出這個目錄版本的資料庫備份，選一個並確認後還原
+make db restore backups/x.dump       # 直接指定檔案（版本必須與 make services 上方的版本一致）
 make uploads restore                 # 列出所有上傳檔案的備份，選一個並確認後還原
 make uploads restore backups/x.tar   # 直接指定檔案
 ```
 
-**資料庫**用 `pg_dump`，清單只列出與 `make version` 一致的備份，新到舊，例如 `1) v0.0.2 2026-10-17 08:35:53`。
+沒有只備份一邊的指令：單邊的備份配不成一組，還原時容易選錯。
+
+**備份期間對外服務會暫停**：先停 nginx（唯一的對外入口，用 `stop` 不是 `down`），備份完、或備份
+失敗時都會重新啟動。沒有新的寫入，資料庫與上傳檔案才是同一個時間點；api 與 web 不停，因為上傳
+檔案是從 api 容器裡打包的。
+
+**還原前會先完整備份一次**（等於自動跑一次 `make backup`），選錯檔案時還退得回來；這次備份失敗
+就不還原。整段在 nginx 停著的時候做，還原到一半時不會有請求讀寫到新舊混雜的資料。
+
+**資料庫**用 `pg_dump`，清單只列出與這個目錄版本一致的備份，新到舊，例如 `1) v0.0.2 2026-10-17 08:35:53`。
 **還原只接受目前版本的備份**：別版的資料表結構可能跟目前的程式對不上，要還原別版的備份就先部署回那一版。
 檔名沒有版號的舊備份不會列出，真的要用時自己改名成上面的格式。
 還原會**取代備份裡有的資料表**（`pg_restore --clean`）；備份之後才新建的表不會被刪掉。
@@ -358,6 +377,16 @@ make uploads restore backups/x.tar   # 直接指定檔案
 
 **清理**以組為單位、依檔名的時間、不分版號，只刪符合上面命名的檔案。部署時會自動清
 （`BACKUP_KEEP`，見〈[自動部署](#自動部署)〉），手動 `make backup` 不會。
+
+### 內部指令
+
+部署與腳本自己用的指令，不列在 `make help`：
+
+```bash
+make backup allow-fresh              # 同 make backup，但全新主機（還沒有資料 volume）時略過（部署用）
+make backup prune 10                 # 只留最近 10 組，同名的 .dump 與 .tar 一起刪（部署後自動跑）
+make version                         # 這個目錄的版本（APP_VERSION），例如 v0.0.2
+```
 
 `backups/` 只在這台機器上，**正式環境要自己安排排程與異地保存**，並定期實際還原一次 ——
 沒有演練過的備份等於沒有備份。上傳檔案通常比資料庫大得多，留意主機的磁碟空間。
