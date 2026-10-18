@@ -25,7 +25,7 @@ readonly COMPOSE_DIR
 # 相對路徑的話 --env-file 會跟著呼叫者的 CWD 跑掉。
 #
 # **`--env-file` 指到不存在的檔案時 compose 一定失敗**, 而且不會退回讀環境變數。
-# 所以每一支會呼叫這裡的腳本都要先 `require_env` (訊息會指回「先跑 make init」) ——
+# 所以每一支會呼叫這裡的腳本都要先 `require_env` (訊息會指回「先跑 make init dev|prod」) ——
 # 少了那一步, 錯誤會落在呼叫端自己的錯誤路徑上, 變成跟原因無關的東西。
 # 守衛不放在這個函式裡: 呼叫端多半是 `$(compose config ...)`, 命令替換裡的 `exit`
 # 只結束子 shell, 主腳本會若無其事地拿著空字串繼續跑。

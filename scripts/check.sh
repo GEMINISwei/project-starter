@@ -11,7 +11,7 @@
 #   make check portable      把兩邊的 shared/ 單獨複製到空專案, 確認型別檢查與測試照樣通過
 #   make check integration   起拋棄式 PostgreSQL 跑完整後端測試, 再確認 model 與 migration 一致
 #
-# 在主機上跑, 不是在容器裡 —— 那才是編輯器與 CI 看到的環境。首次執行前先跑 make init。
+# 在主機上跑, 不是在容器裡 —— 那才是編輯器與 CI 看到的環境。首次執行前先跑 make init dev。
 set -euo pipefail
 
 # shellcheck source=scripts/lib/pg.sh
