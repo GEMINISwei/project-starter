@@ -77,6 +77,8 @@
 - **權限的顯示標籤與分類只寫在後端**（各模組 `permissions.py` 的 `PermissionSpec`），前端不另存一份。
 - **route function、pydantic model、enum 的 docstring 會進公開 API 文件**，內部說明寫在一般註解。
 - **Server Action 的回傳值會送進瀏覽器**：簽發 token 的 action 回傳前要經過 `withoutAccessToken`。
+- **上傳的檔案存在 `/app/uploads/<模組>/`**：存到別的路徑不會報錯，但重建容器就消失、`make backup` 也備份不到
+  （[說明](docs/extending.md#上傳檔案)）。
 - **後端直接送到畫面的文字**也要走 `LangText` + `resolve_text()`。
 - **不要用 `NEXT_PUBLIC_*` 放部署設定**（build 時就烤死），執行期設定走 `shared/runtime/`。
 - **`apps/web/proxy.ts` 不能搬**，放錯位置路由保護會安靜消失；`npm run build` 輸出要有 `ƒ Proxy (Middleware)`。

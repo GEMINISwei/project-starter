@@ -1,5 +1,7 @@
 """備份檔帶版號 (`scripts/lib/backups.sh`), `make db restore` 只列出與 `make version` 一致的備份。
 
+`make backup` 的 `.dump` 與 `.tar` 共用同一個檔名主幹, 部署後的清理以這一組為單位。
+
 回滾到某一版之後, 能還原的只有那一版的備份: 新版 migration 改過的結構, 舊程式讀不了。
 檔名帶版號、清單只列這一版, 確認的人才不會挑錯檔案。
 
@@ -9,6 +11,8 @@
 import shutil
 import subprocess
 from pathlib import Path
+
+import pytest
 
 from app.config import APP_VERSION
 
@@ -110,4 +114,116 @@ def test_make_version_prints_app_version() -> None:
 def test_deploy_backs_up_before_checking_out_new_tag() -> None:
     # 備份檔的版號取自這份 checkout; 先 checkout 新 tag 的話, 舊版的資料會被標成新版號。
     text = WORKFLOW.read_text()
-    assert text.index("echo 'make db backup allow-fresh'") < text.index("git checkout --detach")
+    assert text.index("echo 'make backup allow-fresh'") < text.index("git checkout --detach")
+
+
+def test_backup_name_uses_given_extension_with_same_stem(tmp_path: Path) -> None:
+    # `make backup` 的兩份檔案只差副檔名, 看檔名就知道是同一個時間點。
+    assert output(tmp_path, "backup_name", "my-app", "0.0.1", "20261017_083553", "tar") == [
+        "backups/my-app_v0.0.1_20261017_083553.tar"
+    ]
+
+
+def test_backup_label_reads_tar_names(tmp_path: Path) -> None:
+    file = "backups/my_app_v0.0.1_20261017_083553.tar"
+    assert output(tmp_path, "backup_label", file) == ["v0.0.1 2026-10-17 08:35:53"]
+
+
+def test_db_list_skips_uploads_archives(tmp_path: Path) -> None:
+    make_backups(tmp_path, "app_v0.0.1_20261017_083553.dump", "app_v0.0.1_20261017_083553.tar")
+    assert output(tmp_path, "list_backups", "0.0.1") == ["backups/app_v0.0.1_20261017_083553.dump"]
+
+
+def test_uploads_list_includes_all_versions_newest_first(tmp_path: Path) -> None:
+    # 檔案沒有結構可言, 任何一版的都能還原, 所以不像資料庫只列目前版本。
+    make_backups(
+        tmp_path,
+        "app_v0.0.1_20261017_083553.tar",
+        "app_v0.0.2_20261101_000000.tar",
+        "app_v0.0.2_20261101_000000.dump",
+        "app_v0.0.2_20261102_000000.tar.partial",
+    )
+    assert output(tmp_path, "list_uploads_backups") == [
+        "backups/app_v0.0.2_20261101_000000.tar",
+        "backups/app_v0.0.1_20261017_083553.tar",
+    ]
+
+
+def test_prune_keeps_latest_n_sets_by_filename_time(tmp_path: Path) -> None:
+    # 依檔名的時間而不是 mtime: 搬過主機的檔案 mtime 會變。
+    make_backups(
+        tmp_path,
+        "app_v0.0.1_20261017_083553.dump",
+        "app_v0.0.1_20261101_000000.dump",
+        "app_v0.0.1_20261020_000000.dump",
+    )
+    assert output(tmp_path, "backups_to_prune", "2") == ["backups/app_v0.0.1_20261017_083553.dump"]
+
+
+def test_prune_removes_dump_and_tar_of_same_stem_together(tmp_path: Path) -> None:
+    # 以組為單位: 只刪一半的話, 留下的那份就再也配不成一組。
+    make_backups(
+        tmp_path,
+        "app_v0.0.1_20261017_083553.dump",
+        "app_v0.0.1_20261017_083553.tar",
+        "app_v0.0.1_20261101_000000.dump",
+        "app_v0.0.1_20261101_000000.tar",
+    )
+    assert sorted(output(tmp_path, "backups_to_prune", "1")) == [
+        "backups/app_v0.0.1_20261017_083553.dump",
+        "backups/app_v0.0.1_20261017_083553.tar",
+    ]
+
+
+def test_prune_counts_sets_across_versions(tmp_path: Path) -> None:
+    # 不替每個版號保留: 回滾後可能找不到那一版的備份, 這個限制寫在 docs/operations.md。
+    make_backups(
+        tmp_path,
+        "app_v0.0.1_20261017_083553.dump",
+        "app_v0.0.2_20261101_000000.dump",
+    )
+    assert output(tmp_path, "backups_to_prune", "1") == ["backups/app_v0.0.1_20261017_083553.dump"]
+
+
+def test_prune_ignores_files_not_matching_backup_pattern(tmp_path: Path) -> None:
+    make_backups(
+        tmp_path,
+        "app_20261017_083553.dump",
+        "app_v0.0.1_20261017_083553.dump.partial",
+        "app_v0.0.1_20261017_083553.tar.partial",
+        "notes.txt",
+        "app_v0.0.1_20261101_000000.dump",
+    )
+    assert output(tmp_path, "backups_to_prune", "1") == []
+
+
+@pytest.mark.parametrize("count", ["0", "-1", "abc", "", "01"])
+def test_prune_rejects_non_positive_count(tmp_path: Path, count: str) -> None:
+    # 0 會把全部備份刪光, 寧可失敗。
+    make_backups(tmp_path, "app_v0.0.1_20261017_083553.dump")
+    result = run(tmp_path, "backups_to_prune", count)
+    assert result.returncode != 0
+    assert result.stdout == ""
+
+
+def test_deploy_prunes_backups_after_services_are_up() -> None:
+    # 服務沒起來就不清: 部署失敗時多留幾份備份比較安心。
+    text = WORKFLOW.read_text()
+    assert text.index("echo 'make prod ps'") < text.index("make backup prune")
+
+
+def test_deploy_prune_failure_only_warns() -> None:
+    # 清理失敗時服務已經是新版在跑, 不該讓部署變紅、Re-run 又整套重來一次。
+    line = next(line for line in WORKFLOW.read_text().splitlines() if "make backup prune" in line)
+    assert "|| echo" in line
+    assert "::warning::" in line
+
+
+def test_deploy_backup_keep_defaults_to_ten() -> None:
+    assert "BACKUP_KEEP: ${{ vars.BACKUP_KEEP || '10' }}" in WORKFLOW.read_text()
+
+
+def test_deploy_checks_backup_keep_before_connecting() -> None:
+    # 設錯的值要在碰主機之前就擋下, 不要等部署完才在清理那步只留一個警告。
+    text = WORKFLOW.read_text()
+    assert text.index("name: 檢查 BACKUP_KEEP") < text.index("name: 部署到主機")

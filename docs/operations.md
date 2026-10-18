@@ -84,9 +84,9 @@ environment（見下方〈新增一套系統〉），workflow 不用改。`produ
    只建一次，這次部署的每一組各標一個組名。image 只標組名，執行中的版本看 `APP_VERSION`
    （設定頁顯示的就是它）；不同組用不同標籤，先行測試的組部署新版時不會蓋掉其他組的 image。
 5. **一次一套**依序部署，每套是一個獨立的 job（`deploy (<environment>)`）：檢查 secrets →
-   SSH 到主機 → `make db backup allow-fresh`（在 checkout 之前，備份檔才會標上線上那一版的版號）→
-   `git checkout` 同一個 tag（compose 檔與 nginx 模板是從原始碼 bind mount 的）→ 拉 image 並重啟 →
-   `make prod ps` → 清掉被取代的舊 image。
+   SSH 到主機 → `make backup allow-fresh`（資料庫與上傳檔案；在 checkout 之前，備份檔才會標上線上那一版
+   的版號）→ `git checkout` 同一個 tag（compose 檔與 nginx 模板是從原始碼 bind mount 的）→ 拉 image
+   並重啟 → `make prod ps` → 清掉被取代的舊 image → 只留最近 `BACKUP_KEEP` 組備份。
    **一套失敗不會中斷其他套**。
 6. 執行頁面的 **Summary** 列出每套的結果與失敗的步驟，以及這次沒有部署的組。失敗的那套點進它的
    job 看 log，修好之後按 **Re-run failed jobs**，只會重跑失敗的那幾套。
@@ -101,6 +101,10 @@ GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進�
 | 資料庫在跑 | 照常備份 |
 | 連資料 volume 都沒有（全新主機） | 沒有東西可備份，略過，直接部署 |
 | 有資料 volume，但資料庫沒在跑 | 主機狀態不是預期的，**中止**，先上主機看過 |
+| 沒有 uploads volume（還沒部署過有它的版本） | 只備份資料庫 |
+
+服務起來之後才清舊備份，只留最近 `BACKUP_KEEP` 組（見〈[備份與還原](#備份與還原)〉）。
+**清理失敗不會讓部署變紅**，執行頁面只留一個警告，上主機手動 `make backup prune <組數>` 即可。
 
 清舊 image 只清這個 repo 的（以 `org.opencontainers.image.source` 標籤辨認）、已經沒有容器在用的，
 不碰主機上其他專案的 image，**也從不碰 volume**。同一台主機上其他套系統還在用的舊 image 不算沒人用，
@@ -146,6 +150,9 @@ GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進�
 - [ ] 第一次推上去之後，到 GHCR 的 package 設定確認 Visibility：image 裡有完整的程式碼（但沒有機密），
       **私有 repo 要設 Private**；公開 repo 的 image 內容等於原始碼，設 Public 也可以，而且免費。
       **改成 Public 之後就改不回 Private**
+- [ ] 要改每套保留的備份組數時，在 Variables 加 `BACKUP_KEEP`（正整數，沒設就是 10）；
+      放在 repo 層級是所有系統的預設，個別 environment 也設的話以那份為準。設成不是正整數的值，
+      那套系統在連上主機之前就會失敗
 - [ ] repo 的 Settings → Variables 加 `PUBLISH_TARGETS`（例如 `production`）；要用 pre-release
       先行測試時再加 `PRE_RELEASE_TARGETS`（例如 `canary`）
 - [ ] 想要「發布之後再核准一次」：在 environment 開 Required reviewers
@@ -229,7 +236,9 @@ gh workflow run deploy.yml --ref main -f tag=v0.1.0 -f target="production stagin
 **migration 不會倒退**：新版改過
 資料表的話，舊程式可能讀不了新結構，這時要用部署前的備份 `make db restore`（會失去備份之後的資料）。
 部署前的備份標的是當時線上的版本，所以回滾到 `v0.1.0` 後，`make version` 是 `v0.1.0`，
-`make db restore` 列出的就是 `v0.1.0` 時留下的備份。
+`make db restore` 列出的就是 `v0.1.0` 時留下的備份 —— **前提是它還沒被清掉**：部署後只留最近
+`BACKUP_KEEP` 組，不分版號，之後又部署過很多次的話，那一版的備份可能已經不在了。
+回滾預期只用在嚴重問題，平常部署的應該是穩定版本；真的需要長期保留某一版，自己把那組備份搬出 `backups/`。
 
 ### 可觀測性只到 stdout
 
@@ -324,17 +333,31 @@ API 是**單一 Python 行程**（沒有 workers，compose 也沒有 replica）�
 
 ## 備份與還原
 
+資料庫與上傳檔案分開備份、分開還原，`make backup` 讓兩份共用同一個檔名，只差副檔名：
+
 ```bash
-make version                    # 目前的版本，例如 v0.0.2
-make db backup                  # 備份到 ./backups/<專案>_v<版號>_<日期>_<時間>.dump
-make db restore                 # 列出目前版本的備份，選一個並確認後還原
-make db restore backups/x.dump  # 直接指定檔案（版本必須與 make version 一致）
+make version                         # 目前的版本，例如 v0.0.2
+make backup                          # 兩份一起：backups/<專案>_v<版號>_<日期>_<時間>.dump 與 .tar
+make backup prune 10                 # 只留最近 10 組，同名的 .dump 與 .tar 一起刪
+make db backup                       # 只備份資料庫（.dump）
+make db restore                      # 列出目前版本的資料庫備份，選一個並確認後還原
+make db restore backups/x.dump       # 直接指定檔案（版本必須與 make version 一致）
+make uploads backup                  # 只備份上傳檔案（.tar）
+make uploads restore                 # 列出所有上傳檔案的備份，選一個並確認後還原
+make uploads restore backups/x.tar   # 直接指定檔案
 ```
 
-清單只列出與 `make version` 一致的備份，新到舊，例如 `1) v0.0.2 2026-10-17 08:35:53`。
+**資料庫**用 `pg_dump`，清單只列出與 `make version` 一致的備份，新到舊，例如 `1) v0.0.2 2026-10-17 08:35:53`。
 **還原只接受目前版本的備份**：別版的資料表結構可能跟目前的程式對不上，要還原別版的備份就先部署回那一版。
 檔名沒有版號的舊備份不會列出，真的要用時自己改名成上面的格式。
-
 還原會**取代備份裡有的資料表**（`pg_restore --clean`）；備份之後才新建的表不會被刪掉。
+
+**上傳檔案**是 uploads volume（api 的 `/app/uploads`）整包打成 `.tar`，不壓縮（圖片、影片本身已經壓過）。
+檔案沒有結構，**任何版本的備份都能還原**。還原會先清空 volume 再解開，備份之後才上傳的檔案會消失。
+兩邊分開還原時，自己確認選的是同一組（同樣的日期與時間），否則資料庫裡的紀錄可能指到不存在的檔案。
+
+**清理**以組為單位、依檔名的時間、不分版號，只刪符合上面命名的檔案。部署時會自動清
+（`BACKUP_KEEP`，見〈[自動部署](#自動部署)〉），手動 `make backup` 不會。
+
 `backups/` 只在這台機器上，**正式環境要自己安排排程與異地保存**，並定期實際還原一次 ——
-沒有演練過的備份等於沒有備份。
+沒有演練過的備份等於沒有備份。上傳檔案通常比資料庫大得多，留意主機的磁碟空間。
