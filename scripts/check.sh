@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 #
-# 檢查與測試: make check [lint|types|test|build|portable|integration|contract] (不帶參數 = 前五項依序全跑)
+# 檢查與測試: make check [lint|contract|types|test|build|portable|integration] (不帶參數 = 前六項依序全跑)
 #
-#   make check               lint → types → test → build → portable, 前後端都跑, 不需要 Docker (送出前跑這個)
+#   make check               lint → contract → types → test → build → portable, 前後端都跑, 不需要 Docker (送出前跑這個)
 #   make check lint          ruff + import-linter + eslint + dependency-cruiser + knip + shellcheck + compose 檔
+#   make check contract      重產契約與前端型別到暫存目錄, 確認與 repo 裡的一致 (只讀, 不改檔)
 #   make check types         mypy + tsc
 #   make check test          pytest + vitest (帶覆蓋率), 沒有資料庫的 integration 測試會 skip
 #   make check build         前端 production build
 #   make check portable      把兩邊的 shared/ 單獨複製到空專案, 確認型別檢查與測試照樣通過
 #   make check integration   起拋棄式 PostgreSQL 跑完整後端測試, 再確認 model 與 migration 一致
-#   make check contract      重產契約與前端型別, 確認與 git 裡的一致 (CI 用; 本機要先 commit 或 add)
 #
 # 在主機上跑, 不是在容器裡 —— 那才是編輯器與 CI 看到的環境。首次執行前先跑 make init。
 set -euo pipefail
@@ -18,6 +18,8 @@ set -euo pipefail
 source "$(dirname "$0")/lib/pg.sh"
 # shellcheck source=scripts/lib/compose.sh
 source "$(dirname "$0")/lib/compose.sh"
+# shellcheck source=scripts/lib/contract.sh
+source "$(dirname "$0")/lib/contract.sh"
 
 # next.config.ts 在載入時會讀 UPLOAD_SIZE_LIMIT 之類的環境變數, build 前要先載入 .env。
 load_env
@@ -186,21 +188,15 @@ run_integration() {
     echo "model 與 migration 一致"
 }
 
-# 契約路徑只定義在 scripts/lib/common.sh, CI 呼叫這裡, 不另寫一份。
+# 排在 types 前面: 型別檔過期時 tsc 的錯誤看不出原因, 這裡先講清楚是契約沒更新。
 run_contract() {
     step "contract"
-    # 不在 git repo 裡時 `git diff a b` 會退化成「比較 a 與 b 兩個檔案」, 結果完全無意義。
-    git rev-parse --is-inside-work-tree > /dev/null 2>&1 \
-        || { echo "make check contract 需要在 git repo 裡跑（先 make init）" >&2; exit 1; }
-    "${REPO_ROOT}/scripts/gen-types.sh"
-    if ! git diff --exit-code -- "${CONTRACT}" "${WEB_SCHEMA}"; then
-        echo "契約或前端型別不是最新的：本機跑 make gen-types，並把兩份產出一起 commit" >&2
-        exit 1
-    fi
+    check_contract
+    echo "契約與前端型別是最新的"
 }
 
 case "${1:-all}" in
-    all)         run_lint; run_types; run_test; run_build; run_portable ;;
+    all)         run_lint; run_contract; run_types; run_test; run_build; run_portable ;;
     lint)        run_lint ;;
     types)       run_types ;;
     test)        run_test ;;

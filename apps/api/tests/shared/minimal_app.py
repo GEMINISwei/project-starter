@@ -52,14 +52,11 @@ async def platform_contract_route() -> PlatformContract:
 CONTRACT_MODULE = ModuleManifest("platform-contract", routers=(_router,))
 
 
-def create_minimal_app(
-    *modules: ModuleManifest, app_version: str = "0", contract_version: str = "0"
-) -> FastAPI:
+def create_minimal_app(*modules: ModuleManifest, app_version: str = "0") -> FastAPI:
     return create_platform_app(
         env=MinimalEnv(),
         modules=modules,
         permissions=Permission,
         title="minimal",
         app_version=app_version,
-        contract_version=contract_version,
     )

@@ -187,15 +187,13 @@ def create_platform_app(
     permissions: type[BasePermission],
     title: str,
     app_version: str,
-    contract_version: str,
 ) -> FastAPI:
     """組出一個掛好平台接線與指定 modules 的 app。
 
     `permissions` 是專案的權限 enum。權限目錄依**實際傳入的** modules 建立,
     所以用子集合組出來的 app (測試、停用某個 module) 只看得到那些 module 的權限。
 
-    `app_version` 是 `GET /api/system/version` 回報的產品版號, `contract_version` 是
-    OpenAPI 的 `info.version`; 兩者刻意分開, 發版才不會讓契約檔跟著變。
+    `app_version` 是 `GET /api/system/version` 回報的產品版號, 刻意不進 OpenAPI 的 `info.version`。
     """
     table_list = table_models(modules)
     resolved = tuple(modules)
@@ -203,7 +201,9 @@ def create_platform_app(
         permissions, (spec for module in resolved for spec in module.permissions)
     )
 
-    application = FastAPI(title=title, version=contract_version, lifespan=_lifespan)
+    # `info.version` 是 OpenAPI 規格的必填欄位, 但前後端同一個 repo、一起部署, 沒有人讀它:
+    # 契約的變更看 contracts/openapi.json 的 diff。固定不動, 發版才不會讓契約檔跟著變。
+    application = FastAPI(title=title, version="1", lifespan=_lifespan)
 
     application.state.env = env
     application.state.modules = resolved

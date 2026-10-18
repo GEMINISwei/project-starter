@@ -1,7 +1,7 @@
 name: CI
 
 # 每個 job 跑的就是本機的 make 指令, CI 不另寫一份流程 —— 本機綠, CI 就綠。
-#   check        make check + make check contract (重產之後契約不能有 diff)
+#   check        make check (含契約比對: 重產之後不能跟 repo 裡的不一致)
 #   integration  make check integration (拋棄式 PostgreSQL + alembic check)
 #   images       兩份 production image 建得起來, 且 web image 裡沒有真的 Server Action 金鑰
 #
@@ -48,7 +48,6 @@ jobs:
       - run: cd apps/api && uv sync --frozen
       - run: cd apps/web && npm ci
       - run: make check
-      - run: make check contract
 
   integration:
     runs-on: ubuntu-latest

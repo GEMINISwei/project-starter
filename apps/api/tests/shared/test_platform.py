@@ -263,8 +263,9 @@ async def test_unhandled_exception_rolls_back_and_never_commits(
 
 # ── 版號 ─────────────────────────────────────────────────────────────────────
 #
-# 產品版號與 OpenAPI 的 `info.version` 是兩件事: 前者每次發版都變, 後者只在契約有破壞性變更時
-# 手動改。綁在一起的話, 每次發版 contracts/openapi.json 都會出現一筆跟契約無關的 diff。
+# 產品版號與 OpenAPI 的 `info.version` 是兩件事: 前者每次發版都變, 後者固定不動 (規格要求必填,
+# 契約的變更看 contracts/openapi.json 的 diff)。綁在一起的話,
+# 每次發版契約檔都會多一筆無關的 diff。
 
 
 async def _member_resolver(username: str) -> CurrentUser | None:
@@ -308,7 +309,7 @@ async def test_version_route_requires_authentication(
     assert response.status_code == 401
 
 
-def test_openapi_version_is_independent_of_app_version():
-    openapi = create_minimal_app(app_version="1.2.3", contract_version="7").openapi()
+def test_openapi_version_is_fixed_regardless_of_app_version():
+    openapi = create_minimal_app(app_version="1.2.3").openapi()
 
-    assert openapi["info"]["version"] == "7"
+    assert openapi["info"]["version"] == "1"

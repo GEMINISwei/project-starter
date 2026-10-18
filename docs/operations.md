@@ -197,6 +197,14 @@ Run workflow 就會拉回來。
 **發版**：`make release <版號>` → 看過 diff 後 commit、push → 在 GitHub 建 release，tag 填 `v<版號>`，按 Publish
 （要先行測試就勾 pre-release，見上方〈自動部署〉）。
 
+`make release` 改檔之前會先檢查，任何一項不過就停、什麼都不改（`scripts/lib/release.sh`）：
+版號是 `X.Y.Z` 且不帶前導零、比目前的 `APP_VERSION` 大（逐段比數字）、CHANGELOG 還沒有這個版號、
+`[Unreleased]` 不是空的、工作目錄乾淨、在 `main` 且與 `origin/main` 一致、tag `v<版號>` 不存在、
+契約與程式碼一致。契約不一致時不會在這裡重產：那代表 `main` 上有繞過 CI 的東西，先走 PR 修好。
+
+還沒發過版的專案 `APP_VERSION` 是 `0.0.0`，CHANGELOG 的 `[0.0.0]` 是專案初始化的基準點（沒有對應的
+tag），第一版是 `make release 0.0.1`。
+
 跟 git tag 對齊的版號只有兩處：後端的 `APP_VERSION` 與 CHANGELOG 的版本段落；只改了 api 或 web
 也一樣升這一個。前端顯示的版號經 `GET /api/system/version` 取自 `APP_VERSION`。
 `make release` 會改 `APP_VERSION`，並把 CHANGELOG 的 `[Unreleased]` 改成這個版號；不要手動改，
@@ -207,7 +215,7 @@ Run workflow 就會拉回來。
 | 版號 | 什麼時候改 |
 |---|---|
 | `pyproject.toml`、`uv.lock`、`package.json`、`package-lock.json` 的專案版號 | 那個套件本身有變更時才改，不跟發版 |
-| OpenAPI 的 `info.version`（`app/config.py` 的 `CONTRACT_VERSION`） | 契約有**破壞性**變更時手動 +1；一般變更看 `contracts/openapi.json` 的 diff |
+| OpenAPI 的 `info.version` | 固定是 `"1"`，不改（[說明](architecture.md#前後端契約)）；契約的變更看 `contracts/openapi.json` 的 diff |
 
 **部署到其他組，或重新部署某個版本（回滾）**：Actions → Deploy → **Run workflow**，branch 選 `main`，
 填一個已經存在的 tag（例如上一版的 `v0.1.0`）與 `target`（要部署的組，多組用空格分開）。

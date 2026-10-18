@@ -46,7 +46,7 @@ make dev     # 啟動 postgres → migrate → api → web → nginx（首次建
 make init [env]                              # env = 只產生 .env（部署主機用）
 make dev  [up|down|logs [服務]|ps [full]]    # prod 同一組子指令（prod 的 up 會重新建置 image）
 make db   psql|backup|restore [檔案]|reset|migrate|migration "說明"|superuser
-make check [lint|types|test|build|portable|integration|contract]   # 不帶參數 = 前五項，送出前跑
+make check [lint|contract|types|test|build|portable|integration]   # 不帶參數 = 前六項，送出前跑
 make gen-types                               # 改過後端 schema／權限／語系後必跑
 make version                                 # 目前的版本（APP_VERSION）
 ```
@@ -126,7 +126,7 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 | nginx 每個 location 都覆寫用戶端 IP、兩份模板都帶安全標頭 | `apps/api/tests/test_nginx_templates.py` |
 | `scripts/` 的 shell 寫法 | shellcheck（`make check lint`） |
 | compose 展得開、用到的變數 `.env.example` 都有 | `docker compose config`（`make check lint`） |
-| 契約與前端型別是最新的 | `make check contract`（CI） |
+| 契約與前端型別是最新的 | `make check contract`（只比對、不改檔） |
 | `shared/` 整包複製到空專案還能用 | `make check portable`（[說明](architecture.md#shared-的可移植性)） |
 | 後端 `tests/shared/` 不碰 `app`／`modules` | `apps/api/tests/test_architecture.py` |
 | `shared/` 用到的 CSS 變數都定義在 shared 裡 | `apps/web/tests/shared/ui/tokens.test.ts` |
@@ -189,8 +189,7 @@ GitHub 端要設定一次，流程才不是靠自覺：
   分支上的 commit 建議照寫。
 - 送出前通過 `make check`，實質改動在 [`CHANGELOG.md`](../CHANGELOG.md) 的 `## [Unreleased]` 留一筆。
 
-CI（`.github/workflows/ci.yml`）跑的就是本機指令：`check`（`make check` 與
-`make check contract`）、`integration`（`make check integration`）、`images`（兩份 production image
+CI（`.github/workflows/ci.yml`）跑的就是本機指令：`check`（`make check`，含契約比對）、`integration`（`make check integration`）、`images`（兩份 production image
 建得起來，且 web image 裡沒有真的 Server Action 金鑰）。**本機綠，CI 就綠。** 部署另由
 `deploy.yml` 在 Publish release 時執行，見 [`operations.md`](operations.md#自動部署)。
 

@@ -32,15 +32,14 @@ def main() -> None:
     output = Path(sys.argv[1] if len(sys.argv) > 1 else "openapi.json")
 
     # 刻意**不**建立上層目錄 (不要改成 `mkdir(parents=True, exist_ok=True)`): 呼叫端把路徑
-    # 打錯時, 那樣會默默生出一個新目錄、把契約寫進去 —— 而 CI 的 drift job 比對的是原本那個
-    # 檔 (沒被動到, 所以是綠的), 最該被擋下來的錯反而完全沒有訊號。
+    # 打錯時, 那樣會默默生出一個新目錄、把契約寫進去, 看起來像是更新成功了, 原本那個檔卻沒被動到。
     # 契約目錄本來就進版控, 正常情況下必定存在, 所以「不存在」只會是路徑錯了。
     if not output.parent.is_dir():
         sys.exit(f"輸出目錄不存在：{output.parent}（請檢查傳入的路徑，本腳本刻意不自動建立目錄）")
 
     schema = create_app().openapi()
 
-    # sort_keys 讓輸出穩定: CI 靠 `git diff --exit-code` 判斷型別檔是否過期,
+    # sort_keys 讓輸出穩定: 契約比對 (scripts/lib/contract.sh) 靠逐字 diff 判斷型別檔是否過期,
     # 只要有一次 key 順序飄動就會產生假警報。
     output.write_text(
         json.dumps(schema, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
