@@ -1,21 +1,26 @@
 <!-- PR 標題用 Conventional Commits（`feat: add product list page`）：squash merge 後它就是 main 的 commit。
-     先開 Draft，「送出前」勾完再按 Ready for review。流程見 docs/development.md#開發流程 -->
+     先開 Draft，「驗證」寫完再按 Ready for review。流程見 docs/development.md#開發流程 -->
 
-## 這個 PR 做什麼
+## 摘要
 
-<!-- 一到三句，寫「為什麼」；「怎麼做」看 diff。 -->
-
-## 驗收條件
-
-<!-- 一條一行，後面接測試名稱。寫不出測試名稱，代表那一條還沒想清楚。
-- 管理者不能停用自己的帳號 → `test_cannot_disable_self` -->
+<!-- 這個 PR 改了哪些內容、為什麼。之後再推 commit 時回來補，讓這段一直對得上最新的 diff。 -->
 
 -
 
-## 送出前
+## 驗證
 
-- [ ] `make check`
-- [ ] 動過 schema／權限／語系：`make gen-types`
-- [ ] 動過 model：`make db migration "說明"`，並跑 `make check integration`
-- [ ] 新增模組：前端 `config/routes.ts` 與後端 `app/registry.py` 的 `ENABLED_MODULES` 都加了
-- [ ] 整份 diff 自己讀過一次
+<!-- 做過哪些驗證、結果如何，成功與失敗都寫；沒驗到的寫原因。
+     驗收條件一條一行，接測試名稱與結果。寫不出測試名稱，代表那一條還沒想清楚。
+- 管理者不能停用自己的帳號 → `test_cannot_disable_self`：通過
+- `make check`：通過
+     依改動補上：schema／權限／語系 → `make gen-types`；model → `make db migration "說明"` 與
+     `make check integration`；新增模組 → 前後端的 `ENABLED_MODULES` -->
+
+-
+
+## 檢查
+
+<!-- 請審查者確認的項目。整份 diff 本來就要看，不用列；這裡寫 diff 看不出來、需要人去確認的事，
+     例如在部署主機實際跑一次、對已部署的下游有沒有影響、畫面在手機寬度下的樣子。 -->
+
+- [ ]
