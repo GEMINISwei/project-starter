@@ -9,7 +9,7 @@ MIN_JWT_SECRET_LENGTH = 32
 
 # 產品版號: 跟 git tag (`v<版號>`) 與 CHANGELOG 對齊, 前端經 `GET /api/system/version` 顯示。
 # 不要手動改, 用 `make release <版號>` (與 CHANGELOG 一致由 tests/test_version.py 擋)。
-APP_VERSION = "0.0.1"
+APP_VERSION = "0.0.0"
 
 
 class AppEnv(BaseSettings):
