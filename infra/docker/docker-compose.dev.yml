@@ -42,6 +42,6 @@ services:
 
 volumes:
   web_node_modules:
-    name: ${COMPOSE_PROJECT_NAME:?}_dev_web_node_modules
+    name: ${COMPOSE_PROJECT_NAME:?}_${MODE:?}_web_node_modules
   web_next_cache:
-    name: ${COMPOSE_PROJECT_NAME:?}_dev_web_next_cache
+    name: ${COMPOSE_PROJECT_NAME:?}_${MODE:?}_web_next_cache
