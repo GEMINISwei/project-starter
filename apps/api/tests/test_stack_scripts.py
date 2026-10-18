@@ -39,6 +39,8 @@ COPIED_FILES = (
 
 # 依參數決定行為, 每一次呼叫都記進 calls。`stop`/`start` 會改 running, 巢狀的停機才測得到。
 # 任何一個參數有對應的 fail-<參數> 檔案就失敗 (例如 fail-pg_dump)。
+# `volume ls --filter label=…project=<專案>` 只回傳 labeled 裡那個專案的 volume (每行 `專案 名稱`),
+# `system df` 回傳 sizes 的內容 (每行 `名稱<TAB>容量`)。
 FAKE_DOCKER = """#!/bin/sh
 state="$FAKE_DOCKER_DIR"
 printf '%s\\n' "$*" >> "$state/calls"
@@ -50,8 +52,19 @@ case "$1" in
         case "$*" in *--filter*) exit 0 ;; esac
         cat "$state/running" ;;
     volume)
-        case "$*" in *--filter*) exit 0 ;; esac
-        cat "$state/volumes" ;;
+        case "$*" in
+            *--filter*)
+                project=""
+                for arg in "$@"; do
+                    case "$arg" in
+                        label=com.docker.compose.project=*) project="${arg#*project=}" ;;
+                    esac
+                done
+                awk -v p="$project" '$1 == p { print $2 }' "$state/labeled" ;;
+            *) cat "$state/volumes" ;;
+        esac ;;
+    system)
+        cat "$state/sizes" ;;
     stop)
         grep -vx "$2" "$state/running" > "$state/running.tmp" || true
         mv "$state/running.tmp" "$state/running" ;;
@@ -96,6 +109,8 @@ class Sandbox:
             self.tool(name, FAILING_TOOL)
         self.containers()
         self.volumes()
+        self.labeled()
+        self.sizes()
 
     def tool(self, name: str, script: str) -> None:
         path = self.bin / name
@@ -119,6 +134,13 @@ class Sandbox:
 
     def volumes(self, *names: str) -> None:
         (self.state / "volumes").write_text("".join(f"{name}\n" for name in names))
+
+    def labeled(self, *volumes: tuple[str, str]) -> None:
+        # (專案, volume 名稱): compose 加在 volume 上的專案標籤。
+        (self.state / "labeled").write_text("".join(f"{p} {n}\n" for p, n in volumes))
+
+    def sizes(self, *volumes: tuple[str, str]) -> None:
+        (self.state / "sizes").write_text("".join(f"{n}\t{size}\n" for n, size in volumes))
 
     def fail(self, arg: str) -> None:
         (self.state / f"fail-{arg}").touch()
@@ -303,6 +325,97 @@ def test_services_prints_app_version(box: Sandbox) -> None:
     assert result.returncode == 0, result.stderr
     assert f"v{APP_VERSION}" in result.stdout
     assert box.called(" ps")
+
+
+def test_services_prints_mode_after_version(box: Sandbox) -> None:
+    running_production(box)
+    result = box.run("services")
+    assert result.returncode == 0, result.stderr
+    assert f"版本：v{APP_VERSION}  MODE：production" in result.stdout.splitlines()
+
+
+PROJECT_VOLUMES = (
+    (PROJECT, f"{PROJECT}_production_postgres_data"),
+    (PROJECT, f"{PROJECT}_production_uploads"),
+    (PROJECT, f"{PROJECT}_development_postgres_data"),
+    (PROJECT, f"{PROJECT}_legacy_data"),
+)
+OTHER_VOLUMES = (
+    ("other", "other_production_postgres_data"),
+    (f"{PROJECT}-2", f"{PROJECT}-2_production_uploads"),
+)
+
+
+def volume_lines(stdout: str) -> list[str]:
+    # `Volumes` 標題之後的每一行, 名稱靠左不縮排。
+    lines = stdout.splitlines()
+    return lines[lines.index("Volumes") + 1 :]
+
+
+def test_services_lists_project_volumes(box: Sandbox) -> None:
+    # 以 compose 的專案標籤篩選: `my-app-2` 這種開頭相同的別的專案不算。
+    running_production(box)
+    box.labeled(*PROJECT_VOLUMES, *OTHER_VOLUMES)
+    result = box.run("services")
+    assert result.returncode == 0, result.stderr
+    names = [line.split()[0] for line in volume_lines(result.stdout) if line.strip()]
+    assert names == [name for _, name in PROJECT_VOLUMES]
+
+
+def test_services_marks_volumes_not_matching_mode(box: Sandbox) -> None:
+    # 另一種模式留下的, 以及不符合 `<專案>_<MODE>_` 命名的, 都是這個 MODE 用不到的 volume。
+    running_production(box)
+    box.labeled(*PROJECT_VOLUMES)
+    result = box.run("services")
+    assert result.returncode == 0, result.stderr
+    marked = {
+        line.split()[0]: line.endswith("← Not Matched") for line in volume_lines(result.stdout)
+    }
+    assert marked == {
+        f"{PROJECT}_production_postgres_data": False,
+        f"{PROJECT}_production_uploads": False,
+        f"{PROJECT}_development_postgres_data": True,
+        f"{PROJECT}_legacy_data": True,
+    }
+
+
+def test_services_does_not_compute_sizes(box: Sandbox) -> None:
+    # 算容量要掃過整台主機的 volume; 部署每次都跑 make services, 不能被它拖慢。
+    running_production(box)
+    box.labeled(*PROJECT_VOLUMES)
+    result = box.run("services")
+    assert result.returncode == 0, result.stderr
+    assert not box.called("system df")
+
+
+def test_services_volumes_shows_sizes(box: Sandbox) -> None:
+    running_production(box)
+    box.labeled(*PROJECT_VOLUMES, *OTHER_VOLUMES)
+    box.sizes(
+        (f"{PROJECT}_production_postgres_data", "245MB"),
+        (f"{PROJECT}_production_uploads", "3.1GB"),
+        (f"{PROJECT}_development_postgres_data", "52MB"),
+        (f"{PROJECT}_legacy_data", "0B"),
+        ("other_production_postgres_data", "9GB"),
+    )
+    result = box.run("services", "volumes")
+    assert result.returncode == 0, result.stderr
+    assert f"版本：v{APP_VERSION}  MODE：production" in result.stdout.splitlines()
+    rows = {line.split()[0]: line.split()[1:] for line in volume_lines(result.stdout)}
+    assert rows == {
+        f"{PROJECT}_production_postgres_data": ["245MB"],
+        f"{PROJECT}_production_uploads": ["3.1GB"],
+        f"{PROJECT}_development_postgres_data": ["52MB", "←", "Not", "Matched"],
+        f"{PROJECT}_legacy_data": ["0B", "←", "Not", "Matched"],
+    }
+    assert not box.called(" ps ")
+
+
+def test_services_without_volumes_says_none(box: Sandbox) -> None:
+    running_production(box)
+    result = box.run("services")
+    assert result.returncode == 0, result.stderr
+    assert volume_lines(result.stdout) == ["沒有 volume"]
 
 
 # ── make backup ──────────────────────────────────────────────────────────────
