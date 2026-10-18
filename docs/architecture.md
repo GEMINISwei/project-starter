@@ -229,10 +229,14 @@ apps/web/shared/api/entities.ts                ← 平台 entity（Permission、
 apps/web/modules/*/types.ts                    ← 業務 entity，以 Schema<"RoleInfo"> 命名
 ```
 
-兩份產出都進版控，讓「後端改了對外介面」在 code review 的 diff 裡直接看得到；沒有重產時
-CI 的 `check` job 會擋。什麼時候要跑 `make gen-types` 見 [`development.md`](development.md#指令)。
-兩個檔案的路徑只定義在 `scripts/lib/common.sh` 的 `CONTRACT`、`WEB_SCHEMA`
-（`make gen-types` 與 CI 用的 `make check contract` 都從那裡讀）。
+兩份產出都進版控，讓「後端改了對外介面」在 code review 的 diff 裡直接看得到。
+寫進 repo 的只有 `make gen-types`；`make check`（本機與 CI）與 `make release` 只把它重產到暫存目錄
+再比對，不一致就擋，不會改動工作目錄（`scripts/lib/contract.sh`）。
+什麼時候要跑 `make gen-types` 見 [`development.md`](development.md#指令)。
+兩個檔案的路徑只定義在 `scripts/lib/common.sh` 的 `CONTRACT`、`WEB_SCHEMA`。
+
+OpenAPI 的 `info.version` 固定是 `"1"`：規格要求必填，但前後端在同一個 repo、一起部署，
+沒有人讀它；契約變了什麼看 `contracts/openapi.json` 的 diff。
 
 ## 新增與移除 module
 

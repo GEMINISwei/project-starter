@@ -6,35 +6,33 @@
 #
 # 跟 git tag 對齊的版號只有這兩處 (前端的版號經 API 取自 APP_VERSION), 由這支腳本一起改,
 # `make check` 的 `apps/api/tests/test_version.py` 擋住兩者不一致。
-# pyproject.toml、package.json、lock 檔與 OpenAPI 的 info.version 刻意不跟發版:
-# 那些是套件與契約自己的版號, 有實際變更時才改, git 上的 diff 才有意義。
+# pyproject.toml、package.json 與 lock 檔刻意不跟發版: 那些是套件自己的版號, 有實際變更時才改,
+# git 上的 diff 才有意義。OpenAPI 的 info.version 固定不動 (見 shared/platform.py)。
+#
+# 改檔之前先檢查 (scripts/lib/release.sh), 任何一項不過就停, 什麼都不改: 這是本機的指令,
+# 等 push 之後才由 CI 發現就太晚了。契約只比對不重產 —— 不一致代表 main 上有繞過 CI 的東西,
+# 要先走 PR 修好, 不該默默包進發版的 commit。
 #
 # 只改檔案, 不 commit 也不建 tag: 跑完看過 diff 再 commit, 然後照 docs/operations.md〈發版〉建 release。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-# shellcheck source=scripts/lib/common.sh
-source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck source=scripts/lib/release.sh
+source "$SCRIPT_DIR/lib/release.sh"
+# shellcheck source=scripts/lib/contract.sh
+source "$SCRIPT_DIR/lib/contract.sh"
 
 version="${1:-}"
-# 只收 X.Y.Z: deploy.yml 要求 tag 是 `v<版號>`, 混進空白或斜線的版號建不出合法的 tag。
-if ! [[ "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo "用法：make release <版號>，例如 make release 0.0.3" >&2
-    exit 1
-fi
-
+require_version_format "${version}"
 current="$(app_version)"
-if [ "${version}" = "${current}" ]; then
-    echo "目前已經是 ${current}" >&2
-    exit 1
-fi
-
-# [Unreleased] 底下沒有任何條目就發版, CHANGELOG 會多一個空的版本段落 —— 多半是忘了寫。
-unreleased="$(awk '/^## \[Unreleased\]/ { found = 1; next } found && /^## \[/ { exit } found && NF { print }' CHANGELOG.md)"
-if [ -z "${unreleased}" ]; then
-    echo "CHANGELOG.md 的 [Unreleased] 是空的，先寫下這一版改了什麼" >&2
-    exit 1
-fi
+# 不需要網路的先做, 錯了馬上知道; fetch 之後 tag 的檢查才準; 契約最慢, 放最後。
+require_new_version "${version}" "${current}"
+require_unreleased_entries
+require_clean_tree
+require_synced_main
+require_untagged_version "${version}"
+load_env
+check_contract
 
 # 每一處都用「只會命中那一行」的樣式改, 不做全檔取代。
 #

@@ -51,7 +51,7 @@
 | model 的欄位、索引、約束 | `make db migration "說明"`，讀過產出，再 `make check integration` |
 | 跟資料庫互動的後端程式 | `make check integration`（`make check` 裡 integration 會 skip） |
 | 後端 schema、權限、語系 | `make gen-types`，兩份產出一起 commit |
-| 發版（跟 tag 對齊的只有 `APP_VERSION` 與 CHANGELOG） | `make release <版號>`，不要手動改；`package.json`、`pyproject.toml`、lock 檔與 `CONTRACT_VERSION` 不跟發版（[說明](docs/operations.md#自動部署)） |
+| 發版（跟 tag 對齊的只有 `APP_VERSION` 與 CHANGELOG） | `make release <版號>`，不要手動改；`package.json`、`pyproject.toml`、lock 檔與 OpenAPI 的 `info.version` 不跟發版（[說明](docs/operations.md#自動部署)） |
 | 環境變數 | `.env.example`、compose、讀取端（後端 `app/config.py`／前端 `shared/runtime/`）；要詢問或自動產生的才動 `scripts/init.sh`（[說明](docs/development.md#環境變數的同步點)） |
 | nginx 模板 | 每個 `proxy_pass` 的 location 都要 `include` `snippets/proxy-headers.conf`（測試會擋） |
 | 行為有變 | `CHANGELOG.md` 的 `## [Unreleased]` 留一筆 |

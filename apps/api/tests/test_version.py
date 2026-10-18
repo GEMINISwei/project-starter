@@ -4,7 +4,7 @@ deploy.yml 只比對 tag 與 `APP_VERSION`, 這裡擋住 CHANGELOG 沒跟上 —
 變更紀錄會掛在錯的版本底下, 而那不會有任何錯誤訊息。兩處由 `make release` 一起改。
 
 其餘的版號刻意不跟發版: `pyproject.toml`、`package.json` 與 lock 檔是套件自己的版號,
-OpenAPI 的 `info.version` 是契約的版號 (見 `app/config.py`), 各自有變更時才改。
+有變更時才改; OpenAPI 的 `info.version` 固定不動 (見 `shared/platform.py`)。
 
 住在 api 底下的理由同 `test_nginx_templates.py`: `make check` 一定會跑到這裡。
 """

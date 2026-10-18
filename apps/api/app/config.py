@@ -11,10 +11,6 @@ MIN_JWT_SECRET_LENGTH = 32
 # 不要手動改, 用 `make release <版號>` (與 CHANGELOG 一致由 tests/test_version.py 擋)。
 APP_VERSION = "0.0.1"
 
-# OpenAPI 的 `info.version`, 刻意不跟 APP_VERSION: 發版不該讓契約檔出現無關的 diff。
-# 契約的一般變更看 contracts/openapi.json 的 diff 就夠, 只有破壞性變更才手動 +1。
-CONTRACT_VERSION = "1"
-
 
 class AppEnv(BaseSettings):
     model_config = SettingsConfigDict(
