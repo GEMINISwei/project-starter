@@ -32,6 +32,11 @@ checkout：在主機上 `git pull` 了 main 再啟動，等於上線一份沒發
 
 `make services down` 在正式環境要先確認（資料留在 volume，但服務會停）。
 
+`make services` 會列出這個專案的 volume（以 compose 的專案標籤篩選），名稱不是 `<專案>_<MODE>_`
+開頭的標 `← Not Matched`：另一種模式留下的，或改過命名之前的舊 volume，目前的 `MODE` 用不到，
+也不會自己消失。只標註不刪除，確定不要了再自己 `docker volume rm`。各 volume 的容量看
+`make services volumes`（要掃過整台主機的 volume，所以不放在 `make services` 裡）。
+
 同一台主機要跑多套，就各用一個目錄，`.env` 的 `COMPOSE_PROJECT_NAME` 與 `SYSTEM_PORT` 不重複
 （見〈[新增一套系統](#新增一套系統)〉）。
 
