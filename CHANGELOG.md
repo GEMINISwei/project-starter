@@ -4,7 +4,8 @@
 
 ## [Unreleased]
 
-- 移除網頁上的 `/signup` 與 `REGISTER_KEY`：超級管理者只能用 `make db superuser` 建立。既有部署可以從 `.env` 刪掉 `REGISTER_KEY`，`system_state` 資料表由 migration 移除。
+- migration 合併回單一的初始結構（拿掉 `system_state`），既有的資料庫要 `make db reset` 重建。
+- 移除網頁上的 `/signup` 與 `REGISTER_KEY`：超級管理者只能用 `make db superuser` 建立。`.env` 的 `REGISTER_KEY` 可以刪掉。
 
 ## [0.0.1]
 
