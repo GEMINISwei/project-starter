@@ -80,9 +80,16 @@ stack() {
         down) "${run}" down --remove-orphans ;;
         # 不帶服務名稱時看全部; `make dev logs api` 只看 api。
         logs) "${run}" logs -f --tail=200 "$@" ;;
-        ps)   "${run}" ps ;;
+        # 預設的 ps 有 7 欄, IMAGE/COMMAND/PORTS 一長就換行; 平常只留判斷狀態要的欄位。
+        ps)
+            case "${1:-}" in
+                "") "${run}" ps --format 'table {{.Name}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}' ;;
+                full) "${run}" ps ;;
+                *) echo "用法：make ${mode} ps [full]" >&2; exit 1 ;;
+            esac
+            ;;
         *)
-            echo "用法：make ${mode} [up|down|logs [服務]|ps]" >&2
+            echo "用法：make ${mode} [up|down|logs [服務]|ps [full]]" >&2
             exit 1
             ;;
     esac
