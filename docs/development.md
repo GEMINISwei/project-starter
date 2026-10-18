@@ -140,7 +140,7 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 
 ### 驗收條件與測試名稱
 
-PR 描述的每條驗收條件後面接一個測試名稱。**寫不出測試名稱的那一條，就是動手前要先問清楚的地方。**
+PR 描述「驗證」段的每條驗收條件後面接一個測試名稱與結果。**寫不出測試名稱的那一條，就是動手前要先問清楚的地方。**
 
 - 前端：讀得通的中文句子（`未登入導向 /login`）
 - 後端：`test_<動作>_<條件>_<結果>`（`test_get_users_without_permission_returns_403`）
@@ -158,12 +158,18 @@ Feature Branch → Draft PR → Incremental Commits → Code Review → Squash M
 
 1. **Feature Branch**：從最新的 `main` 開分支，命名 `<type>/<kebab-case>`（`feat/product-list`）。
    不直接 push `main`。一個分支只做一件事，做到一半發現別的問題就另開分支，不要順手塞進來。
-2. **Draft PR**：分支第一次 push 就開 Draft PR（`gh pr create --draft`），先照模板寫「這個 PR
-   做什麼」與[驗收條件](#驗收條件與測試名稱)。動手前就把方向攤開，方向錯了在寫程式之前就會被看到。
+2. **Draft PR**：分支第一次 push 就開 Draft PR（`gh pr create --draft`），先照模板寫「摘要」與
+   [驗收條件](#驗收條件與測試名稱)。動手前就把方向攤開，方向錯了在寫程式之前就會被看到。
+   描述固定三段（[模板](../.github/PULL_REQUEST_TEMPLATE.md)）；`gh pr create --body` 會跳過模板，
+   自己帶內文時照同樣三段寫：
+   - **摘要**：改了哪些內容、為什麼。之後再推 commit 時回來補，讓它一直對得上最新的 diff。
+   - **驗證**：做過哪些驗證與結果，**成功與失敗都寫**，沒驗到的寫原因。
+   - **檢查**：請審查者確認的項目，用 checkbox 列。整份 diff 本來就要看，不用列；這裡只寫
+     diff 看不出來、要有人去確認的事（例：在部署主機實際跑一次、對已部署的下游有沒有影響）。
 3. **Incremental Commits**：小步提交、常常 push，每個 commit 是一個說得清楚的步驟
    （例：先補測試、再實作、再整理）。這些 commit 的訊息會併進 squash 後的內文，所以寫成
    「做了什麼、為什麼」，不要一路 `wip`、`fix`。
-4. **Code Review**：`make check` 綠、模板的「送出前」勾完、整份 diff 自己讀過一次，才按
+4. **Code Review**：`make check` 綠、「驗證」寫完、整份 diff 自己讀過一次，才按
    **Ready for review**。回應 review 用新的 commit，不要 force push 改寫已經被看過的歷史，
    reviewer 才看得出這一輪改了什麼。CI 綠、意見都處理完才合併。
 5. **Squash Merge**：一律 **Squash and merge**，`main` 上一個 PR 一個 commit。squash 後的標題就是

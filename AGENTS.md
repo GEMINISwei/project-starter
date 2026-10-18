@@ -25,6 +25,9 @@
 - **開發流程：Feature Branch → Draft PR → Incremental Commits → Code Review → Squash Merge**。
   不直接 push `main`；PR 標題用 Conventional Commits，因為 squash 後它就是 `main` 的 commit
   （[說明](docs/development.md#開發流程)）。
+- **PR 描述固定三段：摘要、驗證（成功失敗都寫）、檢查（給審查者的 checkbox）**。
+  `gh pr create --body` 會跳過 [`PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md)，
+  自己帶內文時也照這三段；之後推新 commit 要回頭補摘要與驗證。
 - **動手前先寫驗收條件，每條對應一個測試名稱**；寫不出測試名稱的那條就是要先問清楚的地方
   （[說明](docs/development.md#驗收條件與測試名稱)）。
 - **先寫測試**。`actions.ts` 與 `ui/*.tsx` 不寫執行期測試；畫面有分支時抽進 `capabilities.ts` 再測。
