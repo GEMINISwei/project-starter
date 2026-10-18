@@ -8,17 +8,17 @@ requires-python = ">=3.14,<3.15"
 # 正式環境相依一律 `==`: lock 是解出來的結果, 這裡是我們同意的版本 ——
 # 沒有上限的話, 下一次 `uv lock` 可以在沒人決定的情況下跨過 major。
 dependencies = [
-    "fastapi==0.143.0",
+    "fastapi==0.143.1",
     "uvicorn[standard]==0.54.0",
     # `[asyncio]` 會拉進 greenlet, 不要改成裸的 "sqlalchemy": 少了它要到執行期才丟
     # `MissingGreenlet`, 安裝時沒有任何警告。
     "sqlalchemy[asyncio]==2.1.4",
     "asyncpg==0.32.0",
-    "pydantic-settings==2.15.0",
+    "pydantic-settings==2.16.0",
     # 用 PyJWT 而非 python-jose: 只簽 HS256, 後者會拉進用不到的非對稱加密鏈 (含帶著
     # timing attack advisory 的 ecdsa)。套件名寫正規化的小寫: Dependabot 的 uv 更新器拿這裡的
     # 字面名稱去比對 uv.lock (一律小寫), 大小寫不同會找不到而整批更新失敗。
-    "pyjwt==2.13.0",
+    "pyjwt==2.15.1",
     "python-multipart==0.0.32",
     "bcrypt==5.0.0",
     # 是正式環境相依: compose 的 migrate service 用 api image 跑 `alembic upgrade head`。
