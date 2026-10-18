@@ -44,7 +44,7 @@ make dev     # 啟動 postgres → migrate → api → web → nginx（首次建
 
 ```bash
 make init [env]                              # env = 只產生 .env（部署主機用）
-make dev  [up|down|logs [服務]|ps]           # prod 同一組子指令（prod 的 up 會重新建置 image）
+make dev  [up|down|logs [服務]|ps [full]]    # prod 同一組子指令（prod 的 up 會重新建置 image）
 make db   psql|backup|restore [檔案]|reset|migrate|migration "說明"|superuser
 make check [lint|types|test|build|portable|integration|contract]   # 不帶參數 = 前五項，送出前跑
 make gen-types                               # 改過後端 schema／權限／語系後必跑
