@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 #
-# 開案: 確認 docker 與專案名稱可用、產生 .env、安裝主機端相依、建立 git 歷史。
+# 開案: 產生 .env (含 MODE), 開發機另外安裝主機端相依、建立 git 歷史: make init <dev|prod>
 #
-#   make init       可以重跑: 已有的 .env 與 .git 會跳過, 相依會照 lock 檔重新安裝
-#   make init env   只產生 .env (部署主機用: 那裡只跑容器, 不必裝 uv 與 Node)
+#   make init dev    開發機: 產生 .env (MODE=development)、安裝相依、git init; 可以重跑, 已有的 .env 與 .git 會跳過
+#   make init prod   部署主機: 只產生 .env (MODE=production), 那裡只跑容器, 不必裝 uv 與 Node
 #
-# 服務跑在容器裡 (`make dev`), 但 `make check` 在主機上跑 —— 那才是編輯器與 CI 看到的
+# 一定要指定: 預設成任何一種, 都會有人在另一種主機上習慣性地打 `make init`。
+# MODE 只在第一次產生 .env 時決定; 要換就刪掉 .env 重跑, 或手動改那一行。
+#
+# 服務跑在容器裡 (`make start`), 但 `make check` 在主機上跑 —— 那才是編輯器與 CI 看到的
 # 環境, 所以開發機要把 uv 與 npm 的相依裝好。
 #
 # 產生的祕密一律用 openssl, 不用 $RANDOM 那類 —— 這些值直接決定 JWT 與 Server Action 的
@@ -128,7 +131,9 @@ valid_db_password() {
 
 # 以 .env.example 為範本, 只改問到的與自動產生的那幾項 —— 其餘預設值與註解都直接沿用,
 # 新增一個有預設值的變數時不必動這支腳本。
+# 用法: create_env <development|production>
 create_env() {
+    local mode="$1"
     if [ -f .env ]; then
         echo ".env 已存在，跳過"
         return
@@ -149,6 +154,7 @@ create_env() {
     local draft=.env.partial
     trap 'rm -f .env.partial .env.partial.tmp' EXIT
     cp .env.example "$draft"
+    set_env_value "$draft" MODE "$mode"
     set_env_value "$draft" COMPOSE_PROJECT_NAME "$project_name"
     set_env_value "$draft" SYSTEM_NAME "$system_name"
     set_env_value "$draft" SYSTEM_PORT "$system_port"
@@ -187,7 +193,7 @@ init_git() {
         echo "已建立全新的 git 歷史"
     fi
 
-    # 這裡刻意不問遠端網址: 本機開發測試常常不想綁任何儲存庫, 而這一步跑完就該能 make dev。
+    # 這裡刻意不問遠端網址: 本機開發測試常常不想綁任何儲存庫, 而這一步跑完就該能 make start。
     # 正常開案 ("Use this template" 之後 git clone) origin 早就綁好了, 看不到這兩行。
     if ! git remote | grep -q .; then
         echo "尚未綁定任何 git remote。需要的話："
@@ -195,24 +201,27 @@ init_git() {
     fi
 }
 
-case "${1:-all}" in
-    all)
+case "${1:-}" in
+    dev)
+        # 已經是正式主機的 .env 時不要裝開發相依, 也不要在部署目錄裡 git init。
+        load_env
+        deny_on_production "make init dev"
         require_tools openssl uv node npm docker
         require_compose
         check_node_version
-        create_env
+        create_env development
         install_deps
         init_git
         echo
         echo "完成。接著："
-        echo "  make dev            # 啟動開發環境（首次建置 image 約 2–5 分鐘）"
+        echo "  make start          # 啟動開發環境（首次建置 image 約 2–5 分鐘）"
         echo "  make db superuser   # 啟動後建立第一個超級管理者（網頁上沒有註冊入口）"
-        echo "  make check   # 送出前的檢查"
+        echo "  make check          # 送出前的檢查"
         ;;
-    env)
+    prod)
         require_tools openssl docker
         require_compose
-        create_env
+        create_env production
         ;;
     *) usage ;;
 esac

@@ -18,7 +18,7 @@ export async function register() {
 
   console.error(
     `UPLOAD_SIZE_LIMIT 不一致：image 是以 ${built} 建置的，但執行期拿到 ${runtime}。`
-    + " 這個值只能在 build 期決定，改了必須重新建置 image（make prod）或發一版新的 tag。"
+    + " 這個值只能在 build 期決定，改了必須重新建置 image（make start）或發一版新的 tag。"
   )
 
   // `process.exit` 而不是 `throw`: Next 會接住 hook 拋出的錯誤並繼續監聽、對每個請求回 500。

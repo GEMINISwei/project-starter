@@ -84,7 +84,33 @@ require_env() {
     done
     if [ -n "$missing" ]; then
         # ${} 不可省: 後面緊接全形括號時, bash 會把那幾個 byte 一起吃進變數名。
-        echo "缺少環境變數：${missing}（請確認 .env，或先執行 make init）" >&2
+        echo "缺少環境變數：${missing}（請確認 .env，或先執行 make init dev|prod）" >&2
+        exit 1
+    fi
+}
+
+# .env 的 MODE 決定這台主機是哪種環境: compose 疊哪份 overlay、volume 叫什麼、哪些指令不能跑。
+# 只由 `make init dev|prod` 寫入。缺少或值不對時停下來, 不猜: 猜錯就是用另一組 volume 起服務,
+# 或在正式主機上放行開發用的指令。
+require_mode() {
+    case "${MODE:-}" in
+        production|development) ;;
+        *)
+            echo ".env 的 MODE 必須是 production 或 development（目前是「${MODE:-}」）：" >&2
+            echo "  刪掉 .env 重跑 make init dev|prod，或手動補上 MODE=…" >&2
+            exit 1
+            ;;
+    esac
+}
+
+# 用法: deny_on_production <指令>
+#
+# 只屬於開發機的指令 (清空資料、產生 migration、檢查與發版) 在正式主機上拒絕執行。
+# 沒有 MODE 時放行: CI 沒有 .env, 而 `make check` 要在那裡跑。
+# 這是防手誤, 不是權限控制 —— 能上主機的人照樣可以改 .env。
+deny_on_production() {
+    if [ "${MODE:-}" = production ]; then
+        echo "正式環境（MODE=production）不能執行 $1" >&2
         exit 1
     fi
 }
@@ -103,9 +129,10 @@ app_version() {
 
 # 破壞性操作前的 y/N 確認。
 confirm() {
-    local ans
+    local ans=""
     printf '%s [y/N] ' "$1"
-    read -r ans
+    # 讀不到輸入 (stdin 不是終端機, 例如經過 ssh 的腳本) 算取消, 也要印出原因。
+    read -r ans || true
     if [ "$ans" != "y" ] && [ "$ans" != "Y" ]; then
         echo "已取消"
         exit 1

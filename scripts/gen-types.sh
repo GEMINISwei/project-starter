@@ -14,6 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/lib/contract.sh"
 
 load_env
+deny_on_production "make gen-types"
 
 generate_contract "$REPO_ROOT/$CONTRACT" "$REPO_ROOT/$WEB_SCHEMA"
 

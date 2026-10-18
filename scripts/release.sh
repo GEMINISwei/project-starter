@@ -22,6 +22,9 @@ source "$SCRIPT_DIR/lib/release.sh"
 # shellcheck source=scripts/lib/contract.sh
 source "$SCRIPT_DIR/lib/contract.sh"
 
+load_env
+deny_on_production "make release"
+
 version="${1:-}"
 require_version_format "${version}"
 current="$(app_version)"
@@ -31,7 +34,6 @@ require_unreleased_entries
 require_clean_tree
 require_synced_main
 require_untagged_version "${version}"
-load_env
 check_contract
 
 # 每一處都用「只會命中那一行」的樣式改, 不做全檔取代。
