@@ -76,7 +76,8 @@ cmd_backup() {
     mkdir -p "${BACKUP_DIR}"
     local version dest
     version="$(app_version)"
-    dest="$(backup_name "${COMPOSE_PROJECT_NAME}" "${version}" "$(date +%Y%m%d_%H%M%S)")"
+    # BACKUP_TIME 由 make backup 給: 與 uploads 那份共用同一個時間, 檔名才配得成一組。
+    dest="$(backup_name "${COMPOSE_PROJECT_NAME}" "${version}" "${BACKUP_TIME:-$(date +%Y%m%d_%H%M%S)}")"
     docker exec -e PGPASSWORD="${POSTGRES_PASSWORD:-}" "${COMPOSE_PROJECT_NAME}-postgres" \
         pg_dump -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -Fc --no-owner --no-acl > "${dest}.partial"
     mv "${dest}.partial" "${dest}"

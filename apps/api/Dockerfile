@@ -20,8 +20,11 @@ COPY alembic.ini ./
 COPY migrations/ ./migrations/
 
 # 以非 root 執行。沒有掛主機目錄, uid 不必跟主機對齊。
+# uploads 要在 chown 之前建好: 新的具名 volume 沿用 image 裡這個目錄的擁有者, 不存在就是 root,
+# 上傳到執行期才 Permission denied。
 RUN groupadd --gid 1000 app \
     && useradd --uid 1000 --gid 1000 --no-create-home app \
+    && mkdir -p /app/uploads \
     && chown -R app:app /app
 
 USER app

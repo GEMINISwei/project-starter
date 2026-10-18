@@ -4,7 +4,7 @@
 # 新增指令 = 加一支 scripts/<name>.sh (記得 chmod +x) 並把 <name> 加進 TARGETS;
 # 新增子指令 = 改那支腳本的 case, Makefile 不用動。
 
-TARGETS = init dev prod db check gen-types release version
+TARGETS = init dev prod db uploads backup check gen-types release version
 
 .DEFAULT_GOAL := help
 .PHONY: help $(TARGETS)
@@ -17,11 +17,15 @@ TARGETS = init dev prod db check gen-types release version
 #     那在 make 眼裡是一個含空白的目標名, 逐字宣告接不住。
 # 只在第一個字是已知指令時才這樣做 —— 打錯字的 `make dve` 仍然要報錯;
 # 子指令打錯 (`make db psqll`) 則交給腳本印出用法。
+#
+# 參數剛好也是指令名稱時 (`make db backup` 的 backup) 不另立空規則 (會蓋掉指令的規則),
+# 改由下面的指令規則判斷: 只有第一個字才執行腳本, 否則 `make db backup` 會連 backup.sh 一起跑。
 ifneq ($(filter $(firstword $(MAKECMDGOALS)),$(TARGETS)),)
   CMD_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
-  ifneq ($(CMD_ARGS),)
-    .PHONY: $(CMD_ARGS)
-    $(eval $(CMD_ARGS):;@:)
+  PLAIN_ARGS := $(filter-out $(TARGETS),$(CMD_ARGS))
+  ifneq ($(PLAIN_ARGS),)
+    .PHONY: $(PLAIN_ARGS)
+    $(eval $(PLAIN_ARGS):;@:)
   endif
 %:
 	@:
@@ -31,4 +35,4 @@ help:
 	@./scripts/help.sh $(TARGETS)
 
 $(TARGETS):
-	@./scripts/$@.sh $(CMD_ARGS)
+	@$(if $(filter $@,$(firstword $(MAKECMDGOALS))),./scripts/$@.sh $(CMD_ARGS),:)

@@ -23,6 +23,9 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?}
       EXPIRE_HOURS: ${EXPIRE_HOURS:?}
       TOKEN_VERSION: ${TOKEN_VERSION:-1}
+    # 上傳的檔案一律放這裡 (各模組一個子目錄): 寫在別的路徑, 重建容器就消失, make backup 也備份不到。
+    volumes:
+      - uploads:/app/uploads
     depends_on:
       postgres:
         condition: service_healthy
@@ -129,4 +132,7 @@ services:
 volumes:
   postgres_data:
     name: ${COMPOSE_PROJECT_NAME:?}_${MODE:?}_postgres_data
+  # make uploads 依這個名稱判斷 volume 在不在; 改名的話舊 volume 裡的檔案會被留在原地。
+  uploads:
+    name: ${COMPOSE_PROJECT_NAME:?}_${MODE:?}_uploads
 
