@@ -23,6 +23,7 @@ source "$(dirname "$0")/lib/contract.sh"
 
 # next.config.ts 在載入時會讀 UPLOAD_SIZE_LIMIT 之類的環境變數, build 前要先載入 .env。
 load_env
+deny_on_production "make check"
 
 step() { printf '\n── %s ──────────────────────────────────────────\n' "$1"; }
 
@@ -50,7 +51,7 @@ lint_shell() {
     shellcheck -x scripts/*.sh scripts/lib/*.sh .github/scripts/*.sh
 }
 
-# 用 .env.example 展開 dev 與 prod 兩組 compose: 抓 YAML 與錨點寫錯, 也抓「compose 用了
+# 用 .env.example 展開兩種 MODE 的 compose: 抓 YAML 與錨點寫錯, 也抓「compose 用了
 # `${X:?}` 但 .env.example 沒有 X」—— 後者否則要到有人照著範本開案才會炸。
 # 必填項在範本裡是空的, 填個佔位值讓 `:?` 放行; `env -i` 隔開本機 .env 已經載入的變數,
 # 不然本機有值就把範本的缺漏蓋過去了。
@@ -59,10 +60,9 @@ lint_compose() {
     local env_file mode
     env_file="$(mktemp)"
     sed 's/^\([A-Za-z_][A-Za-z0-9_]*\)=$/\1=placeholder/' .env.example > "${env_file}"
-    for mode in dev prod; do
-        # shellcheck disable=SC2016 # $1 要在子 shell 裡展開
-        if ! env -i PATH="${PATH}" HOME="${HOME}" COMPOSE_ENV_FILE="${env_file}" \
-            bash -c 'source scripts/lib/compose.sh && "$1_compose" config -q' _ "${mode}"; then
+    for mode in development production; do
+        if ! env -i PATH="${PATH}" HOME="${HOME}" COMPOSE_ENV_FILE="${env_file}" MODE="${mode}" \
+            bash -c 'source scripts/lib/compose.sh && app_compose config -q'; then
             rm -f "${env_file}"
             echo "${mode} 的 compose 設定展開失敗（見上方訊息）" >&2
             exit 1
@@ -155,7 +155,7 @@ portable_web() {
     )
 }
 
-# 兩段都需要真的資料庫, 用拋棄式容器而不是 `make dev` 那個: 跑一次就會把開發資料洗掉。
+# 兩段都需要真的資料庫, 用拋棄式容器而不是 `make start` 那個: 跑一次就會把開發資料洗掉。
 #
 # 1. `REQUIRE_INTEGRATION=1` 把「連不上就 skip」變成「連不上就 fail」。
 # 2. `alembic check` 擋「改了 model 卻沒寫 migration」—— 測試資料庫是從 model 現建的,

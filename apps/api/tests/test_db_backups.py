@@ -209,7 +209,7 @@ def test_prune_rejects_non_positive_count(tmp_path: Path, count: str) -> None:
 def test_deploy_prunes_backups_after_services_are_up() -> None:
     # 服務沒起來就不清: 部署失敗時多留幾份備份比較安心。
     text = WORKFLOW.read_text()
-    assert text.index("echo 'make prod ps'") < text.index("make backup prune")
+    assert text.index("echo 'make services'") < text.index("make backup prune")
 
 
 def test_deploy_prune_failure_only_warns() -> None:

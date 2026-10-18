@@ -1,8 +1,8 @@
 # api 與 migrate 是**同一個 image** 的兩種跑法, 共用的部分只寫一次 (錨點),
 # 兩者的 image 字串就不可能飄掉。
 x-api-image: &api-image
-  # 預設是本機建置 (`make prod`)。之後接 registry 時, 在 shell 匯出 API_IMAGE/WEB_IMAGE/
-  # IMAGE_PULL_POLICY=always 即可改成拉 image; 三者是部署參數, 刻意不進 .env。
+  # 預設是本機建置 (MODE=production 的 `make start`)。之後接 registry 時, 在 shell 匯出
+  # API_IMAGE/WEB_IMAGE/IMAGE_PULL_POLICY=always 即可改成拉 image; 三者是部署參數, 刻意不進 .env。
   image: ${API_IMAGE:-${COMPOSE_PROJECT_NAME:?}-api:latest}
   pull_policy: ${IMAGE_PULL_POLICY:-build}
   build:

@@ -3,7 +3,7 @@
 # 起一個拋棄式的 PostgreSQL 容器, 給需要「真的資料庫」但不該碰開發資料的檢查用
 # (`make check integration`、`make db migration`)。
 #
-# 為什麼不直接用 `make dev` 起來的那個: 出廠的 compose 沒有把 PostgreSQL publish 到主機,
+# 為什麼不直接用 `make start` 起來的那個: 出廠的 compose 沒有把 PostgreSQL publish 到主機,
 # 而且那份資料是開發用的 —— 跑一次 integration 測試就把它洗掉。
 #
 # 這支是被 source 的, 所以刻意**不**寫 `set -euo pipefail` (同 common.sh)。

@@ -1,8 +1,8 @@
 """compose 檔裡每個具名 volume 都叫 `<專案>_<MODE>_<名稱>`。
 
-名稱是腳本認 volume 的依據 (`make db backup allow-fresh` 判斷全新主機、`make uploads` 判斷 volume
-在不在), 也是人在主機上用 `docker volume ls` 分辨哪個專案、哪個模式的方式。寫死 `dev` 這類例外
-不會有錯誤訊息, 只會讓依模式篩選的人漏掉它。
+名稱是腳本認 volume 的依據 (`make backup allow-fresh` 判斷全新主機、`make backup` 判斷有沒有
+uploads volume), 也是人在主機上用 `docker volume ls` 分辨哪個專案、哪個模式的方式。
+寫死 `dev` 這類例外不會有錯誤訊息, 只會讓依模式篩選的人漏掉它。
 
 住在 api 底下的理由同 `test_nginx_templates.py`: `make check` 一定會跑到這裡。
 """

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# 備份檔的命名、挑選與清理: `make db`／`make uploads`／`make backup` 共用同一種檔名。
+# 備份檔的命名、挑選與清理: `make backup` 產生, `make db restore`／`make uploads restore` 挑選。
 #
 #   backups/<專案>_v<版號>_<日期>_<時間>.dump   資料庫, 例如 backups/my-app_v0.0.1_20261017_083553.dump
 #   backups/<專案>_v<版號>_<日期>_<時間>.tar    上傳檔案 (uploads volume)
 #
-# `make backup` 產出的兩份只差副檔名, 同一個主幹就是同一組, 清理時一起刪。
+# 兩份只差副檔名, 同一個主幹就是同一組, 清理時一起刪。
 #
 # 版號是備份當下這份 checkout 的版本, 也就是資料表結構所屬的版本: 回滾到某一版之後只能還原
 # 那一版的備份 (新版 migration 改過的結構, 舊程式讀不了), 所以 restore 只認版號一致的檔案。
@@ -17,6 +17,9 @@
 BACKUPS_SH_LOADED=1
 
 readonly BACKUP_DIR=backups
+# shellcheck disable=SC2034 # 給 source 這支的腳本用 (backup.sh、uploads.sh)
+# uploads volume 在 api 容器裡的掛載點 (compose 檔), 備份與還原都從這裡打包、解開。
+readonly UPLOADS_DIR=/app/uploads
 # 從檔名尾端比對: 專案名稱本身可以有底線或 `_v`。
 readonly BACKUP_PATTERN='_v([0-9]+\.[0-9]+\.[0-9]+)_([0-9]{8})_([0-9]{6})\.(dump|tar)$'
 

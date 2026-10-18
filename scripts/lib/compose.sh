@@ -40,59 +40,52 @@ compose() {
         "$@"
 }
 
-dev_compose() {
-    MODE=development compose -f "$COMPOSE_DIR/docker-compose.dev.yml" "$@"
+# 依 .env 的 MODE 疊 overlay: development 是 bind mount 的原始碼, production 是建置或拉好的 image。
+# MODE 由呼叫端先載入 (load_env); 這裡不載: `make check lint` 用 .env.example 驗證時, MODE
+# 是從呼叫端直接給的, 載入真的 .env 會把它蓋掉。
+app_compose() {
+    require_mode
+    local overlay=dev
+    if [ "${MODE}" = production ]; then
+        overlay=prod
+    fi
+    compose -f "$COMPOSE_DIR/docker-compose.${overlay}.yml" "$@"
 }
 
-prod_compose() {
-    MODE=production compose -f "$COMPOSE_DIR/docker-compose.prod.yml" "$@"
+# 用法: container_running <容器名稱>
+#
+# 先把清單存下來再比對, 不直接接 `| grep -q`: grep 提早結束會讓 docker 收到 SIGPIPE, 在 pipefail
+# 下整條管線算失敗。docker 本身失敗要明確 exit, 不能當成「沒在跑」。
+container_running() {
+    local names
+    names="$(docker ps --format '{{.Names}}')" || { echo "無法列出 docker 容器" >&2; exit 1; }
+    grep -qx "$1" <<< "${names}"
 }
 
-# `make dev` 與 `make prod` 的共同實作: 同一組子指令, 只差 compose 疊的是哪一份 overlay。
+# 用法: without_traffic <指令...>
 #
-# prod 的 up 預設 `--build`: 正式環境要確定跑的是目前這份原始碼建出來的 image;
-# dev 不必, 原始碼是 bind mount 進去的, 改了直接生效。
+# 停掉 nginx (唯一的對外入口) 再執行指令, 結束後 (失敗也一樣) 開回來: 備份與還原期間沒有新的
+# 寫入, 資料庫與上傳檔案才是同一個時間點。用 stop 不用 down, 容器原樣留著。
 #
-# 有給 API_IMAGE/WEB_IMAGE (deploy workflow 從 CI 建好的 image) 時改成拉 image, 而且
-# **不能帶 `--build`**: 實測 `--build` 會蓋過 `pull_policy: always`, 照樣在主機上建置,
-# 還把建出來的東西標成 registry 的 image 名稱。兩個要一起給 —— 只給一個的話, 另一個會去
-# Docker Hub 拉 `<專案>-web:latest` 之類不存在的 image。
-stack() {
-    local mode="$1" action="${2:-up}"
-    shift 2 || shift $#
-
-    load_env
-    require_env COMPOSE_PROJECT_NAME
-
-    local run="${mode}_compose"
-    case "${action}" in
-        up)
-            if [ "${mode}" = prod ] && [ -n "${API_IMAGE:-}${WEB_IMAGE:-}" ]; then
-                require_env API_IMAGE WEB_IMAGE
-                IMAGE_PULL_POLICY=always "${run}" up -d --remove-orphans
-            elif [ "${mode}" = prod ]; then
-                "${run}" up -d --build --remove-orphans
-            else
-                "${run}" up -d --remove-orphans
-            fi
-            echo "已啟動：http://localhost:${SYSTEM_PORT}"
-            ;;
-        down) "${run}" down --remove-orphans ;;
-        # 不帶服務名稱時看全部; `make dev logs api` 只看 api。
-        logs) "${run}" logs -f --tail=200 "$@" ;;
-        # 預設的 ps 有 7 欄, IMAGE/COMMAND/PORTS 一長就換行; 平常只留判斷狀態要的欄位, 其餘看 `ps full`。
-        ps)
-            case "${1:-}" in
-                "") "${run}" ps --format 'table {{.Name}}\t{{.Status}}\t{{.Ports}}' ;;
-                full) "${run}" ps ;;
-                *) echo "用法：make ${mode} ps [full]" >&2; exit 1 ;;
-            esac
-            ;;
-        *)
-            echo "用法：make ${mode} [up|down|logs [服務]|ps [full]]" >&2
-            exit 1
-            ;;
-    esac
+# nginx 本來就沒在跑時什麼都不動, 只開回自己停掉的: 還原會在外層先停, 裡面那次備份不能在還原
+# 之前就把它開回來。
+#
+# 用 EXIT trap 而不是 `"$@" || status=$?`: 在 `||` 左邊的函式裡 `set -e` 不生效, 中途失敗會繼續
+# 往下跑。這個 trap 會取代呼叫端的 EXIT trap, 所以呼叫端不能自己再設一個。
+without_traffic() {
+    local nginx="${COMPOSE_PROJECT_NAME}-nginx"
+    if ! container_running "${nginx}"; then
+        "$@"
+        return
+    fi
+    echo "停止對外服務（${nginx}），完成後會重新啟動"
+    docker stop "${nginx}" > /dev/null
+    # shellcheck disable=SC2064 # 現在就展開: trap 觸發時這個區域變數已經不在了
+    trap "docker start '${nginx}' > /dev/null" EXIT
+    "$@"
+    trap - EXIT
+    docker start "${nginx}" > /dev/null
+    echo "已重新啟動對外服務"
 }
 
 # api 容器裡的資料庫 CLI (apps/api/scripts/db.py)。
@@ -106,7 +99,7 @@ db_cli_tty() {
 }
 
 # `make init` 用: compose 外掛與 daemon 都要能用。只檢查 `docker` 指令在不在不夠 ——
-# 舊版只有 `docker-compose`、或 Docker Desktop 沒開時, 錯誤要到 `make dev` 才出現。
+# 舊版只有 `docker-compose`、或 Docker Desktop 沒開時, 錯誤要到 `make start` 才出現。
 require_compose() {
     if ! docker compose version > /dev/null 2>&1; then
         echo "缺少 docker compose（Compose v2 外掛，Docker Desktop 已內建）" >&2

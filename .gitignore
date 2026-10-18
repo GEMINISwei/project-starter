@@ -27,7 +27,7 @@ next-env.d.ts
 tsconfig.tsbuildinfo
 coverage/
 
-# `make backup`／`make db backup`／`make uploads backup` 的輸出
+# `make backup` 的輸出 (還原前的自動備份也在這裡)
 backups/
 
 # macOS
