@@ -188,6 +188,19 @@ pytest，前端用只有平台 schema 的契約跑 `tsc` 與 vitest。新專案�
   在請求裡它是一個 SAVEPOINT：區塊失敗只撤銷區塊內的寫入，成功也**不會提前 commit**，
   整個請求最後回錯誤時一樣全部回滾。
 
+## 上傳檔案
+
+上傳的檔案（圖片、影片、文件）一律存在 api 的 **`/app/uploads/<模組>/`** 底下，例如
+`/app/uploads/products/`。那裡掛的是 uploads volume，`make backup`／`make uploads backup` 備份的就是它
+（見 [`operations.md`](operations.md#備份與還原)）。
+
+- **存到別的路徑不會有任何錯誤**：上傳、讀取都正常，但容器一重建檔案就消失，備份裡也不會有。
+- 一個模組一個子目錄，不要每個模組開自己的 volume：多一個 volume 就要多改一次 compose 與備份腳本。
+- 資料庫裡存**相對於 `/app/uploads` 的路徑**（`products/<id>.jpg`），不存絕對路徑：之後換掛載點或改用
+  物件儲存時，資料不用跟著改。
+- 檔名由後端產生（例如 id），不要直接用使用者給的檔名：可能撞名，也可能帶 `../`。
+- 經 Server Action 上傳時，body 上限是 `.env` 的 `UPLOAD_SIZE_LIMIT`（預設 `1mb`，改了要重建 image）。
+
 ## 呼叫 API
 
 前端的回應型別**由 `url` 推導**，不要自己指定：
