@@ -3,8 +3,12 @@
 # 啟動服務: make start (依 .env 的 MODE)
 #
 #   make start   啟動 postgres → migrate → api → web → nginx (會自動跑 migration); production 會重新建置或拉 image
+#   make start lan   (僅 development) 同上, 但對區網開放, 讓手機連進來測試; 下次一般的 make start 就關回去
 #
 # development 用 bind mount 的原始碼, 改了直接生效, 不必建置。
+#
+# `lan` 不寫進 .env 而是每次啟動時給: 常駐的話帶著筆電到外面的 Wi-Fi 也照樣開著。
+# 沒給時明確設回 loopback, 不沿用 shell 裡留下的 DEV_BIND_ADDRESS。
 #
 # production 預設 `--build`: 要確定跑的是目前這份原始碼建出來的 image。shell 有匯出 API_IMAGE 與
 # WEB_IMAGE 時改成從 registry 拉 (deploy workflow 走這條, 見 docs/operations.md〈自動部署〉), 而且
@@ -35,10 +39,48 @@ require_release_checkout() {
     fi
 }
 
-[ "$#" -eq 0 ] || usage
+# 印給手機輸入的網址。取不到 IP (沒連網路、介面名稱不同) 時只提示, 不讓啟動失敗。
+print_lan_urls() {
+    local address="" host interface
+    for interface in en0 en1; do
+        address="$(ipconfig getifaddr "${interface}" 2> /dev/null || true)"
+        [ -n "${address}" ] && break
+    done
+    if [ -z "${address}" ]; then
+        address="$(hostname -I 2> /dev/null | awk '{ print $1 }' || true)"
+    fi
+    host="$(scutil --get LocalHostName 2> /dev/null || true)"
+    if [ -n "${address}" ]; then
+        echo "區網：http://${address}:${SYSTEM_PORT}"
+    fi
+    if [ -n "${host}" ]; then
+        echo "區網：http://${host}.local:${SYSTEM_PORT}（換 Wi-Fi 也不變）"
+    fi
+    if [ -z "${address}${host}" ]; then
+        echo "區網：找不到這台電腦的區網 IP，請自行查詢後用 http://<IP>:${SYSTEM_PORT} 連線"
+    fi
+    echo "同一個網路上的人都連得到，用完跑一次 make start 關回只限本機"
+}
+
+lan=false
+case "$#:${1:-}" in
+    0:) ;;
+    1:lan) lan=true ;;
+    *) usage ;;
+esac
 load_env
 require_env COMPOSE_PROJECT_NAME
 require_mode
+
+if [ "${lan}" = true ] && [ "${MODE}" != development ]; then
+    echo "正式環境不能用 lan：nginx 信任上一層送來的 X-Real-IP，對外開放就能冒充任何 IP" >&2
+    exit 1
+fi
+if [ "${lan}" = true ]; then
+    export DEV_BIND_ADDRESS=0.0.0.0
+else
+    export DEV_BIND_ADDRESS=127.0.0.1
+fi
 
 if [ "${MODE}" = development ]; then
     app_compose up -d --remove-orphans
@@ -52,3 +94,6 @@ else
     fi
 fi
 echo "已啟動：http://localhost:${SYSTEM_PORT}"
+if [ "${lan}" = true ]; then
+    print_lan_urls
+fi

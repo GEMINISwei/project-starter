@@ -19,7 +19,8 @@ import pytest
 from tests.test_nginx_templates import TEMPLATES, read_template
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-COMPOSE = REPO_ROOT / "infra" / "docker" / "docker-compose.yml"
+COMPOSE_DIR = REPO_ROOT / "infra" / "docker"
+COMPOSE = COMPOSE_DIR / "docker-compose.yml"
 HOST_EXAMPLE = REPO_ROOT / "infra" / "host-nginx" / "example.conf"
 
 # 主機經 docker 的 port 轉進來時, 來源是 loopback 或 docker 網路的 gateway, 都在這幾段裡。
@@ -68,14 +69,37 @@ def test_every_template_hides_nginx_version(template: Path) -> None:
     assert re.search(r"^\s*server_tokens\s+off;", read_template(template), flags=re.MULTILINE)
 
 
+def nginx_service(compose: Path) -> str:
+    source = compose.read_text("utf-8")
+    service = re.search(r"^  nginx:\n(.*?)(?=^  \S|^\S|\Z)", source, re.M | re.S)
+    assert service
+    return service.group(1)
+
+
 def test_nginx_port_binds_loopback_only() -> None:
     # 綁 0.0.0.0 的話外部可以繞過主機直接連進來, 自己帶 X-Real-IP 就能冒充任何 IP。
     # Docker 直接改 iptables, 主機的 ufw 擋不住它開的 port。
-    service = re.search(r"^  nginx:\n(.*?)(?=^  \S|\Z)", COMPOSE.read_text("utf-8"), re.M | re.S)
-    assert service
-    ports = re.search(r"ports:\n((?:\s+- .*\n)+)", service.group(1))
+    ports = re.search(r"ports:\n((?:\s+- .*\n)+)", nginx_service(COMPOSE))
     assert ports
     assert re.findall(r"^\s+- (\S+)$", ports.group(1), re.M) == ["127.0.0.1:${SYSTEM_PORT:?}:80"]
+
+
+def test_prod_overlay_keeps_base_port() -> None:
+    # 正式環境只能沿用 base 的 loopback; overlay 的 ports 會附加或覆寫它。
+    assert "ports" not in nginx_service(COMPOSE_DIR / "docker-compose.prod.yml")
+
+
+def test_dev_overlay_binds_loopback_unless_lan_requested() -> None:
+    # 開發機用 `make start lan` 讓手機從區網連進來, 平常照樣只綁 loopback。
+    # `!override`: compose 合併 ports 是附加, 不覆寫的話會同時綁兩個位址, 撞 port 起不來。
+    ports = re.search(
+        r"ports: !override\n((?:\s+- .*\n)+)",
+        nginx_service(COMPOSE_DIR / "docker-compose.dev.yml"),
+    )
+    assert ports
+    assert re.findall(r"^\s+- (\S+)$", ports.group(1), re.M) == [
+        "${DEV_BIND_ADDRESS:-127.0.0.1}:${SYSTEM_PORT:?}:80"
+    ]
 
 
 def test_host_example_overwrites_client_headers() -> None:

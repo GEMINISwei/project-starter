@@ -4,6 +4,16 @@ const nextConfig: NextConfig = {
   output: "standalone",
   reactCompiler: true,
   devIndicators: false,
+  // `make start lan` 讓手機從區網連進來。Next dev 預設擋掉非 localhost 來源的 HMR 與 /_next,
+  // 頁面會停在伺服器渲染的 HTML 而不 hydrate。只在 port 對區網開放時才連得到, 所以一律允許,
+  // 開關只有 port 一個。production build 不讀這個設定。
+  allowedDevOrigins: [
+    "192.168.*.*",
+    "10.*.*.*",
+    // 172.16.0.0/12 只到 172.31, 萬用字元表達不了範圍, 逐段列出。
+    ...Array.from({ length: 16 }, (_, index) => `172.${16 + index}.*.*`),
+    "*.local",
+  ],
   // Server Action 參數可能含密碼; 開發日誌只保留請求結果, 不展開參數。
   logging: { serverFunctions: false },
   // Next 16.3 起 `next dev` 會自動在 app 根產生 AGENTS.md 與 CLAUDE.md。這個 repo 的 agent

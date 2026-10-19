@@ -84,7 +84,7 @@
   （[說明](docs/extending.md#大小上限)）。
 - **後端直接送到畫面的文字**也要走 `LangText` + `resolve_text()`。
 - **不要用 `NEXT_PUBLIC_*` 放部署設定**（build 時就烤死），執行期設定走 `shared/runtime/`。
-- **compose 的 nginx 信任主機 reverse proxy 送來的 `X-Real-IP` 與 `X-Forwarded-Proto`**：port 只能綁 `127.0.0.1`，
+- **compose 的 nginx 信任主機 reverse proxy 送來的 `X-Real-IP` 與 `X-Forwarded-Proto`**：port 只能綁 `127.0.0.1`（例外只有開發機的 `make start lan`），
   主機那層要覆寫這兩個標頭，少了任何一邊，限流與 cookie 的 `Secure` 都會出錯，而且不會報錯
   （[說明](docs/operations.md#主機的-reverse-proxy)）。
 - **`apps/web/proxy.ts` 不能搬**，放錯位置路由保護會安靜消失；`npm run build` 輸出要有 `ƒ Proxy (Middleware)`。
