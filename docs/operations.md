@@ -206,6 +206,7 @@ docker builder prune
 3. 確認它的組列在 `PUBLISH_TARGETS` 或 `PRE_RELEASE_TARGETS`（是新的組才需要加）；下一次發布
    （或對目前的 tag 按 Run workflow）就會部署到它。
 4. 同主機有多套時，HTTPS 與網域由主機上的 reverse proxy 依網域轉到各套的 `SYSTEM_PORT`。
+   網域還沒決定時先用 SSH tunnel 檢查，決定後照〈[設定網域](#設定網域)〉做（見〈[主機的 reverse proxy](#主機的-reverse-proxy)〉）。
 
 #### 停用一套系統
 
@@ -350,6 +351,58 @@ compose 裡的 nginx **一定在主機的 reverse proxy 後面**：HTTPS、網�
 
 LB 在**另一台機器**時，它連不到 `127.0.0.1`：要改 compose 的綁定位址，並且用防火牆或安全群組確保只有
 LB 連得到，再把 `infra/nginx/snippets/trusted-proxy.conf` 的 `set_real_ip_from` 縮到 LB 的網段。
+
+### 還沒有網域時：用 SSH tunnel 檢查
+
+部署後想確認系統正常，但子網域還沒決定時，**不要為了測試開放 port 或在主機 nginx 開一個用 IP 連的站**。
+用 SSH tunnel 把主機上的 port 接到自己的電腦，主機什麼都不用改：
+
+```bash
+ssh -N -L 8080:127.0.0.1:<SYSTEM_PORT> <使用者>@<主機 IP>
+```
+
+連線保持開著，瀏覽器開 `http://localhost:8080`，關掉 SSH（`Ctrl+C`）就結束。本機的 `8080` 換成任何沒在用的 port 都可以，
+避開本機開發的 `SYSTEM_PORT` 就好。
+
+- 流量經過 SSH 加密，對外什麼都沒有開放。
+- 沒有經過主機的 nginx，所以沒有 `X-Forwarded-Proto`：cookie 不帶 `Secure`，用 HTTP 也能正常登入。
+- 容器看到的來源都是主機自己，所有人共用一份登入限流額度；只有自己測試時沒有影響。
+
+### 設定網域
+
+**憑證要先申請，才能套用 [`example.conf`](../infra/host-nginx/example.conf)**：它引用的憑證檔還不存在時，
+`nginx -t` 會失敗，無法 reload。
+
+1. DNS 加一筆 A 記錄，把子網域指到主機 IP。`dig +short <子網域>` 回傳主機 IP 才算生效。
+2. 主機 nginx 先放**只有 HTTP** 的設定，讓 certbot 可以驗證網域：
+
+   ```nginx
+   server {
+       listen 80;
+       server_name <子網域>;
+       client_max_body_size 16m;
+
+       location / {
+           proxy_pass http://127.0.0.1:<SYSTEM_PORT>;
+           proxy_set_header Host              $host;
+           proxy_set_header X-Real-IP         $remote_addr;
+           proxy_set_header X-Forwarded-Proto $scheme;
+       }
+   }
+   ```
+
+   `sudo nginx -t && sudo systemctl reload nginx`。
+3. `sudo certbot --nginx -d <子網域>`：certbot 會加上 `listen 443 ssl`、憑證路徑，以及 HTTP 轉 HTTPS。
+4. 照 `example.conf` 在 443 的區塊補上 `server_tokens off`、HSTS，`listen 443 ssl` 改成 `listen 443 ssl http2`，
+   再 reload 一次。標了 `managed by Certbot` 的行保留原樣，certbot 續約時會找這些標記。
+
+套用設定一律用 `reload`，不要用 `restart`：reload 不會中斷現有連線，新設定有錯時也會保留舊的繼續運作。
+
+完成後確認：
+
+- `curl -sI https://<子網域> | grep -iE "^HTTP|^server|strict-transport"`：回應是 `HTTP/2`、`server` 不帶版本號、有 HSTS。
+- 主機上 `sudo ss -ltnp | grep <SYSTEM_PORT>` 顯示 `127.0.0.1:<SYSTEM_PORT>`，外部連 `http://<主機 IP>:<SYSTEM_PORT>` 連不上。
+- 登入後在瀏覽器確認 cookie 帶 `Secure`。
 
 ## 用戶端 IP 與限流
 
