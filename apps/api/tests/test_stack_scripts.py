@@ -44,6 +44,8 @@ COPIED_FILES = (
 FAKE_DOCKER = """#!/bin/sh
 state="$FAKE_DOCKER_DIR"
 printf '%s\\n' "$*" >> "$state/calls"
+# compose 從環境變數展開 `${DEV_BIND_ADDRESS:-…}`, 參數裡看不到, 另外記下最後一次的值。
+printf '%s\\n' "${DEV_BIND_ADDRESS-unset}" > "$state/bind"
 for arg in "$@"; do
     [ -e "$state/fail-$arg" ] && exit 1
 done
@@ -95,6 +97,8 @@ esac
 class Sandbox:
     def __init__(self, tmp_path: Path) -> None:
         self.repo = tmp_path / "repo"
+        # 呼叫者 shell 裡已經匯出的變數, 測「腳本不沿用外面的值」用。
+        self.exported: dict[str, str] = {}
         self.state = tmp_path / "state"
         self.bin = tmp_path / "bin"
         self.home = tmp_path / "home"
@@ -166,6 +170,7 @@ class Sandbox:
             "GIT_AUTHOR_EMAIL": "test@example.com",
             "GIT_COMMITTER_NAME": "test",
             "GIT_COMMITTER_EMAIL": "test@example.com",
+            **self.exported,
         }
 
     def run(self, script: str, *args: str, answer: str = "") -> subprocess.CompletedProcess[str]:
@@ -189,6 +194,9 @@ class Sandbox:
 
     def last(self, needle: str) -> int:
         return max(i for i, call in enumerate(self.calls()) if needle in call)
+
+    def bind_address(self) -> str:
+        return (self.state / "bind").read_text().strip()
 
     def called(self, needle: str) -> bool:
         return any(needle in call for call in self.calls())
@@ -301,6 +309,42 @@ def test_production_start_requires_matching_tag(box: Sandbox, tag: str | None) -
     result = box.run("start")
     assert result.returncode != 0
     assert f"v{APP_VERSION}" in result.stderr
+    assert not box.called(" up ")
+
+
+def test_start_binds_loopback_by_default(box: Sandbox) -> None:
+    # 明確給 loopback 而不是不設: shell 裡留著的值會讓一般的 `make start` 也對區網開放。
+    box.write_env("development")
+    box.exported["DEV_BIND_ADDRESS"] = "0.0.0.0"  # noqa: S104
+    result = box.run("start")
+    assert result.returncode == 0, result.stderr
+    assert box.called(" up ")
+    assert box.bind_address() == "127.0.0.1"
+
+
+def test_start_lan_binds_all_interfaces(box: Sandbox) -> None:
+    box.write_env("development")
+    result = box.run("start", "lan")
+    assert result.returncode == 0, result.stderr
+    assert box.called(" up ")
+    assert box.bind_address() == "0.0.0.0"  # noqa: S104
+
+
+def test_production_start_rejects_lan(box: Sandbox) -> None:
+    # 正式環境的 nginx 信任上一層送來的 X-Real-IP, 對外開放就能冒充任何 IP。
+    box.write_env("production")
+    box.release_checkout()
+    result = box.run("start", "lan")
+    assert result.returncode != 0
+    assert "正式環境" in result.stderr
+    assert not box.called(" up ")
+
+
+def test_start_rejects_unknown_argument(box: Sandbox) -> None:
+    box.write_env("development")
+    result = box.run("start", "lna")
+    assert result.returncode != 0
+    assert "make start lan" in result.stderr
     assert not box.called(" up ")
 
 

@@ -60,3 +60,25 @@ describe("nginx 的 client_max_body_size", () => {
     expect(toBytes(sizes[0])).toBe(toBytes(String(await loadBodySizeLimit())))
   })
 })
+
+describe("開發時允許的來源", () => {
+  // `make start lan` 讓手機從區網連進來; Next dev 預設擋掉非 localhost 來源的 HMR 與 /_next,
+  // 頁面只剩伺服器渲染的 HTML, 不會 hydrate。只在 port 有對區網開放時才連得到, 所以一律允許。
+  async function loadAllowedDevOrigins(): Promise<string[]> {
+    vi.resetModules()
+    const { default: config } = await import("../next.config")
+    return config.allowedDevOrigins ?? []
+  }
+
+  it.each(["192.168.*.*", "10.*.*.*", "172.16.*.*", "172.31.*.*", "*.local"])("允許 %s", async (pattern) => {
+    expect(await loadAllowedDevOrigins()).toContain(pattern)
+  })
+
+  it("不允許私有網段以外的 172.*", async () => {
+    // 172.16.0.0/12 只到 172.31, 172.32 以後是公開位址。
+    const origins = await loadAllowedDevOrigins()
+
+    expect(origins).not.toContain("172.*.*.*")
+    expect(origins).not.toContain("172.32.*.*")
+  })
+})

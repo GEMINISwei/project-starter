@@ -37,6 +37,11 @@ services:
       - web_next_cache:/app/.next
 
   nginx:
+    # 平常同 base 只綁 loopback; `make start lan` 改成 0.0.0.0, 讓手機從區網連進來測試。
+    # 這時同網段的人都能自己帶 X-Real-IP, 開發機上可以接受, 正式環境不行 (prod overlay 不碰這裡)。
+    # `!override`: compose 合併 ports 是附加, 不覆寫的話會同時綁兩個位址而撞 port。
+    ports: !override
+      - ${DEV_BIND_ADDRESS:-127.0.0.1}:${SYSTEM_PORT:?}:80
     volumes:
       - ../nginx/default.dev.conf.template:/etc/nginx/templates/default.conf.template:ro
 

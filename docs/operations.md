@@ -349,6 +349,7 @@ compose 裡的 nginx **一定在主機的 reverse proxy 後面**：HTTPS、網�
 **容器 nginx 信任上一層的前提是外部連不到它**。compose 把 port 綁在 `127.0.0.1`，只有主機上的程式連得到；
 改回 `0.0.0.0` 的話，任何人都能直接連進來、自己帶 `X-Real-IP` 冒充別人的 IP。Docker 直接改 iptables，
 **主機的 ufw 擋不住它開的 port**，所以不能靠防火牆補。`apps/api/tests/test_nginx_trusted_proxy.py` 守住這幾件事。
+開發機的 `make start lan` 會改綁 `0.0.0.0`（寫在 dev overlay），prod overlay 不碰 port，`MODE=production` 時也會拒絕。
 
 LB 在**另一台機器**時，它連不到 `127.0.0.1`：要改 compose 的綁定位址，並且用防火牆或安全群組確保只有
 LB 連得到，再把 `infra/nginx/snippets/trusted-proxy.conf` 的 `set_real_ip_from` 縮到 LB 的網段。
