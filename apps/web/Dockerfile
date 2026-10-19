@@ -16,11 +16,7 @@ CMD ["npm", "run", "dev"]
 
 # ---- builder stage ----
 FROM node:${NODE_VERSION}-slim AS builder
-# 唯一的 build 期設定, 其餘一律執行期注入 (見 shared/runtime/config.ts)。
-# Next 把 bodySizeLimit 序列化進產物, standalone 不會重讀 next.config.ts, 所以移不掉;
-# 執行期比對在 instrumentation.ts。
-ARG UPLOAD_SIZE_LIMIT
-ENV UPLOAD_SIZE_LIMIT=$UPLOAD_SIZE_LIMIT
+# 沒有 build 期設定, 一律執行期注入 (見 shared/runtime/config.ts)。
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

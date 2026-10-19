@@ -187,16 +187,6 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: refs/tags/${{ needs.version.outputs.tag }}
-      # 是 build 期設定 (會烤進 image), 所以必須與主機 .env 的同一個值, 不一致時 web 開機就結束。
-      # 放在 repo 層級: 同一份 image 給這次每一組、每套系統用, 各套不能有不同的值。
-      - name: 檢查 UPLOAD_SIZE_LIMIT
-        env:
-          UPLOAD_SIZE_LIMIT: ${{ vars.UPLOAD_SIZE_LIMIT }}
-        run: |
-          [ -n "${UPLOAD_SIZE_LIMIT}" ] || {
-            echo "請在 repo 的 Settings → Variables 設定 UPLOAD_SIZE_LIMIT（與主機 .env 相同）" >&2
-            exit 1
-          }
       # GHCR 的名稱只收小寫, 帳號或 repo 名有大寫時直接用 github.repository 會被拒絕。
       # source 是 OCI 標準的來源標籤: 主機清舊 image 時只認這個標籤, 不碰別的專案的 image。
       # 只建一次, 這次要部署的每一組各標一個組名: 部署 staging 與 canary 時兩組拿到同一份。
@@ -235,7 +225,6 @@ jobs:
         with:
           context: apps/web
           target: prod
-          build-args: UPLOAD_SIZE_LIMIT=${{ vars.UPLOAD_SIZE_LIMIT }}
           push: true
           tags: ${{ steps.names.outputs.web-tags }}
           labels: org.opencontainers.image.source=${{ steps.names.outputs.source }}

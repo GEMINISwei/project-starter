@@ -86,16 +86,11 @@ services:
     build:
       context: ../../apps/web
       target: prod
-      args:
-        # 唯一的 build 期設定, 理由見 apps/web/Dockerfile。
-        UPLOAD_SIZE_LIMIT: ${UPLOAD_SIZE_LIMIT:?}
     environment:
       API_URL: http://api:8000
       # EXPIRE_HOURS 決定 cookie 的 maxAge, **必須與 api 的同一份**。
       SYSTEM_NAME: ${SYSTEM_NAME:?}
       EXPIRE_HOURS: ${EXPIRE_HOURS:?}
-      # 只用來跟 image 裡烤的值比對, 不一致時 web 會結束行程。
-      UPLOAD_SIZE_LIMIT: ${UPLOAD_SIZE_LIMIT:?}
       # 真正的那一把, image 裡只有公開的 id salt (見 apps/web/Dockerfile)。
       # 忘了注入會安靜地改用公開值加密, 所以 instrumentation.ts 開機時也會擋。
       NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:?}

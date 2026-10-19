@@ -84,8 +84,6 @@ jobs:
         with:
           context: apps/web
           target: prod
-          # Dockerfile 的 ARG 沒有預設值, 不傳的話 next.config.ts 拿到空字串會拒絕建置。
-          build-args: UPLOAD_SIZE_LIMIT=1mb
           cache-from: type=gha,scope=web
           cache-to: type=gha,scope=web,mode=max
           load: true
