@@ -337,8 +337,7 @@ compose 裡的 nginx **一定在主機的 reverse proxy 後面**：HTTPS、網�
 | 面對誰 | 用戶端 | 只有主機（port 綁 `127.0.0.1`） |
 | `X-Real-IP` | 以 `$remote_addr` **覆寫** | 信任私有網段送來的值，換成用戶端 IP |
 | `X-Forwarded-Proto` | 以 `$scheme` 送出（`https`） | 沿用 `http`／`https`，沒送時用自己的協定 |
-| 上傳上限 | 不小於 16m | 16m（與 Next 相同） |
-| HSTS | 由這層送（TLS 在這裡結束） | 不送 |
+| 上傳上限 | 16m（與專案固定的上限相同） | 16m（與 Next 相同） |
 
 主機那層少了任何一項都**不會有錯誤訊息**：
 
