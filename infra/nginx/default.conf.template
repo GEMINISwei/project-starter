@@ -1,3 +1,5 @@
+include /etc/nginx/snippets/trusted-proxy.conf;
+
 server {
     listen 80;
 

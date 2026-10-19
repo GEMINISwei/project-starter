@@ -48,9 +48,9 @@ api 週期性重啟時，先懷疑記憶體上限。
 
 上線前確認：
 
-- [ ] HTTPS 由前面的 reverse proxy 或 load balancer 處理；**多一層 proxy 時要調整取 IP 的方式**，
-      見〈[用戶端 IP 與限流](#用戶端-ip-與限流)〉
-- [ ] 對外只開 nginx 的 port
+- [ ] 主機的 reverse proxy 照 [`infra/host-nginx/example.conf`](../infra/host-nginx/example.conf)
+      設定（HTTPS、轉送標頭、上傳上限），見〈[主機的 reverse proxy](#主機的-reverse-proxy)〉
+- [ ] 從**另一台機器**連 `http://<主機>:<SYSTEM_PORT>` 要連不上（compose 只綁 127.0.0.1）
 - [ ] `.env` 的密碼、`JWT_SECRET_KEY` 都是這台主機自己產的
 - [ ] 備份排程與異地保存，並做過一次還原演練
 - [ ] 依平台補上監控與錯誤追蹤（見下一節）
@@ -324,21 +324,38 @@ shell，不需要保管任何註冊代碼。
 - 忘記密碼 → 請超級管理者在後台重設（超級管理者全部失聯時用 `make db superuser` 另建一個）。
   模板沒有 email，所以沒有寄重設連結。
 
+## 主機的 reverse proxy
+
+compose 裡的 nginx **一定在主機的 reverse proxy 後面**：HTTPS、網域、同主機多套系統的分流都由主機那層處理，
+範例在 [`infra/host-nginx/example.conf`](../infra/host-nginx/example.conf)。兩層的分工：
+
+| | 主機的 nginx | 容器內的 nginx |
+|---|---|---|
+| 面對誰 | 用戶端 | 只有主機（port 綁 `127.0.0.1`） |
+| `X-Real-IP` | 以 `$remote_addr` **覆寫** | 信任私有網段送來的值，換成用戶端 IP |
+| `X-Forwarded-Proto` | 以 `$scheme` 送出（`https`） | 沿用 `http`／`https`，沒送時用自己的協定 |
+| 上傳上限 | 16m（與專案固定的上限相同） | 16m（與 Next 相同） |
+| HSTS、HTTP/2 | 由這層處理（TLS 在這裡結束） | 不處理 |
+| 版本號 | `server_tokens off` | `server_tokens off` |
+
+主機那層少了任何一項都**不會有錯誤訊息**：
+
+- 沒送 `X-Real-IP` → 後端看到的是主機的位址，所有使用者共用同一個登入限流額度，一個人打爆全站被鎖。
+- 沒送 `X-Forwarded-Proto` → cookie 不帶 `Secure`（`shared/session/cookie-options.ts`）。
+- `client_max_body_size` 沒設 → nginx 預設 1m，超過的上傳在主機就被擋下。
+
+**容器 nginx 信任上一層的前提是外部連不到它**。compose 把 port 綁在 `127.0.0.1`，只有主機上的程式連得到；
+改回 `0.0.0.0` 的話，任何人都能直接連進來、自己帶 `X-Real-IP` 冒充別人的 IP。Docker 直接改 iptables，
+**主機的 ufw 擋不住它開的 port**，所以不能靠防火牆補。`apps/api/tests/test_nginx_trusted_proxy.py` 守住這幾件事。
+
+LB 在**另一台機器**時，它連不到 `127.0.0.1`：要改 compose 的綁定位址，並且用防火牆或安全群組確保只有
+LB 連得到，再把 `infra/nginx/snippets/trusted-proxy.conf` 的 `set_real_ip_from` 縮到 LB 的網段。
+
 ## 用戶端 IP 與限流
 
 登入與註冊以用戶端 IP 限流（`shared/http/rate_limit.py`，數字在 `modules/users/router.py`）。
-後端只讀 `X-Real-IP`，**前提是 nginx 是最外層**：nginx 以 `$remote_addr` 覆寫這個標頭，
+後端只讀 `X-Real-IP`：容器 nginx 先依主機送來的值換掉 `$remote_addr`（見上一節），再以它覆寫這個標頭，
 `apps/api/tests/test_nginx_templates.py` 確保每個 location 都有覆寫。
-
-**nginx 前面還有一層 proxy（LB、CDN）時**，`$remote_addr` 會變成那層 proxy 的位址，
-所有使用者共用同一個限流額度 —— 一個人打爆，全站被鎖。這時在
-`infra/nginx/default.conf.template` 的 server 區塊加上：
-
-```nginx
-set_real_ip_from  10.0.0.0/8;   # 換成你的 LB／CDN 實際的 CIDR，不要填 0.0.0.0/0
-real_ip_header    X-Forwarded-For;
-real_ip_recursive on;
-```
 
 ### 單一行程，不能直接加副本
 

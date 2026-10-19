@@ -111,8 +111,11 @@ services:
   nginx:
     container_name: ${COMPOSE_PROJECT_NAME:?}-nginx
     image: nginx:1.31.6-alpine
+    # 只綁 loopback: 對外由主機的 reverse proxy 負責, 這層信任它送來的用戶端 IP
+    # (infra/nginx/snippets/trusted-proxy.conf)。綁 0.0.0.0 的話外部可以繞過主機直接連,
+    # 自己帶 X-Real-IP 冒充任何 IP。Docker 直接改 iptables, 主機的 ufw 擋不住它開的 port。
     ports:
-      - ${SYSTEM_PORT:?}:80
+      - 127.0.0.1:${SYSTEM_PORT:?}:80
     volumes:
       - ../nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
       # dev 與 prod 模板共用的片段 (安全標頭、proxy 標頭), 兩份模板都 `include` 它們。
