@@ -110,7 +110,7 @@ services:
 
   nginx:
     container_name: ${COMPOSE_PROJECT_NAME:?}-nginx
-    image: nginx:1.31.6-alpine
+    image: nginx:1.31.7-alpine
     # 只綁 loopback: 對外由主機的 reverse proxy 負責, 這層信任它送來的用戶端 IP
     # (infra/nginx/snippets/trusted-proxy.conf)。綁 0.0.0.0 的話外部可以繞過主機直接連,
     # 自己帶 X-Real-IP 冒充任何 IP。Docker 直接改 iptables, 主機的 ufw 擋不住它開的 port。
