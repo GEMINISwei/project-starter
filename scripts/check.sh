@@ -21,7 +21,7 @@ source "$(dirname "$0")/lib/compose.sh"
 # shellcheck source=scripts/lib/contract.sh
 source "$(dirname "$0")/lib/contract.sh"
 
-# next.config.ts 在載入時會讀 UPLOAD_SIZE_LIMIT 之類的環境變數, build 前要先載入 .env。
+# deny_on_production 看的是 .env 的 MODE, 要先載入。
 load_env
 deny_on_production "make check"
 

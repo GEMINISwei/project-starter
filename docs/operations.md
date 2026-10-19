@@ -162,9 +162,6 @@ GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進�
   environment 的規則由 GitHub 判斷，其他 ref 拿不到這套系統的 secrets。少了 `main` 那條，
   回滾與部署到其他組會在 deploy job 被 GitHub 擋下（environment protection rules）。
   `main` 要有 ruleset（見 [`development.md`](development.md)），它上面的 `deploy.yml` 才一定經過 PR。
-- [ ] repo 的 Settings → Variables 加 `UPLOAD_SIZE_LIMIT`，與主機 `.env` 的**同一個值**
-      （會在 build 時烤進 image，不一致時 web 開機就結束）。它放在 repo 層級，因為同一份 image
-      給組裡每套系統用，**每套系統的 `.env` 都要是這個值**
 - [ ] 第一次推上去之後，到 GHCR 的 package 設定確認 Visibility：image 裡有完整的程式碼（但沒有機密），
       **私有 repo 要設 Private**；公開 repo 的 image 內容等於原始碼，設 Public 也可以，而且免費。
       **改成 Public 之後就改不回 Private**
@@ -203,7 +200,7 @@ docker builder prune
 
 1. 主機上 clone 到新的目錄，例如 `/srv/system-b`，`make init prod`。`.env` 的
    `COMPOSE_PROJECT_NAME`、`SYSTEM_PORT` **不可以與同主機的其他套重複**（容器、volume、
-   network 都以前者為前綴），`UPLOAD_SIZE_LIMIT` 與 repo Variable 相同。
+   network 都以前者為前綴）。
 2. GitHub 建 environment，例如 `production-system-b`，照〈首次設定〉填 secrets，並加上同樣兩條
    部署規則（tag `v*`、branch `main`）；`DEPLOY_PATH` 指向新目錄，同主機的其他 secrets 與其他套相同。
 3. 確認它的組列在 `PUBLISH_TARGETS` 或 `PRE_RELEASE_TARGETS`（是新的組才需要加）；下一次發布

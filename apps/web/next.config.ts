@@ -1,15 +1,5 @@
 import type { NextConfig } from "next";
 
-// 型別從 `serverActions.bodySizeLimit` 衍生 —— 那是這個值**唯一**的消費者。
-type ServerActionsConfig = NonNullable<NonNullable<NextConfig["experimental"]>["serverActions"]>;
-type SizeLimit = NonNullable<ServerActionsConfig["bodySizeLimit"]>;
-
-const uploadSizeLimitValue = process.env.UPLOAD_SIZE_LIMIT ?? "1mb";
-if (!/^\d+(?:\.\d+)?(?:kb|mb|gb)$/i.test(uploadSizeLimitValue)) {
-  throw new Error("UPLOAD_SIZE_LIMIT 必須使用容量格式，例如 500kb、1mb 或 1gb");
-}
-const uploadSizeLimit = uploadSizeLimitValue as SizeLimit;
-
 const nextConfig: NextConfig = {
   output: "standalone",
   reactCompiler: true,
@@ -20,18 +10,12 @@ const nextConfig: NextConfig = {
   // 指引只有根目錄 AGENTS.md 一份本體, 多一份自動生成的會變成沒人維護的第二來源。
   agentRules: false,
   experimental: {
+    // 固定值, 刻意不開放設定: Next 把它序列化進 build 產物, 執行期改不了。這是防護用的天花板,
+    // 各功能的上限寫在功能裡 (docs/extending.md 的「上傳檔案」)。nginx 兩份模板的
+    // client_max_body_size 要相同, tests/next.config.test.ts 守。
     serverActions: {
-      bodySizeLimit: uploadSizeLimit,
+      bodySizeLimit: "16mb",
     },
-  },
-  // 這個區塊的值會在 build 時**內嵌成字面值**, 所以裡面放的一律是「build 期的事實」而不是
-  // 設定。部署設定請走 `shared/runtime/config.ts` 的執行期注入, 理由寫在那裡。
-  //
-  // `BUILT_UPLOAD_SIZE_LIMIT` 是唯一一項, 因為 `bodySizeLimit` 結構上移不到執行期: Next 把它
-  // 序列化進 `.next/required-server-files.json`, standalone 的 server.js 讀那份檔案, 不會重新
-  // 求值本檔。把 build 當下的值留一份, `instrumentation.ts` 才能在開機時跟執行期的值比對。
-  env: {
-    BUILT_UPLOAD_SIZE_LIMIT: uploadSizeLimitValue,
   },
   // 這裡刻意**沒有** `/api/:path*` → 後端的 rewrite。用不到: 資料存取一律走 Server Component
   // 與 Server Action (伺服器端直接打 `API_URL`), **瀏覽器不需要任何後端路徑**。

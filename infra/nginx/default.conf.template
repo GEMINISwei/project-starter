@@ -5,8 +5,10 @@ server {
 
     # ── 請求體大小上限 ────────────────────────────────────────────────────────
     #
-    # 粗粒度的 DoS 護欄。刻意比應用層的 UPLOAD_SIZE_LIMIT 寬鬆, 讓超過業務限制的請求
-    # 拿到應用層帶訊息的錯誤, 而不是 nginx 的 413。兩者格式不同, 不要共用變數。
+    # 防護用的天花板, 與 Next 的 Server Action 上限 (next.config.ts) 相同, 不開放設定。
+    # 比 Next 小的話, 介於兩者之間的請求只會拿到 nginx 沒有訊息的 413。兩邊格式不同
+    # (`16m`／`16mb`) 共用不了變數, 由 apps/web/tests/next.config.test.ts 對齊。
+    # 給使用者看的上限寫在各功能裡, 見 docs/extending.md 的「上傳檔案」。
     client_max_body_size 16m;
 
     include /etc/nginx/snippets/security-headers.conf;

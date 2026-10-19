@@ -79,6 +79,9 @@
 - **Server Action 的回傳值會送進瀏覽器**：簽發 token 的 action 回傳前要經過 `withoutAccessToken`。
 - **上傳的檔案存在 `/app/uploads/<模組>/`**：存到別的路徑不會報錯，但重建容器就消失、`make backup` 也備份不到
   （[說明](docs/extending.md#上傳檔案)）。
+- **上傳的請求固定上限 16MB，不開放設定**：超過時使用者只看到一般錯誤，所以每個上傳功能要自己定上限，
+  後端回傳 `LangText` 錯誤、前端送出前先檢查；需要更大的檔案時改用串流或直傳，不要調高上限
+  （[說明](docs/extending.md#大小上限)）。
 - **後端直接送到畫面的文字**也要走 `LangText` + `resolve_text()`。
 - **不要用 `NEXT_PUBLIC_*` 放部署設定**（build 時就烤死），執行期設定走 `shared/runtime/`。
 - **`apps/web/proxy.ts` 不能搬**，放錯位置路由保護會安靜消失；`npm run build` 輸出要有 `ƒ Proxy (Middleware)`。
