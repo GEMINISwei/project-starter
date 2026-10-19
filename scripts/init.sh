@@ -141,7 +141,7 @@ create_env() {
 
     local project_name system_name system_port db_user db_password
     printf '請輸入初始化資訊\n'
-    prompt_until_valid project_name "專案名稱" "my-app" valid_project_name
+    prompt_until_valid project_name "專案名稱" "$(default_project_name "$REPO_ROOT")" valid_project_name
     # 一問到就查, 不必等其他問題都答完才發現要重來。
     require_unused_project_name "$project_name"
     prompt_until_valid system_name "系統名稱" "My App" valid_system_name
