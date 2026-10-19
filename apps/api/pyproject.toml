@@ -8,7 +8,7 @@ requires-python = ">=3.14,<3.15"
 # 正式環境相依一律 `==`: lock 是解出來的結果, 這裡是我們同意的版本 ——
 # 沒有上限的話, 下一次 `uv lock` 可以在沒人決定的情況下跨過 major。
 dependencies = [
-    "fastapi==0.143.1",
+    "fastapi==0.143.2",
     "uvicorn[standard]==0.54.0",
     # `[asyncio]` 會拉進 greenlet, 不要改成裸的 "sqlalchemy": 少了它要到執行期才丟
     # `MissingGreenlet`, 安裝時沒有任何警告。
@@ -29,7 +29,7 @@ dependencies = [
 # (一律 `--frozen`), 所以跑 `uv lock` 時記得看一眼 diff 裡有沒有跨 major。
 [dependency-groups]
 dev = [
-    "ruff>=0.17.0",
+    "ruff>=0.17.1",
     "pytest==9.1.1",
     "pytest-asyncio==1.4.0",
     "pytest-cov>=7.1.0",
