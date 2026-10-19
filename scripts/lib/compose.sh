@@ -111,6 +111,18 @@ require_compose() {
     fi
 }
 
+# 用法: default_project_name <目錄>
+#
+# `make init` 問專案名稱時的預設值: 同主機多套系統時, 目錄與專案同名最好對照。
+# 轉成專案名稱的字元集 (小寫英數、-、_), 轉完什麼都不剩 (例如全是中文) 才退回 my-app。
+# LC_ALL=C: 讓多位元組字元逐 byte 被當成不合法字元, 不會因 locale 而被 [a-z] 意外收下。
+default_project_name() {
+    local name
+    name="$(basename "$1" | LC_ALL=C tr '[:upper:]' '[:lower:]' \
+        | LC_ALL=C sed 's/[^a-z0-9_-]\{1,\}/-/g; s/^[-_]*//; s/[-_]*$//')"
+    printf '%s\n' "${name:-my-app}"
+}
+
 # 用法: require_unused_project_name <專案名稱>
 #
 # 容器、volume、network 都以專案名稱為前綴, 撞名時新專案會接手舊專案的容器與資料庫 volume。

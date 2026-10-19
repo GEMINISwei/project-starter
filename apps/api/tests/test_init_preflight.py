@@ -117,3 +117,32 @@ def test_unreachable_docker_daemon_is_reported(tmp_path: Path) -> None:
     result = run(tmp_path, "require_compose")
     assert result.returncode != 0
     assert "daemon" in result.stderr
+
+
+# 同一台主機放好幾套系統時, 目錄名稱與專案名稱取一樣最好對照, 所以預設就拿目錄名稱;
+# 目錄名稱不一定符合專案名稱的規則, 轉不出合法的名稱時才退回範本的 my-app。
+
+
+def test_default_project_name_is_the_directory_name(tmp_path: Path) -> None:
+    result = run(tmp_path, "default_project_name", "/srv/project-starter-test")
+    assert result.stdout == "project-starter-test\n", result.stderr
+
+
+def test_default_project_name_is_lowercased(tmp_path: Path) -> None:
+    result = run(tmp_path, "default_project_name", "/srv/Project_Starter")
+    assert result.stdout == "project_starter\n", result.stderr
+
+
+def test_default_project_name_replaces_invalid_characters(tmp_path: Path) -> None:
+    result = run(tmp_path, "default_project_name", "/srv/my.app v2")
+    assert result.stdout == "my-app-v2\n", result.stderr
+
+
+def test_default_project_name_trims_separators(tmp_path: Path) -> None:
+    result = run(tmp_path, "default_project_name", "/srv/_my-app.")
+    assert result.stdout == "my-app\n", result.stderr
+
+
+def test_default_project_name_falls_back_when_nothing_is_left(tmp_path: Path) -> None:
+    result = run(tmp_path, "default_project_name", "/srv/專案")
+    assert result.stdout == "my-app\n", result.stderr

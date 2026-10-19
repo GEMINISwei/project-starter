@@ -200,7 +200,8 @@ docker builder prune
 
 1. 主機上 clone 到新的目錄，例如 `/srv/system-b`，`make init prod`。`.env` 的
    `COMPOSE_PROJECT_NAME`、`SYSTEM_PORT` **不可以與同主機的其他套重複**（容器、volume、
-   network 都以前者為前綴）。
+   network 都以前者為前綴）。專案名稱的預設值是目錄名稱，目錄取 `system-b` 時直接按 Enter，
+   容器名稱就與目錄對得起來。
 2. GitHub 建 environment，例如 `production-system-b`，照〈首次設定〉填 secrets，並加上同樣兩條
    部署規則（tag `v*`、branch `main`）；`DEPLOY_PATH` 指向新目錄，同主機的其他 secrets 與其他套相同。
 3. 確認它的組列在 `PUBLISH_TARGETS` 或 `PRE_RELEASE_TARGETS`（是新的組才需要加）；下一次發布
