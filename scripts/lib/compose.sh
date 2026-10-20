@@ -49,7 +49,19 @@ app_compose() {
     if [ "${MODE}" = production ]; then
         overlay=prod
     fi
-    compose -f "$COMPOSE_DIR/docker-compose.${overlay}.yml" "$@"
+    NGINX_CONFIG_HASH="$(nginx_config_hash)" \
+        compose -f "$COMPOSE_DIR/docker-compose.${overlay}.yml" "$@"
+}
+
+# nginx 的模板與片段是 bind mount 的, 內容變了 compose 看不出來, `up` 不會重建 nginx; 而官方
+# image 只在啟動時展開模板, 所以線上會一直跑舊設定, 直到哪天重開機才突然換成新的 (實測過:
+# api 與 web 被重建時 nginx 也不會跟著重建)。把內容的雜湊放進 nginx 的 label, 變了就重建。
+#
+# 整個目錄一起算, 不分 MODE: 只改另一種模式的模板會多重建一次, 換來不必跟 overlay 對齊。
+# 用 cksum 是因為 POSIX 必備, macOS 與 Linux 主機都有; 這裡防的是漏改, 不是竄改。
+nginx_config_hash() {
+    (cd "$REPO_ROOT/infra/nginx" && find . -type f | LC_ALL=C sort | xargs cksum | cksum) \
+        | awk '{ print $1 }'
 }
 
 # 用法: container_running <容器名稱>
