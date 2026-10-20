@@ -32,6 +32,11 @@ checkout：在主機上 `git pull` 了 main 再啟動，等於上線一份沒發
 
 `make services down` 在正式環境要先確認（資料留在 volume，但服務會停）。
 
+`make services restart` 原地重啟現有的容器（migrate 除外），在正式環境也要先確認。它不重建容器、不拉也不建 image，
+所以主機上不必知道 image 名稱、不必登入 GHCR，跑的是本機建置的還是 registry 拉的都照原樣。
+**它不套用任何變更**：`.env`、compose、image 變了要用 `make start`；容器已經 `down` 掉時也只能 `make start`。
+例外是 nginx 模板：官方 image 在啟動時才展開模板，所以改了模板要 restart 才會生效（`make start` 不會重建 nginx）。
+
 `make services` 會列出這個專案的 volume（以 compose 的專案標籤篩選），名稱不是 `<專案>_<MODE>_`
 開頭的標 `← Not Matched`：另一種模式留下的，或改過命名之前的舊 volume，目前的 `MODE` 用不到，
 也不會自己消失。只標註不刪除，確定不要了再自己 `docker volume rm`。各 volume 的容量看
