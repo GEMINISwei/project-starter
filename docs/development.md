@@ -58,7 +58,7 @@ make start lan  # 同 make start，但對區網開放，結束時印出手機要
 ```bash
 make init dev|prod                           # 產生 .env 並寫入 MODE；prod 只產生 .env（部署主機用）
 make start [lan]                             # 依 .env 的 MODE 啟動；lan = 開放區網讓手機連（僅 development）
-make services [volumes|logs [服務]|down]     # 不帶參數 = 版本與 MODE、服務狀態、volume；volumes = 各 volume 的容量
+make services [volumes|logs [服務]|restart|down]   # 不帶參數 = 版本與 MODE、服務狀態、volume；restart = 原地重啟
 make backup                                  # 資料庫與上傳檔案一起備份，期間對外服務暫停
 make db   psql|restore [檔案]|reset|migrate|migration "說明"|superuser
 make uploads restore [檔案]

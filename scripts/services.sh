@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 #
-# 服務狀態與操作: make services [volumes|logs [服務]|down] (不帶參數 = 狀態)
+# 服務狀態與操作: make services [volumes|logs [服務]|restart|down] (不帶參數 = 狀態)
 #
 #   make services              版本與 MODE、各服務的狀態 (名稱、狀態、port)、這個專案的 volume
 #   make services volumes      版本與 MODE、這個專案每個 volume 的容量 (要掃過整台主機, 比較慢)
 #   make services logs [服務]  追 log, 例如 make services logs api
+#   make services restart      原地重啟現有的容器, 不重建、不拉 image (production 要先確認)
 #   make services down         停止並移除容器 (資料留在 volume; production 要先確認)
+#
+# restart 不套用任何變更: .env、compose 或 image 變了要用 make start (它會重建容器)。
+# 唯一的例外是 nginx 模板 —— 官方 image 在啟動時才展開模板, 所以 restart 會讀到新的。
 set -euo pipefail
 
 # shellcheck source=scripts/lib/compose.sh
@@ -76,6 +80,36 @@ print_volumes() {
     ' <<< "${names}"
 }
 
+# 用 `compose restart` 而不是 `up`: up 會拿 compose 檔的 image 跟容器比對, 主機上沒匯出
+# API_IMAGE 時會以為該用本機建置的 image 而重建 (見 start.sh); restart 只靠標籤找到現有容器,
+# 不看 image 欄位, 所以本機建置的與從 registry 拉的都照原樣重啟。
+#
+# 排除 migrate: restart 連已結束的容器也會啟動, 會跟 api 同時再跑一次 migration。
+# 容器不存在時 compose 會安靜跳過, 所以先比對, 缺了就指回 make start。
+restart_services() {
+    local services existing missing
+    services="$(app_compose config --services | grep -vx migrate)"
+    existing="$(app_compose ps -a --services)"
+    missing="$(grep -vxF -f <(printf '%s\n' "${existing}") <<< "${services}" || true)"
+    if [ -n "${missing}" ]; then
+        echo "這些服務沒有容器，restart 無法重啟：$(paste -sd " " - <<< "${missing}")" >&2
+        echo "  先用 make start 建立容器" >&2
+        exit 1
+    fi
+    if [ "${MODE}" = production ]; then
+        confirm "將重啟正式環境的所有服務（期間會短暫中斷），確定？"
+    fi
+    # shellcheck disable=SC2086 # 服務名稱逐字拆開當參數
+    app_compose restart ${services}
+    echo
+    print_status
+}
+
+print_status() {
+    # 預設的 ps 有 7 欄, IMAGE/COMMAND/PORTS 一長就換行; 這裡只留判斷狀態要的欄位。
+    app_compose ps --format 'table {{.Name}}\t{{.Status}}\t{{.Ports}}'
+}
+
 load_env
 require_env COMPOSE_PROJECT_NAME
 require_mode
@@ -86,8 +120,7 @@ case "${action}" in
     '')
         [ "$#" -eq 0 ] || usage
         print_header
-        # 預設的 ps 有 7 欄, IMAGE/COMMAND/PORTS 一長就換行; 這裡只留判斷狀態要的欄位。
-        app_compose ps --format 'table {{.Name}}\t{{.Status}}\t{{.Ports}}'
+        print_status
         echo
         print_volumes
         ;;
@@ -98,6 +131,10 @@ case "${action}" in
         ;;
     # 不帶服務名稱時看全部; `make services logs api` 只看 api。
     logs) app_compose logs -f --tail=200 "$@" ;;
+    restart)
+        [ "$#" -eq 0 ] || usage
+        restart_services
+        ;;
     down)
         [ "$#" -eq 0 ] || usage
         # 不刪 volume, 但正式環境停下來就是停機, 誤打的代價太高。
