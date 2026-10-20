@@ -146,6 +146,7 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 | 沒有未使用的匯出 | knip（`npm run check:deadcode`） |
 | model 改了有寫 migration | `make check integration` |
 | nginx 每個 location 都覆寫用戶端 IP、兩份模板都帶安全標頭 | `apps/api/tests/test_nginx_templates.py` |
+| nginx 的模板變了 `make start` 會重建 nginx | `apps/api/tests/test_nginx_config_recreate.py` |
 | `scripts/` 的 shell 寫法 | shellcheck（`make check lint`） |
 | compose 展得開、用到的變數 `.env.example` 都有 | `docker compose config`（`make check lint`） |
 | 契約與前端型別是最新的 | `make check contract`（只比對、不改檔） |
