@@ -62,6 +62,18 @@ print_lan_urls() {
     echo "同一個網路上的人都連得到，用完跑一次 make start 關回只限本機"
 }
 
+# 模板寫錯的話, 重建後的 nginx 起不來, 整個站就停了。先用一次性的容器 (同樣的 image、mount 與
+# 環境變數, 官方 entrypoint 會照常展開模板) 跑 `nginx -t`, 不過就在 up 之前停下, 線上的 nginx
+# 原樣不動。不帶 --service-ports, 不會跟跑著的 nginx 搶 port。
+check_nginx_config() {
+    local output
+    if ! output="$(app_compose run --rm --no-deps -T nginx nginx -t 2>&1)"; then
+        echo "${output}" >&2
+        echo "nginx 設定檢查失敗（見上方訊息），沒有啟動；線上的 nginx 維持原樣" >&2
+        exit 1
+    fi
+}
+
 lan=false
 case "$#:${1:-}" in
     0:) ;;
@@ -82,10 +94,15 @@ else
     export DEV_BIND_ADDRESS=127.0.0.1
 fi
 
+# 正式環境先確認停在發版的 tag 上, 檢查的才是要上線的那份模板。
+if [ "${MODE}" = production ]; then
+    require_release_checkout
+fi
+check_nginx_config
+
 if [ "${MODE}" = development ]; then
     app_compose up -d --remove-orphans
 else
-    require_release_checkout
     if [ -n "${API_IMAGE:-}${WEB_IMAGE:-}" ]; then
         require_env API_IMAGE WEB_IMAGE
         IMAGE_PULL_POLICY=always app_compose up -d --remove-orphans
