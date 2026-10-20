@@ -9,7 +9,8 @@
 #   make services down         停止並移除容器 (資料留在 volume; production 要先確認)
 #
 # restart 不套用任何變更: .env、compose 或 image 變了要用 make start (它會重建容器)。
-# 唯一的例外是 nginx 模板 —— 官方 image 在啟動時才展開模板, 所以 restart 會讀到新的。
+# nginx 模板改了也用 make start: 它先跑 nginx -t 才重建。restart 雖然也會重新展開模板 (官方 image
+# 在啟動時才展開), 但不會先檢查, 模板寫錯時 nginx 起不來。
 set -euo pipefail
 
 # shellcheck source=scripts/lib/compose.sh
