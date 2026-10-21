@@ -151,10 +151,10 @@ export default function AppShell({
 
       <nav className={styles.bottomNavigation} aria-label={t("mobileNav")}>
         {renderNav("bottom")}
-        {/* 手機沒有側欄: 切換區域與登出都在這一格的選單裡。 */}
+        {/* 手機沒有側欄: 切換區域與登出都在這一格的選單裡, 以底部面板呈現。 */}
         <Menu
-          placement="above"
           fullWidth
+          sheetTitle={nickname || t("account")}
           triggerLabel={t("accountMenu")}
           triggerClassName={styles.bottomNavItem}
           items={accountItems}
