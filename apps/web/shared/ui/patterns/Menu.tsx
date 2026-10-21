@@ -1,6 +1,8 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
+import { Modal } from "../dialogs"
 import { cls } from "../internals"
 import styles from "../styles/action-menu.module.css"
 
@@ -35,6 +37,11 @@ type MenuProps = {
   placement?: "below" | "above"
   /** 撐滿外層 (例如側欄底部、底部導覽的一格); 預設跟內容一樣寬。 */
   fullWidth?: boolean
+  /**
+   * 給了就不開下拉, 改開以它為標題的面板 (手機上是從底部浮出、帶遮罩的 sheet)。
+   * 給手指點的觸發點用: 下拉的項目對手指太小, 也看不出點哪裡能關掉。
+   */
+  sheetTitle?: string
 }
 
 type Position = { left: number; top?: number; bottom?: number }
@@ -46,6 +53,7 @@ export default function Menu({
   triggerClassName,
   placement = "below",
   fullWidth = false,
+  sheetTitle,
 }: MenuProps) {
   const [open, setOpen] = useState(false)
   const [position, setPosition] = useState<Position>({ top: 0, left: 0 })
@@ -69,7 +77,8 @@ export default function Menu({
   }
 
   useEffect(() => {
-    if (!open) return
+    // 面板自己有遮罩處理點外面關閉; 面板內捲動也不該把它關掉。
+    if (!open || sheetTitle !== undefined) return
 
     function handleClick(event: MouseEvent) {
       if (ref.current && !ref.current.contains(event.target as Node)) {
@@ -87,7 +96,25 @@ export default function Menu({
       document.removeEventListener("mousedown", handleClick)
       window.removeEventListener("scroll", handleScroll, true)
     }
-  }, [open])
+  }, [open, sheetTitle])
+
+  function renderItems(itemClassName: string | undefined) {
+    return visibleItems.map((item, index) => (
+      <button
+        key={index}
+        type="button"
+        role="menuitem"
+        className={cls(itemClassName, item.color === "error" && styles.itemError)}
+        onClick={() => {
+          setOpen(false)
+          item.onClick()
+        }}
+      >
+        {item.icon && <span className={styles.itemIcon}>{item.icon}</span>}
+        {item.label}
+      </button>
+    ))
+  }
 
   if (visibleItems.length === 0) return null
 
@@ -98,29 +125,24 @@ export default function Menu({
         className={triggerClassName ?? styles.trigger}
         onClick={toggleOpen}
         aria-label={triggerLabel}
-        aria-haspopup="menu"
+        aria-haspopup={sheetTitle === undefined ? "menu" : "dialog"}
         aria-expanded={open}
       >
         {trigger}
       </button>
-      {open && (
+      {open && sheetTitle === undefined && (
         <div className={styles.dropdown} role="menu" style={position}>
-          {visibleItems.map((item, index) => (
-            <button
-              key={index}
-              type="button"
-              role="menuitem"
-              className={cls(styles.item, item.color === "error" && styles.itemError)}
-              onClick={() => {
-                setOpen(false)
-                item.onClick()
-              }}
-            >
-              {item.icon && <span className={styles.itemIcon}>{item.icon}</span>}
-              {item.label}
-            </button>
-          ))}
+          {renderItems(styles.item)}
         </div>
+      )}
+      {/* 觸發點可能在有 backdrop-filter 的外層 (底部導覽) 裡, 它會變成 fixed 的定位基準, 遮罩就蓋不滿畫面。 */}
+      {open && sheetTitle !== undefined && createPortal(
+        <Modal title={sheetTitle} open onOpenChange={setOpen}>
+          <div className={styles.sheetList} role="menu">
+            {renderItems(cls(styles.item, styles.sheetItem))}
+          </div>
+        </Modal>,
+        document.body,
       )}
     </div>
   )

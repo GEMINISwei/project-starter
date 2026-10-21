@@ -71,6 +71,21 @@
   background: var(--color-surface-hover);
 }
 
+.sheetList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+/* 面板是給手指點的: 每一列至少有觸控目標的高度, 字也比下拉大一階。 */
+.sheetItem {
+  min-height: var(--control-height-lg);
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: var(--fs-base);
+}
+
 .itemError {
   color: var(--color-danger-fg);
 }

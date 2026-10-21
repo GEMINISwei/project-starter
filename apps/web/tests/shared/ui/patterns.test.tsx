@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { MessagePage, MessagePageButton, MessagePageLink } from "@/shared/ui/feedback/MessagePage"
@@ -64,6 +64,42 @@ describe("shared list patterns", () => {
     const menu = screen.getByRole("menu")
     expect(menu.style.bottom).toBe(`${window.innerHeight - 700 + 4}px`)
     expect(menu.style.top).toBe("")
+  })
+
+  it("Menu 給了 sheetTitle 時開成以它為標題的面板，選完就收起來", async () => {
+    const action = vi.fn()
+    render(
+      <Menu trigger="王" triggerLabel="帳號選單" sheetTitle="王小明" items={[{ label: "登出", onClick: action }]} />,
+    )
+
+    await userEvent.click(screen.getByRole("button", { name: "帳號選單" }))
+    const sheet = screen.getByRole("dialog", { name: "王小明" })
+    await userEvent.click(within(sheet).getByRole("menuitem", { name: "登出" }))
+
+    expect(action).toHaveBeenCalledOnce()
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+  })
+
+  it("Menu 的面板點遮罩會關閉", async () => {
+    render(
+      <Menu trigger="王" triggerLabel="帳號選單" sheetTitle="王小明" items={[{ label: "登出", onClick: vi.fn() }]} />,
+    )
+
+    await userEvent.click(screen.getByRole("button", { name: "帳號選單" }))
+    await userEvent.click(screen.getByRole("dialog").parentElement!)
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+  })
+
+  it("Menu 的面板按關閉鈕會關閉", async () => {
+    render(
+      <Menu trigger="王" triggerLabel="帳號選單" sheetTitle="王小明" items={[{ label: "登出", onClick: vi.fn() }]} />,
+    )
+
+    await userEvent.click(screen.getByRole("button", { name: "帳號選單" }))
+    await userEvent.click(screen.getByRole("button", { name: "關閉" }))
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
   })
 
   it("FilterDialog 正規化輸入並導向篩選網址", async () => {
