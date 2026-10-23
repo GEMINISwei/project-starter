@@ -9,7 +9,7 @@ name: CI
 # 指定那個 tag —— 手動觸發時 github.ref 是 main, 不傳的話測的會是 main 而不是要部署的版本。
 #
 # action 的版本: GitHub (actions/*) 與 Docker (docker/*) 官方的用 tag, 第三方的釘 commit SHA
-# —— tag 可以被改指向, 第三方的 tag 被改等於把任意程式碼放進 CI。兩種都由 Dependabot 升版。
+# —— tag 可以被改指向, 第三方的 tag 被改等於把任意程式碼放進 CI。有漏洞時由 Dependabot 開安全更新, 其餘在整批升級時手動升。
 on:
   push:
     branches: [main]

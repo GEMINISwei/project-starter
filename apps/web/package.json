@@ -75,7 +75,7 @@
   "//allowScripts": [
     "允許執行安裝腳本的套件 (`npm approve-scripts`)。npm 之後的版本會擋下沒列在這裡的腳本。",
     "fsevents: vite 在 macOS 的原生檔案監看。unrs-resolver: eslint import resolver 用 napi-postinstall 補上平台的原生綁定。",
-    "只寫名稱不釘版本 (`--no-allow-scripts-pin`): Dependabot 每週升版, 釘版本的核准每次都會失效。",
+    "只寫名稱不釘版本 (`--no-allow-scripts-pin`): 每次升版 (安全更新或整批升級) 釘版本的核准都會失效。",
     "新增套件時看到「not yet covered by allowScripts」, 先讀過它的安裝腳本再核准。"
   ],
   "allowScripts": {
