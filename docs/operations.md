@@ -229,7 +229,8 @@ docker builder prune
 停用期間，它的舊 image 可能在其他套更新之後被清掉；資料不受影響。重新啟用時對目前的 tag 按一次
 Run workflow 就會拉回來。
 
-**發版**：`make release <版號>` → 看過 diff 後 commit、push → 在 GitHub 建 release，tag 填 `v<版號>`，按 Publish
+**發版**：先盤點相依落後多少、要不要整批升級（見 [`development.md`](development.md#相依升級)），
+再 `make release <版號>` → 看過 diff 後 commit、push → 在 GitHub 建 release，tag 填 `v<版號>`，按 Publish
 （要先行測試就勾 pre-release，見上方〈自動部署〉）。
 
 `make release` 改檔之前會先檢查，任何一項不過就停、什麼都不改（`scripts/lib/release.sh`）：

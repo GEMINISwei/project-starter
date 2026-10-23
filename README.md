@@ -59,7 +59,9 @@ flowchart LR
 
 1. 複製這份目錄，`make init dev` 會順便 `git init`。
 2. 改寫這份 README、[`LICENSE`](LICENSE) 與 `.env.example` 的 `COMPOSE_PROJECT_NAME` 預設值。
-3. 在 `apps/web/app/theme.css` 覆寫設計變數決定視覺（名字與預設值在 `shared/ui/styles/tokens.css`）。
-4. 照 [`docs/extending.md`](docs/extending.md#新增一個功能模組) 加入第一個模組。
+3. 照 [`docs/development.md`](docs/development.md#開發流程) 的 checklist 設定 GitHub 一次
+   （squash merge、`main` 的 ruleset、Dependabot 警示與安全更新）。
+4. 在 `apps/web/app/theme.css` 覆寫設計變數決定視覺（名字與預設值在 `shared/ui/styles/tokens.css`）。
+5. 照 [`docs/extending.md`](docs/extending.md#新增一個功能模組) 加入第一個模組。
 
 只想把 `shared/` 帶到既有的專案時，見 [`docs/extending.md`](docs/extending.md#把-shared-帶到另一個專案)。

@@ -211,6 +211,8 @@ GitHub 端要設定一次，流程才不是靠自覺：
   **Pull request title and commit details**，並勾 **Automatically delete head branches**
 - [ ] Settings → Rules：替 `main` 建 ruleset，開 **Require a pull request before merging**，
   並把 CI 的三個 job（`check`、`integration`、`images`）設成 **required status check**
+- [ ] Settings → Advanced Security（有的帳號叫 Code security）：打開 **Dependabot alerts** 與
+  **Dependabot security updates**。套件只收安全更新（見〈相依升級〉），沒開的話漏洞修補完全不會來
 
 ## 提交與 CI
 
