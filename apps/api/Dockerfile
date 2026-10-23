@@ -2,7 +2,7 @@ FROM python:3.14-slim AS base
 
 # 刻意不設 TZ, 容器維持 UTC (程式只認 UTC, 見 shared/time)。當地時間由瀏覽器轉換。
 
-COPY --from=ghcr.io/astral-sh/uv:0.12.3 /uv /bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.5 /uv /bin/uv
 
 WORKDIR /app
 

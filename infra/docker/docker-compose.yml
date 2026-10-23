@@ -110,7 +110,7 @@ services:
 
   nginx:
     container_name: ${COMPOSE_PROJECT_NAME:?}-nginx
-    image: nginx:1.31.7-alpine
+    image: nginx:1.31.8-alpine
     # 模板內容變了才重建 nginx (bind mount 的內容 compose 看不出來), 值由 scripts/lib/compose.sh 算。
     labels:
       project.nginx-config-hash: ${NGINX_CONFIG_HASH:?}
