@@ -142,3 +142,31 @@ def test_deploy_keeps_other_systems_going_when_one_fails() -> None:
 def test_deploy_runs_systems_one_at_a_time() -> None:
     # 同一台主機上的多套系統同時備份、拉 image、跑 migration 會互搶資源。
     assert re.search(r"^\s+max-parallel: 1$", _deploy_job(), flags=re.MULTILINE)
+
+
+def _job(name: str) -> str:
+    match = re.search(
+        rf"^  {re.escape(name)}:\n(.*?)(?=^  \S|\Z)", _workflow(), flags=re.MULTILINE | re.DOTALL
+    )
+    assert match, f"deploy.yml 找不到 {name} job"
+    return match.group(1)
+
+
+def test_deploy_waits_for_migration_check_of_every_system() -> None:
+    """整組都通過方向檢查才開始部署任何一套; 獨立的 job, 所以也在備份與 checkout 之前。
+
+    檢查放在各自的部署 job 裡的話, 可能前幾套已經回滾、後面的被拒絕, 同一組跑著不同版本。
+    """
+    needs = re.search(r"^    needs: \[(.*)\]$", _deploy_job(), flags=re.MULTILINE)
+    assert needs, "deploy job 沒有 needs"
+    assert "migration-check" in [job.strip() for job in needs.group(1).split(",")]
+    check = _job("migration-check")
+    assert "matrix: ${{ fromJSON(needs.targets.outputs.matrix) }}" in check
+    assert "environment: ${{ matrix.environment }}" in check
+
+
+def test_migration_check_uses_target_tag() -> None:
+    check = _job("migration-check")
+    assert "ref: refs/tags/${{ needs.version.outputs.tag }}" in check
+    assert "make db revision" in check
+    assert "check_migration_direction" in check

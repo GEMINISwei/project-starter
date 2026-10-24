@@ -41,6 +41,7 @@ COPIED_FILES = (
 # 任何一個參數有對應的 fail-<參數> 檔案就失敗 (例如 fail-pg_dump)。
 # `volume ls --filter label=…project=<專案>` 只回傳 labeled 裡那個專案的 volume (每行 `專案 名稱`),
 # `system df` 回傳 sizes 的內容 (每行 `名稱<TAB>容量`)。
+# 資料庫的 migration revision 取自 revision 檔; 沒有這個檔案就是還沒跑過 migration。
 FAKE_DOCKER = """#!/bin/sh
 state="$FAKE_DOCKER_DIR"
 printf '%s\\n' "$*" >> "$state/calls"
@@ -74,6 +75,8 @@ case "$1" in
         printf '%s\\n' "$2" >> "$state/running" ;;
     exec)
         case "$*" in
+            *to_regclass*) [ -e "$state/revision" ] && echo t || echo f ;;
+            *version_num*) cat "$state/revision" ;;
             *pg_dump*) echo dump ;;
             *" -cf "*) echo archive ;;
             "exec -i "*) cat > /dev/null ;;
@@ -652,3 +655,61 @@ def test_help_hides_internal_commands() -> None:
         assert visible in result.stdout
     for hidden in ("allow-fresh", "prune", "make version", "[內部]"):
         assert hidden not in result.stdout
+
+
+# ── 先單獨跑 migrate, 成功才切換服務 ──────────────────────────────────────────
+
+
+@pytest.mark.parametrize("mode", ["development", "production"])
+def test_start_runs_migrate_before_switching_services(box: Sandbox, mode: str) -> None:
+    # compose 會先把線上的 api 換掉才知道 migrate 失敗, 結果就是停機; 先單獨跑過才換。
+    box.write_env(mode)
+    box.release_checkout()
+    result = box.run("start")
+    assert result.returncode == 0, result.stderr
+    migrate = box.first(" migrate")
+    assert " run " in box.calls()[migrate]
+    assert migrate < box.first(" up ")
+
+
+@pytest.mark.parametrize("mode", ["development", "production"])
+def test_start_stops_when_migrate_fails(box: Sandbox, mode: str) -> None:
+    box.write_env(mode)
+    box.release_checkout()
+    box.fail("migrate")
+    result = box.run("start")
+    assert result.returncode != 0
+    assert not box.called(" up ")
+
+
+# ── 部署前讀資料庫的 revision (make db revision) ─────────────────────────────
+
+
+def _with_database(box: Sandbox, mode: str, revision: str | None) -> None:
+    box.write_env(mode)
+    box.containers(*ALL_RUNNING)
+    box.volumes(f"{PROJECT}_{mode}_postgres_data")
+    if revision is not None:
+        (box.state / "revision").write_text(f"{revision}\n")
+
+
+def test_db_revision_prints_current_revision(box: Sandbox) -> None:
+    _with_database(box, "development", "959dc24d48e4")
+    result = box.run("db", "revision")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "959dc24d48e4"
+
+
+def test_db_revision_prints_nothing_on_fresh_host(box: Sandbox) -> None:
+    # 全新主機 (還沒有資料 volume): 部署的方向檢查視為沒有資料庫而放行。
+    box.write_env("production")
+    result = box.run("db", "revision")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == ""
+
+
+def test_db_revision_is_allowed_on_production(box: Sandbox) -> None:
+    _with_database(box, "production", "959dc24d48e4")
+    result = box.run("db", "revision")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "959dc24d48e4"
