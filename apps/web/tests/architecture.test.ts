@@ -110,3 +110,33 @@ describe("main 地標由外殼提供", () => {
     expect(offenders).toEqual([])
   })
 })
+
+/**
+ * dependency-cruiser 只掃 `check:architecture` 列出的路徑。新增的原始碼目錄或根目錄的
+ * 執行期檔案沒加進去的話, 那一層不受邊界規則管, 而且不會報錯。
+ */
+describe("依賴邊界的掃描範圍", () => {
+  const WEB_ROOT = path.resolve(import.meta.dirname, "..")
+  // 不是應用程式原始碼: 測試、產出物、靜態檔與工具設定。
+  const NOT_SOURCE = new Set(["tests", "node_modules", "coverage", "public", "knip.ts"])
+  const isToolingConfig = (name: string) => /\.config\.ts$|\.d\.ts$/.test(name)
+
+  function hasSource(dir: string): boolean {
+    return entries(dir).some((entry) => entry.isDirectory()
+      ? hasSource(path.join(dir, entry.name))
+      : /\.(ts|tsx)$/.test(entry.name))
+  }
+
+  it("每個原始碼目錄與根目錄的執行期檔案都在 check:architecture 裡", () => {
+    const pkg = JSON.parse(readFileSync(path.join(WEB_ROOT, "package.json"), "utf8"))
+    const scanned = new Set(pkg.scripts["check:architecture"].split(/\s+/))
+    const sources = entries(WEB_ROOT)
+      .filter((entry) => !entry.name.startsWith(".") && !NOT_SOURCE.has(entry.name))
+      .filter((entry) => entry.isDirectory()
+        ? hasSource(path.join(WEB_ROOT, entry.name))
+        : /\.(ts|tsx)$/.test(entry.name) && !isToolingConfig(entry.name))
+      .map((entry) => entry.name)
+
+    expect(sources.filter((name) => !scanned.has(name))).toEqual([])
+  })
+})

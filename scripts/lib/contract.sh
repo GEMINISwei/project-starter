@@ -24,7 +24,7 @@ generate_contract() {
 # 比對的是工作目錄裡的檔案, 不是 git 裡的版本, 所以還沒 commit 的 make gen-types 結果也算數。
 #
 # 整個函式在 subshell 裡跑 (`( )` 而不是 `{ }`): EXIT trap 只管這裡的暫存目錄,
-# 不會蓋掉呼叫端自己設的 trap (check.sh 的 portable 也用 EXIT trap 清目錄)。
+# 不會蓋掉呼叫端自己設的 trap (check.sh 的 integration 也用 EXIT trap 清容器)。
 check_contract() (
     tmp="$(mktemp -d)"
     trap 'rm -rf "${tmp}"' EXIT

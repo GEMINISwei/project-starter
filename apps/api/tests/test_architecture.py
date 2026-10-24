@@ -1,11 +1,11 @@
 """import-linter 管不到的結構規則。
 
 依賴方向 (app → modules → shared、跨模組只走 public) 由 import-linter 檢查, 設定在
-pyproject.toml 的 `[tool.importlinter]`。這裡放 import-linter 管不到的: 「哪些套件不該存在」,
-以及 tests/ 的依賴方向。
+pyproject.toml 的 `[tool.importlinter]`。這裡放 import-linter 管不到的: 「哪些套件不該存在」、
+它的掃描範圍是否涵蓋所有原始碼, 以及 tests/ 的結構。
 """
 
-import ast
+import tomllib
 from pathlib import Path
 
 SRC = Path(__file__).parents[1]
@@ -20,29 +20,23 @@ def test_no_horizontal_layer_packages():
     assert found == []
 
 
-def _imported_roots(path: Path) -> set[str]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    roots: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            roots.update(alias.name.split(".")[0] for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            roots.add(node.module.split(".")[0])
-    return roots
+# 不受邊界規則管的頂層目錄: 測試、CLI 腳本與 migration 都不是被 import 的原始碼。
+NOT_SOURCE_DIRS = {"tests", "scripts", "migrations"}
 
 
-def test_shared_tests_do_not_depend_on_the_project():
-    """`shared/` 要能連同 `tests/shared/` 整包複製到別的專案, 所以那批測試不可以碰
-    `app`/`modules`。import-linter 只看原始碼, 管不到 tests/, 這條補上。
-
-    涵蓋函式裡的延遲 import (`ast.walk` 走整棵樹) —— 那正是最容易漏看的寫法。
-    """
-    offenders = sorted(
-        f"{path.relative_to(SRC)}: {sorted(roots)}"
-        for path in (SRC / "tests" / "shared").rglob("*.py")
-        if (roots := _imported_roots(path) & {"app", "modules"})
-    )
-    assert offenders == []
+def test_every_source_package_is_checked_by_import_linter():
+    """新增的頂層套件沒加進 `root_packages` 的話, 那一層不受邊界規則管, 而且不會報錯。"""
+    config = tomllib.loads((SRC / "pyproject.toml").read_text(encoding="utf-8"))
+    checked = set(config["tool"]["importlinter"]["root_packages"])
+    packages = {
+        directory.name
+        for directory in SRC.iterdir()
+        if directory.is_dir()
+        and not directory.name.startswith((".", "_"))
+        and directory.name not in NOT_SOURCE_DIRS
+        and any(directory.rglob("*.py"))
+    }
+    assert sorted(packages - checked) == []
 
 
 def test_test_packages_mirror_the_source():
