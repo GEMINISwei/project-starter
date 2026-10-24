@@ -37,8 +37,12 @@ shell，不需要保管任何註冊代碼。
 
 | | 存在哪 | 作用範圍 | 怎麼觸發 |
 |---|---|---|---|
-| `TOKEN_VERSION` | `.env` | **所有人** | 手動 +1 後重啟（見 [`operations.md`](operations.md#讓所有人登出)） |
+| `TOKEN_VERSION` | `.env` | **所有人** | 手動 +1 後重新部署（見 [`operations.md`](operations.md#讓所有人登出)） |
 | `auth_version` | `users` 資料表 | **單一使用者** | 換密碼（管理者重設或自己改）或登出時自動 +1 |
+
+`TOKEN_VERSION` 是 token 裡的一個欄位，跟其他欄位一起用 `JWT_SECRET_KEY` 簽名，所以**擋不住金鑰外洩**：
+拿到金鑰的人可以自己簽一張帶新版號的 token。金鑰外洩時要換掉 `JWT_SECRET_KEY` 本身，舊 token
+會跟著全部失效（見 [`operations.md`](operations.md#更換-jwt_secret_key)）。
 
 `auth_version` +1 只影響那一個帳號，其他使用者的 token 照常有效：
 

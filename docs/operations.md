@@ -290,10 +290,34 @@ make db superuser
 互動式輸入暱稱、帳號、密碼（密碼不回顯），可以重複執行。第一個超管、再加一個超管，
 以及唯一的超管失聯時的救援，都用這個指令（理由見 [`features.md`](features.md#帳號)）。
 
+### 套用 `.env` 的變更
+
+`.env` 改了要重建容器才會生效（`make services restart` 不會套用）。接了 CD 的主機**不要直接
+`make start`**：主機的 shell 沒有 `API_IMAGE`／`WEB_IMAGE`，它會改成在主機上建置 image。改用重新部署：
+
+1. 在主機上改好 `.env`。
+2. Actions → Deploy → **Run workflow**，branch 選 `main`，`tag` 填目前線上的版本（`make services`
+   上方顯示的），`target` 填這台主機所在的組。主機會拉 image、以新的 `.env` 重建容器，不在主機上建置。
+
+- 這是**整組**重新部署：同一組的其他系統也會跑一次備份與部署，它們的設定沒變，影響只有備份時
+  nginx 暫停的那幾秒。
+- 改完 `.env` 到部署完成之間，線上跑的仍是舊值，兩步接著做。
+- 沒接 CD 的主機只能 `make start`（會在主機上建置；原始碼沒變的話大部分步驟會用到快取）。
+
 ### 讓所有人登出
 
-`JWT_SECRET_KEY` 外洩這類需要讓**所有人**的 token 立刻失效的情況：把 `.env` 的 `TOKEN_VERSION`
-加 1，再 `make start`。單一使用者的撤銷不需要動主機（見 [`features.md`](features.md#撤銷)）。
+需要讓**所有人**的 token 立刻失效時：把 `.env` 的 `TOKEN_VERSION` 加 1，照〈[套用 `.env` 的變更](#套用-env-的變更)〉
+重新部署。單一使用者的撤銷不需要動主機（見 [`features.md`](features.md#撤銷)）。
+
+### 更換 `JWT_SECRET_KEY`
+
+金鑰外洩時要換掉金鑰本身，`TOKEN_VERSION` 加 1 擋不住（理由見 [`features.md`](features.md#撤銷)）。
+在主機上產生新值換掉 `.env` 的 `JWT_SECRET_KEY`（產法與 `make init` 相同），再照
+〈[套用 `.env` 的變更](#套用-env-的變更)〉重新部署。舊金鑰簽的 token 會全部失效，所有人都要重新登入。
+
+```bash
+openssl rand -hex 32
+```
 
 ## 主機的 reverse proxy
 
