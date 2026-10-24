@@ -12,7 +12,7 @@ x-api-image: &api-image
 x-api-db-env: &api-db-env
   PROJECT_NAME: ${COMPOSE_PROJECT_NAME:?}
   MODE: ${MODE:?}
-  POSTGRES_URL: postgresql+asyncpg://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?}@postgres:5432/${POSTGRES_DB:?}
+  POSTGRES_URL: postgresql+asyncpg://app:${POSTGRES_PASSWORD:?}@postgres:5432/app
 
 services:
   api:
@@ -62,9 +62,12 @@ services:
     # 是破壞性動作, 要當成一次獨立改動並在 CHANGELOG 寫清楚步驟。
     image: postgres:17.11-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:?}
+      # 帳號與資料庫名稱寫死: 資料庫只有這個 compose 專案連得到, volume 名稱已經帶專案前綴,
+      # 名稱不同沒有隔離效果。腳本 (make db psql、make backup) 在容器裡讀這兩個值。
+      # 只在第一次建立資料庫時生效, 改了要連 api 的 POSTGRES_URL 一起改, 而且舊 volume 不會跟著變。
+      POSTGRES_USER: app
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
-      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_DB: app
       # collation 一旦定了就寫進索引, 之後想改要重建整個資料庫, 所以明確指定。
       POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     volumes:

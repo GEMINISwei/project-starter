@@ -112,23 +112,6 @@ valid_port() {
     return 1
 }
 
-valid_db_user() {
-    case "$1" in
-        ''|*[!A-Za-z0-9._~-]*) echo "資料庫帳號只能包含英文字母、數字、.、_、~、-"; return 1 ;;
-    esac
-}
-
-# 字元集限制不是美觀問題: 這個值會被插進 compose 的 `postgresql+asyncpg://user:pass@host/db`,
-# 而 `@`、`:`、`/` 之類的字元會把那個 URL 切在錯的地方 —— 症狀是「認證失敗」,
-# 看不出跟密碼裡的字元有關。
-valid_db_password() {
-    case "$1" in
-        ''|*[!A-Za-z0-9._~-]*)
-            echo "資料庫密碼不可為空，且只能包含英文字母、數字、.、_、~、-"
-            return 1 ;;
-    esac
-}
-
 # 以 .env.example 為範本, 只改問到的與自動產生的那幾項 —— 其餘預設值與註解都直接沿用,
 # 新增一個有預設值的變數時不必動這支腳本。
 # 用法: create_env <development|production>
@@ -139,15 +122,13 @@ create_env() {
         return
     fi
 
-    local project_name system_name system_port db_user db_password
+    local project_name system_name system_port
     printf '請輸入初始化資訊\n'
     prompt_until_valid project_name "專案名稱" "$(default_project_name "$REPO_ROOT")" valid_project_name
     # 一問到就查, 不必等其他問題都答完才發現要重來。
     require_unused_project_name "$project_name"
     prompt_until_valid system_name "系統名稱" "My App" valid_system_name
     prompt_until_valid system_port "系統 Port" "3000" valid_port
-    prompt_until_valid db_user "資料庫帳號" "admin" valid_db_user
-    prompt_until_valid db_password "資料庫密碼（必填）" "" valid_db_password
 
     # 先在暫存檔上改完再改名: 中途被 Ctrl-C 時不會留下一份半套的 .env
     # (下次重跑會被「已存在」跳過, 問題就藏起來了)。
@@ -158,10 +139,10 @@ create_env() {
     set_env_value "$draft" COMPOSE_PROJECT_NAME "$project_name"
     set_env_value "$draft" SYSTEM_NAME "$system_name"
     set_env_value "$draft" SYSTEM_PORT "$system_port"
-    set_env_value "$draft" POSTGRES_USER "$db_user"
-    set_env_value "$draft" POSTGRES_PASSWORD "$db_password"
-    # 資料庫名稱跟著專案名走, 不另外問 —— 一個 compose 專案就是一個資料庫。
-    set_env_value "$draft" POSTGRES_DB "$project_name"
+    # 只有 api 的連線 URL 用得到 (腳本在容器裡走本機 socket), 沒有人需要記住它, 所以不問。
+    # 十六進位: 這個值會被插進 `postgresql+asyncpg://user:pass@host/db`, `@`、`:`、`/` 會把
+    # URL 切在錯的地方, 症狀是看不出原因的「認證失敗」。
+    set_env_value "$draft" POSTGRES_PASSWORD "$(openssl rand -hex 32)"
     set_env_value "$draft" JWT_SECRET_KEY "$(openssl rand -hex 32)"
     set_env_value "$draft" NEXT_SERVER_ACTIONS_ENCRYPTION_KEY "$(openssl rand -base64 32)"
     mv "$draft" .env

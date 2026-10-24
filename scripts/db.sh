@@ -29,17 +29,19 @@ usage() {
 
 # 碰運行中容器的子指令都要先確認環境起著, 否則 docker 的錯誤訊息看不出原因。
 require_running() {
-    require_env COMPOSE_PROJECT_NAME POSTGRES_USER POSTGRES_DB
+    require_env COMPOSE_PROJECT_NAME
     if ! container_running "${COMPOSE_PROJECT_NAME}-postgres"; then
         echo "資料庫沒有在執行，請先 make start" >&2
         exit 1
     fi
 }
 
+# 帳號與資料庫名稱在容器裡讀, 理由同 postgres_tool。psql 要 TTY, 而 postgres_tool 只給 -i。
 cmd_psql() {
     require_running
-    docker exec -it -e PGPASSWORD="${POSTGRES_PASSWORD:-}" "${COMPOSE_PROJECT_NAME}-postgres" \
-        psql -U "${POSTGRES_USER}" -d "${POSTGRES_DB}"
+    # shellcheck disable=SC2016 # 刻意不在主機展開
+    docker exec -it "${COMPOSE_PROJECT_NAME}-postgres" \
+        sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 }
 
 # 從清單選一份這個版本的備份, 選中的路徑寫到 stdout (清單與提示走 stderr, 才能被 $() 接住)。
@@ -71,9 +73,7 @@ choose_backup() {
 restore_database() {
     local file="$1"
     "${REPO_ROOT}/scripts/backup.sh"
-    docker exec -i -e PGPASSWORD="${POSTGRES_PASSWORD:-}" "${COMPOSE_PROJECT_NAME}-postgres" \
-        pg_restore -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" --clean --if-exists --no-owner --no-acl \
-        < "${file}"
+    postgres_tool -i pg_restore --clean --if-exists --no-owner --no-acl < "${file}"
 }
 
 # 只接受目前版本的備份: 回滾後的舊程式讀不了新版 migration 改過的結構,
@@ -95,7 +95,7 @@ cmd_restore() {
         exit 1
     fi
 
-    confirm "將先完整備份一次，再以 $(backup_label "${file}") 的備份取代 ${POSTGRES_DB} 目前的資料，確定？"
+    confirm "將先完整備份一次，再以 $(backup_label "${file}") 的備份取代目前資料庫的資料，確定？"
     without_traffic restore_database "${file}"
     echo "還原完成：$(backup_label "${file}")"
 }
@@ -103,7 +103,7 @@ cmd_restore() {
 cmd_reset() {
     deny_on_production "make db reset"
     require_running
-    confirm "${POSTGRES_DB} 的資料將被清空並重建初始資料，確定？"
+    confirm "資料庫的資料將被清空並重建初始資料，確定？"
     db_cli reset
     db_cli migrate
     db_cli seed

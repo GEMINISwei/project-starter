@@ -53,8 +53,7 @@ require_container() {
 # 先寫到暫存檔再改名: 中途失敗時 backups/ 裡不會留下一份看起來完整的壞檔。
 backup_database() {
     local dest="$1.dump"
-    docker exec -e PGPASSWORD="${POSTGRES_PASSWORD:-}" "${COMPOSE_PROJECT_NAME}-postgres" \
-        pg_dump -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" -Fc --no-owner --no-acl > "${dest}.partial"
+    postgres_tool pg_dump -Fc --no-owner --no-acl > "${dest}.partial"
     mv "${dest}.partial" "${dest}"
     echo "已備份：${dest}"
 }
@@ -93,7 +92,7 @@ cmd_backup() {
         *) usage ;;
     esac
     load_env
-    require_env COMPOSE_PROJECT_NAME POSTGRES_USER POSTGRES_DB
+    require_env COMPOSE_PROJECT_NAME
     require_mode
     if [ "${mode}" = allow-fresh ] && is_fresh_host; then
         echo "還沒有任何資料（第一次部署），略過備份"

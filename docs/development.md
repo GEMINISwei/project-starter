@@ -48,6 +48,7 @@ make start lan  # 同 make start，但對區網開放，結束時印出手機要
 | `port is already allocated` | 改 `.env` 的 `SYSTEM_PORT`，`make services down && make start` |
 | api 一直重啟、`relation "users" does not exist` | migration 失敗了，`make services logs migrate` 看原因 |
 | 容器裡 `ModuleNotFoundError` | 改了相依但 image 沒重建，重建後再 `make start` |
+| api 一直重啟、`password authentication failed` 或 `role "app" does not exist` | 資料庫的帳號密碼只在第一次建立 volume 時寫入：改過 `.env` 的 `POSTGRES_PASSWORD`，或 volume 是舊版（帳號不是 `app`）建的。開發機可以清掉重建（**資料會消失**）：`make services down`，`docker volume rm <專案>_development_postgres_data`，再 `make start` 與 `make db superuser` |
 | `make init dev` 抱怨 Node 版本 | `nvm use` |
 | `make init dev` 說專案名稱已有 docker 服務在使用 | 換一個名稱；確定是不要的舊專案，就用 `docker rm`／`docker volume rm` 清掉列出的資源 |
 
