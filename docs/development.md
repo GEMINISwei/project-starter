@@ -138,10 +138,8 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 
 | 守什麼 | 在哪 |
 |---|---|
-| 依賴方向、跨模組只走 public entry | 後端 import-linter（`pyproject.toml`）、前端 dependency-cruiser（`.dependency-cruiser.cjs`） |
-| 模組內部用相對路徑、manifest 不用瀏覽器 API | ESLint（`eslint.config.mjs`） |
-| client 不可引用 `.server` 檔 | Next.js build（每個 `.server` 檔都 `import "server-only"`） |
-| 模組的檔案放置、不准水平分層、測試目錄與原始碼同構 | `apps/web/tests/architecture.test.ts`、`apps/api/tests/test_architecture.py` |
+| 強制依賴規則 1–9（依賴方向、public entry、manifest、相對路徑、client 不引 server、水平分層） | 各條對應的工具見 [`architecture.md`](architecture.md#強制依賴規則) |
+| 模組的檔案放置、測試目錄與原始碼同構 | `apps/web/tests/architecture.test.ts`、`apps/api/tests/test_architecture.py` |
 | 每個原始碼目錄都在依賴邊界的掃描範圍裡（`check:architecture`、`root_packages`） | 同上 |
 | route adapter 是薄的、Next 特有 export 有接上 | `apps/web/tests/app/route-adapters.test.ts` |
 | 路由清單與 `app/` 的頁面兩邊對得上、頁面放在對的區 | `apps/web/tests/config/routes.test.ts` |

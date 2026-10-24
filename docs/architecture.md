@@ -268,6 +268,5 @@ cookie 的協定，也假設 OpenAPI 裡一定有 `Permission` 與 `Language` �
 前端 shared 另外要求專案在 `LOGIN_PATH` 提供登入頁並認得 `?reason=`，約定寫在
 `apps/web/shared/session/login-contract.ts`（這個模板由 `modules/auth` 提供）。
 
-shared 的設計變數在 `shared/ui/styles/tokens.css` 給預設值，專案只在 `app/theme.css` 覆寫
-（`tests/shared/ui/tokens.test.ts` 擋只定義在專案裡的變數）。
+shared 的設計變數怎麼給預設值、專案怎麼覆寫，見 [`extending.md`](extending.md#更換視覺導入-design-system)。
 
