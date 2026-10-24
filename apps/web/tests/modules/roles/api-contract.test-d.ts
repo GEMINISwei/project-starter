@@ -11,8 +11,8 @@
  * 契約被放寬或被弄壞, 兩種情況都會讓 CI 紅燈。
  *
  * 守的是 `shared/api` 的型別機制, 但題材只能是**這個專案真的有的**端點 (`apiGet` 等直接綁
- * 產生出來的 `paths`), 所以放在這裡而不是 `tests/shared/` —— 後者要能跟著 shared 整包移植到
- * 沒有 roles 的專案 (`make check portable`)。拿掉 roles 時把題材換成留下來的模組的端點。
+ * 產生出來的 `paths`), 所以放在擁有那些端點的 roles 底下, 而不是 `tests/shared/`。
+ * 拿掉 roles 時把題材換成留下來的模組的端點。
  */
 
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/shared/api/request.server"

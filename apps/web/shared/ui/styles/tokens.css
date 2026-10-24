@@ -1,7 +1,7 @@
 /* UI kit 的設計變數: 名字是 `shared/ui` 與所有模組 CSS module 共用的契約, 值是預設外觀。
  *
- * 跟著 `shared/ui` 走: 整包複製 `shared/` 到新專案時, 元件拿得到每一個 `var(--…)`, 不會因為
- * 少了專案的主題檔就變成沒有樣式 (`tests/shared/ui/tokens.test.ts` 守)。
+ * 跟著 `shared/ui` 走: 元件用到的每一個 `var(--…)` 都在這裡有預設值, 主題檔只負責覆寫
+ * (`tests/shared/ui/tokens.test.ts` 守)。
  *
  * **要換外觀不要改這裡**, 在 `app/theme.css` 覆寫想改的變數 —— 它在這份之後載入。
  * 新增一個變數時加在這裡 (給預設值), 名字照**用途**取。 */

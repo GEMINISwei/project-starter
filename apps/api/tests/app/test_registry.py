@@ -1,6 +1,6 @@
 """這個專案的註冊表 (`app/registry.py`) 與註冊在上面的資料表要遵守的慣例。
 
-與 `tests/shared/` 不同, 這裡針對的是**實際啟用的** modules, 所以不隨 shared 一起移植。
+與 `tests/shared/` 不同, 這裡針對的是**實際啟用的** modules。
 """
 
 import inspect

@@ -39,7 +39,7 @@ vi.stubGlobal("fetch", fetchMock)
 const api = await import("@/shared/api/request.server")
 
 // 這支測的是執行期行為, 與專案有哪些端點無關。用與專案無關的路徑並放寬型別 —— 寫成這個專案
-// 真的有的端點 (`/roles/{id}`) 的話, shared 一移植到別的專案就編譯不過 (`make check portable`)。
+// 真的有的端點 (`/roles/{id}`) 的話, 刪掉 roles 時這支 shared 的測試會跟著壞。
 type LooseRequest = {
   url: string
   params?: Record<string, string>

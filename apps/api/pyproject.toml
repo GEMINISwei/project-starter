@@ -67,7 +67,7 @@ src = ["."]
 [tool.ruff.lint]
 # ASYNC 抓 async 函式裡的阻塞呼叫; ARG 抓沒用到的參數 (在 service 層通常代表查詢條件
 # 被悄悄忽略)。C901 與 PLR0915 是防退步的地板, 擋「長到沒人敢動」, 不是逼人拆碎。
-select = ["E", "F", "I", "N", "W", "UP", "B", "ASYNC", "S", "RUF", "ARG", "C901", "PLR0915"]
+select = ["E", "F", "I", "N", "W", "UP", "B", "ASYNC", "S", "RUF", "ARG", "C901", "PLR0915", "TID251"]
 ignore = [
     # 全形標點在中文註解裡是正確用法, 這三條只會產生雜訊。
     "RUF001",
@@ -94,7 +94,14 @@ extend-immutable-calls = [
     "shared.auth.dependency.check_user_permission",
 ]
 
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# 錯誤訊息會直接顯示在畫面上, 要跟著請求語系走; 裸的 HTTPException 只帶得了一種語言。
+"fastapi.HTTPException".msg = "用 shared.http.errors 的 LangException + LangText"
+"starlette.exceptions.HTTPException".msg = "用 shared.http.errors 的 LangException + LangText"
+
 [tool.ruff.lint.per-file-ignores]
+# LangException 本身就是 HTTPException 的子類。
+"shared/http/errors.py" = ["TID251"]
 # ARG: monkeypatch 的 stub 必須完整比對被取代者的簽名。
 "tests/**" = ["S101", "S105", "S106", "ARG001", "ARG002", "ARG004"]
 "scripts/**" = ["S404", "S603", "S607"]

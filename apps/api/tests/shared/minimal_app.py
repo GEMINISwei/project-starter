@@ -1,8 +1,6 @@
-"""只靠 `shared/` 組出來的最小 app: 平台測試與可移植性檢查共用。
+"""只靠 `shared/` 組出來的最小 app, 給平台測試用。
 
-它的 OpenAPI 就是「前端 `shared/` 能假設後端一定有的東西」—— `Permission` 與 `Language`
-兩個 schema, 其餘一概沒有。`make check portable` 用它產生契約, 確認前端 shared
-不依賴任何業務端點也編譯得過。
+它的 OpenAPI 只有前端 `shared/` 假設後端一定有的 `Permission` 與 `Language` 兩個 schema。
 """
 
 from dataclasses import dataclass

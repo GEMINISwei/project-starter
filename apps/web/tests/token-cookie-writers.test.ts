@@ -4,7 +4,7 @@
  *
  * 那支測的是函式本身; 這裡守的是「有人記得呼叫它」。新增一個簽發 token 的 action
  * (例如 refresh) 卻直接 `return res` 不會有任何症狀, 畫面照樣正常。掃的是整個專案,
- * 所以不放在 `tests/shared/` (那批要能跟著 shared 單獨移植)。
+ * 所以放在 `tests/` 根目錄。
  */
 
 import fs from "node:fs"

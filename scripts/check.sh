@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 #
-# 檢查與測試: make check [lint|contract|types|test|build|portable|integration] (不帶參數 = 前六項依序全跑)
+# 檢查與測試: make check [lint|contract|types|test|build|integration] (不帶參數 = 前五項依序全跑)
 #
-#   make check               lint → contract → types → test → build → portable, 前後端都跑, 不需要 Docker (送出前跑這個)
+#   make check               lint → contract → types → test → build, 前後端都跑, 不需要 Docker (送出前跑這個)
 #   make check lint          ruff + import-linter + eslint + dependency-cruiser + knip + shellcheck + compose 檔
 #   make check contract      重產契約與前端型別到暫存目錄, 確認與 repo 裡的一致 (只讀, 不改檔)
 #   make check types         mypy + tsc
 #   make check test          pytest + vitest (帶覆蓋率), 沒有資料庫的 integration 測試會 skip
-#   make check build         前端 production build
-#   make check portable      把兩邊的 shared/ 單獨複製到空專案, 確認型別檢查與測試照樣通過
+#   make check build         前端 production build, 並確認 Next 有認到 proxy.ts
 #   make check integration   起拋棄式 PostgreSQL 跑完整後端測試, 再確認 model 與 migration 一致
 #
 # 在主機上跑, 不是在容器裡 —— 那才是編輯器與 CI 看到的環境。首次執行前先跑 make init dev。
@@ -98,61 +97,16 @@ run_test() {
 
 run_build() {
     step "build"
-    (cd apps/web && npm run build)
-}
-
-# `shared/` 的承諾是「整包複製到別的專案就能用」。import 邊界由 lint 擋, 但漏掉的東西
-# (放錯位置的測試、只定義在專案裡的設計變數、寫死的業務端點) 只有真的複製一次才看得到。
-#
-# 前端用「只有平台 schema」的契約編譯 (`apps/api/tests/shared/minimal_app.py` 產生):
-# shared 引用了任何業務 entity 或端點, 這裡就是編譯錯誤。
-run_portable() {
-    step "portable：shared 單獨複製到空專案"
-    local tmp
-    tmp="$(mktemp -d)"
-    trap 'rm -rf "'"${tmp}"'"' EXIT
-    portable_api "${tmp}/api"
-    portable_web "${tmp}/web" "${tmp}/api/openapi.json"
-    echo "兩邊的 shared/ 都能單獨使用"
-}
-
-# 直接用專案的 venv, 不用 `uv run`: uv 會以專案目錄為準, 而這裡要的是「只看得到複製出去的
-# 那一份 shared」。專案本身沒有安裝進 venv, 所以不會從 site-packages 混回原本的程式。
-portable_api() {
-    local dir="$1"
-    local python="${REPO_ROOT}/apps/api/.venv/bin/python"
-    mkdir -p "${dir}/tests"
-    cp -R apps/api/shared "${dir}/"
-    cp -R apps/api/tests/shared "${dir}/tests/"
-    cp apps/api/tests/__init__.py apps/api/tests/conftest.py apps/api/tests/integration.py \
-        "${dir}/tests/"
-    cp apps/api/pyproject.toml "${dir}/"
-    (
-        cd "${dir}"
-        "${python}" -m mypy shared tests
-        "${python}" -m pytest -q -p no:cacheprovider tests
-        "${python}" -c 'import json, sys
-from tests.shared.minimal_app import CONTRACT_MODULE, create_minimal_app
-json.dump(create_minimal_app(CONTRACT_MODULE).openapi(), sys.stdout)' > openapi.json
-    )
-}
-
-portable_web() {
-    local dir="$1" contract="$2"
-    mkdir -p "${dir}/tests"
-    cp -R apps/web/shared "${dir}/"
-    cp -R apps/web/tests/shared apps/web/tests/stubs apps/web/tests/setup.ts "${dir}/tests/"
-    # package.json 要一起帶: 少了它的 `"type": "module"`, vitest.config.ts 會被當成 CommonJS 載入。
-    cp apps/web/package.json apps/web/tsconfig.json apps/web/vitest.config.ts "${dir}/"
-    ln -s "${REPO_ROOT}/apps/web/node_modules" "${dir}/node_modules"
-    # 原本的 next-env.d.ts 還引用 .next/ 底下產生的路由型別, 那屬於專案; 這裡只留框架型別。
-    printf '/// <reference types="next" />\n' > "${dir}/next-env.d.ts"
-    (
-        cd "${dir}"
-        npx openapi-typescript "${contract}" -o shared/api/generated/schema.d.ts > /dev/null
-        npx tsc --noEmit -p .
-        npx vitest run
-    )
+    local log
+    log="$(mktemp)"
+    (cd apps/web && npm run build) | tee "${log}"
+    # proxy.ts 放錯位置或匯出名稱不對時, Next 照樣 build 成功, 只是路由保護整層消失。
+    if ! grep -q 'Proxy (Middleware)' "${log}"; then
+        rm -f "${log}"
+        echo "build 輸出沒有 Proxy (Middleware)：Next 沒認到 apps/web/proxy.ts，路由保護不會生效" >&2
+        exit 1
+    fi
+    rm -f "${log}"
 }
 
 # 兩段都需要真的資料庫, 用拋棄式容器而不是 `make start` 那個: 跑一次就會把開發資料洗掉。
@@ -196,12 +150,11 @@ run_contract() {
 }
 
 case "${1:-all}" in
-    all)         run_lint; run_contract; run_types; run_test; run_build; run_portable ;;
+    all)         run_lint; run_contract; run_types; run_test; run_build ;;
     lint)        run_lint ;;
     types)       run_types ;;
     test)        run_test ;;
     build)       run_build ;;
-    portable)    run_portable ;;
     integration) run_integration ;;
     contract)    run_contract ;;
     *)

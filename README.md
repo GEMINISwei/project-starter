@@ -32,7 +32,6 @@ app（組裝層） → modules（垂直功能） → shared（平台能力）
 - **每個功能是一個模組**，前後端同名，各自擁有路由、資料表、權限、畫面與測試。
 - **跨模組只走 public entry**，由 import-linter（後端）與 dependency-cruiser（前端）強制執行。
 - **測試與原始碼同構**：`tests/modules/users/` 對 `modules/users/`。
-- **`shared/` 可以整包移植**：複製到另一個專案就能用，由 `make check portable` 實際驗證。
 
 ```mermaid
 flowchart LR
@@ -64,5 +63,3 @@ flowchart LR
    （squash merge、`main` 的 ruleset、Dependabot 警示與安全更新）。
 4. 在 `apps/web/app/theme.css` 覆寫設計變數決定視覺（名字與預設值在 `shared/ui/styles/tokens.css`）。
 5. 照 [`docs/extending.md`](docs/extending.md#新增一個功能模組) 加入第一個模組。
-
-只想把 `shared/` 帶到既有的專案時，見 [`docs/extending.md`](docs/extending.md#把-shared-帶到另一個專案)。

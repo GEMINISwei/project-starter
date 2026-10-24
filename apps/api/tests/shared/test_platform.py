@@ -1,8 +1,8 @@
 """平台接線 (`shared/platform.py`): 請求紀錄、request id、每個請求的資料庫 session 邊界,
 以及「只靠 shared 就組得出一個 app」。
 
-用 `minimal_app.py` 的環境設定與權限 enum 組 app, 不 import `app.*` —— 這批測試要能跟著
-`shared/` 一起被複製到別的專案 (`tests/test_architecture.py` 與 `make check portable` 守)。
+用 `minimal_app.py` 的環境設定與權限 enum 組 app, 不 import `app.*`: 平台接線的行為
+不該取決於這個專案啟用了哪些模組。
 """
 
 import logging

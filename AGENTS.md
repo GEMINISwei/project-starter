@@ -10,15 +10,32 @@
 ## 硬規則（`make check` 會擋）
 
 1. **跨模組只走 public entry**：前端 `public.server.ts`／`public.client.ts`，後端 `public.py`。組裝層也一樣。
-2. **`shared/` 不可引用 `modules/` 或組裝層，也不可認識業務**：不寫具體的業務端點與 entity，
-   `tests/shared/` 不碰 `app`／`modules`。shared 要能整包複製到別的專案（`make check portable` 擋，
-   [說明](docs/architecture.md#shared-的可移植性)）。
+2. **`shared/` 不可引用 `modules/` 或組裝層**。shared 放多個模組共用的能力，模組化的功能放 `modules/`。
 3. **模組內部一律相對路徑**，`@/` 只用於跨層。
 4. **UI kit 只從 `@/shared/ui` 匯入**，不可指進子路徑。需要 kit 的樣式時在 kit 裡多包一個元件。
 5. **前端模組**：模組根放資料與規則，`ui/` 放畫面，不要開 `components/`、`hooks/`、`utils/`。
    必備 `manifest.ts`、`i18n.ts` 與至少一個 public entry。
 6. **後端 service 回傳建構好的 pydantic model**（不是 dict），而且一定要寫回傳型別註記。
+7. **route adapter 要逐一轉接 Next 特有的 export**（`generateMetadata` 等），Next 本身漏掉不會報錯：
 
+   ```tsx
+   import { XPage, generateXMetadata, type XPageProps } from "@/modules/x/public.server"
+   export const generateMetadata = generateXMetadata
+   export default function Page(props: XPageProps) { return <XPage {...props} /> }
+   ```
+
+8. **新增有頁面的模組要加進 `config/routes.ts` 的 `ENABLED_MODULES`**，頁面放在 manifest `group` 對應的區
+   （`(user)/`／`admin/`）。
+9. **Server Action 的回傳值會送進瀏覽器**：寫入 session cookie 的 action 回傳前要經過 `withoutAccessToken`。
+10. **不用 `NEXT_PUBLIC_*` 放設定**（build 時就烤死），執行期設定走 `shared/runtime/`。
+11. **後端錯誤一律 `LangException` + `LangText`**，不用裸的 `HTTPException`（ruff `TID251`）。
+12. **新增原始碼目錄**要加進 `apps/web/package.json` 的 `check:architecture` 與 `apps/api/pyproject.toml`
+    的 `root_packages`，否則那一層不受邊界規則管。
+13. **`apps/web/proxy.ts` 留在原位**：放錯位置 Next 照樣 build 成功、路由保護整層消失
+    （`make check build` 確認輸出有 `ƒ Proxy (Middleware)`）。
+14. **compose 旗標不要自己組**，一律用 `scripts/lib/compose.sh`。
+
+各條由哪個工具或測試擋，見 [`development.md`](docs/development.md#架構本身也有測試)。
 完整規則見 [`architecture.md`](docs/architecture.md#強制依賴規則)。
 
 ## 寫程式
@@ -65,33 +82,18 @@
 
 ## 漏了不會報錯的地方
 
-- **route adapter 要逐一轉接 Next 特有的 export**（`generateMetadata` 等），漏掉沒有錯誤訊息：
+沒辦法寫成檢查的才列在這裡；能檢查的放上面的硬規則。
 
-  ```tsx
-  import { XPage, generateXMetadata, type XPageProps } from "@/modules/x/public.server"
-  export const generateMetadata = generateXMetadata
-  export default function Page(props: XPageProps) { return <XPage {...props} /> }
-  ```
-
-- **新增有導覽的模組**：漏了 `config/routes.ts` 的 `ENABLED_MODULES` → 沒有導覽也沒有 proxy 保護；
-  漏了 route adapter → 側欄連結 404；放錯區（`(user)/`／`admin/`）→ 套到錯的外殼（測試會擋）。
-- **`Permission` 與 `Language` 刻意中央化**，不要改成動態組裝。`/languages/` 端點是為了讓 enum
-  進 OpenAPI，看起來沒人呼叫也不能刪。
+- **`Permission` 與 `Language` 刻意中央化**，不要改成由模組動態組裝（理由見
+  [說明](docs/architecture.md#兩份刻意中央化的清單)）。
 - **權限的顯示標籤與分類只寫在後端**（各模組 `permissions.py` 的 `PermissionSpec`），前端不另存一份。
 - **route function、pydantic model、enum 的 docstring 會進公開 API 文件**，內部說明寫在一般註解。
-- **Server Action 的回傳值會送進瀏覽器**：簽發 token 的 action 回傳前要經過 `withoutAccessToken`。
 - **上傳的檔案存在 `/app/uploads/<模組>/`**：存到別的路徑不會報錯，但重建容器就消失、`make backup` 也備份不到
   （[說明](docs/extending.md#上傳檔案)）。
 - **上傳的請求固定上限 16MB，不開放設定**：超過時使用者只看到一般錯誤，所以每個上傳功能要自己定上限，
   後端回傳 `LangText` 錯誤、前端送出前先檢查；需要更大的檔案時改用串流或直傳，不要調高上限
   （[說明](docs/extending.md#大小上限)）。
-- **後端直接送到畫面的文字**也要走 `LangText` + `resolve_text()`。
-- **不要用 `NEXT_PUBLIC_*` 放部署設定**（build 時就烤死），執行期設定走 `shared/runtime/`。
-- **compose 的 nginx 信任主機 reverse proxy 送來的 `X-Real-IP` 與 `X-Forwarded-Proto`**：port 只能綁 `127.0.0.1`（例外只有開發機的 `make start lan`），
-  主機那層要覆寫這兩個標頭，少了任何一邊，限流與 cookie 的 `Secure` 都會出錯，而且不會報錯
-  （[說明](docs/operations.md#主機的-reverse-proxy)）。
-- **`apps/web/proxy.ts` 不能搬**，放錯位置路由保護會安靜消失；`npm run build` 輸出要有 `ƒ Proxy (Middleware)`。
-- **新增原始碼目錄**要加進 `apps/web/package.json` 的 `check:architecture`（掃描目錄）與
-  `apps/api/pyproject.toml` 的 `root_packages`，否則那一層不受邊界規則管。
-- **compose 旗標不要自己組**，一律用 `scripts/lib/compose.sh`。
-- **新增 make 指令**要加 `scripts/<name>.sh` 並把名稱加進 Makefile 的 `TARGETS`。
+- **後端直接送到畫面的非錯誤文字**（推播、事件訊息）也要走 `LangText` + `resolve_text()`。
+- **主機的 reverse proxy 要覆寫 `X-Real-IP` 與 `X-Forwarded-Proto`**：它在 repo 之外，少了任何一個，
+  限流與 cookie 的 `Secure` 都會出錯，而且不會報錯（[說明](docs/operations.md#主機的-reverse-proxy)）。
+  repo 這一側（容器 nginx 的信任設定、port 只綁 `127.0.0.1`）由 `tests/test_nginx_trusted_proxy.py` 擋。

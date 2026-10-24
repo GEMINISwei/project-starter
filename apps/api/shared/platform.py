@@ -3,8 +3,8 @@
 `shared/` 的元件各自有前提: `session_scope()` 要有人在每個請求開 session、`NoChangeError`
 要有人轉成 204、`LangException` 要有人先設好這次請求的語系、權限檢查要在 `app.state`
 找得到身分來源與權限目錄。這些接線與任何業務無關, 卻是 shared「能正常使用」的條件,
-所以跟著 shared 走 —— 整包複製到新專案時, 組裝層只需要呼叫 `create_platform_app()`,
-不必照抄一份接線 (漏抄的部分多半不會報錯, 只會在執行期行為不對)。
+所以跟著 shared 走: 組裝層只需要呼叫 `create_platform_app()`, 不必自己接一份
+(漏接的部分多半不會報錯, 只會在執行期行為不對)。
 
 組裝層仍然決定: 環境設定、權限 enum、啟用哪些 module、app 的名稱與版號。
 """

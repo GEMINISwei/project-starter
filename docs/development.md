@@ -63,7 +63,7 @@ make services [volumes|logs [服務]|restart|down]   # 不帶參數 = 版本與 
 make backup                                  # 資料庫與上傳檔案一起備份，期間對外服務暫停
 make db   psql|restore [檔案]|reset|migrate|migration "說明"|superuser
 make uploads restore [檔案]
-make check [lint|contract|types|test|build|portable|integration]   # 不帶參數 = 前六項，送出前跑
+make check [lint|contract|types|test|build|integration]   # 不帶參數 = 前五項，送出前跑
 make gen-types                               # 改過後端 schema／權限／語系後必跑
 ```
 
@@ -95,12 +95,11 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 放在 `tests/` 以外的測試不會執行，也不會報錯；`tests/` 裡對不上原始碼目錄的子目錄由架構測試擋。
 
 - **依賴專案啟用清單的測試**（註冊表、權限覆蓋、每張已註冊資料表的慣例）放後端 `tests/app/`、
-  前端 `tests/` 根目錄或 `tests/config/`，不放 `tests/shared/`。
+  前端 `tests/` 根目錄或 `tests/config/`。
 - **一個模組的測試只放在它自己的目錄**，不要在 `tests/modules/` 根目錄寫同時測好幾個模組的檔案：
   刪模組時是整包刪 `tests/modules/<name>/`，跨模組的測試會留下來並因為引用不到而失敗。
-- **`tests/shared/` 不可依賴專案**（端點、權限、業務 entity）：它要跟著 shared 一起移植。
-  測執行期行為時用與專案無關的路徑（例：`tests/shared/api/request.server.test.ts`），
-  `make check portable` 會擋。
+- **`tests/shared/` 不綁專案目前有的端點與權限**：測執行期行為時用與專案無關的路徑
+  （例：`tests/shared/api/request.server.test.ts`），刪掉模組時這批測試才不會跟著壞。
 - **從公開函式進入**，不直接測 `_` 開頭的私有函式：規則有兩個入口時，只測輔助函式證明不了
   兩邊都有套用（例：`tests/modules/users/test_service.py` 的停用規則）。
 
@@ -143,7 +142,14 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 | 模組內部用相對路徑、manifest 不用瀏覽器 API | ESLint（`eslint.config.mjs`） |
 | client 不可引用 `.server` 檔 | Next.js build（每個 `.server` 檔都 `import "server-only"`） |
 | 模組的檔案放置、不准水平分層、測試目錄與原始碼同構 | `apps/web/tests/architecture.test.ts`、`apps/api/tests/test_architecture.py` |
+| 每個原始碼目錄都在依賴邊界的掃描範圍裡（`check:architecture`、`root_packages`） | 同上 |
 | route adapter 是薄的、Next 特有 export 有接上 | `apps/web/tests/app/route-adapters.test.ts` |
+| 路由清單與 `app/` 的頁面兩邊對得上、頁面放在對的區 | `apps/web/tests/config/routes.test.ts` |
+| Next 有認到 `proxy.ts` | `make check build`（輸出要有 `ƒ Proxy (Middleware)`） |
+| 寫 session cookie 的 action 回傳前經過 `withoutAccessToken` | `apps/web/tests/token-cookie-writers.test.ts` |
+| 不用 `NEXT_PUBLIC_*` | `apps/web/tests/runtime-env.test.ts` |
+| 後端錯誤不用裸的 `HTTPException` | ruff `TID251`（`pyproject.toml`） |
+| compose 只由 `scripts/lib/compose.sh` 呼叫 | `apps/api/tests/test_compose_usage.py` |
 | 沒有未使用的匯出 | knip（`npm run check:deadcode`） |
 | model 改了有寫 migration | `make check integration` |
 | nginx 每個 location 都覆寫用戶端 IP、兩份模板都帶安全標頭 | `apps/api/tests/test_nginx_templates.py` |
@@ -151,8 +157,6 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 | `scripts/` 的 shell 寫法 | shellcheck（`make check lint`） |
 | compose 展得開、用到的變數 `.env.example` 都有 | `docker compose config`（`make check lint`） |
 | 契約與前端型別是最新的 | `make check contract`（只比對、不改檔） |
-| `shared/` 整包複製到空專案還能用 | `make check portable`（[說明](architecture.md#shared-的可移植性)） |
-| 後端 `tests/shared/` 不碰 `app`／`modules` | `apps/api/tests/test_architecture.py` |
 | `shared/` 用到的 CSS 變數都定義在 shared 裡 | `apps/web/tests/shared/ui/tokens.test.ts` |
 
 規則本身見 [`architecture.md`](architecture.md#強制依賴規則)。

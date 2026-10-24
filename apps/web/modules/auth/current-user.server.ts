@@ -8,7 +8,7 @@ import { authMessages } from "./i18n"
 
 // 「目前登入的是誰」屬於登入狀態, 所以住在 auth: 它呼叫的雖然是 users 的端點,
 // 放進 users 的話 roles 要引用 users、users 又引用 roles, 兩個模組會互相依賴。
-// 也不放 shared —— shared 不認識任何具體端點, 整包移植到別的專案才編譯得過。
+// 也放不進 shared: 它用到 auth 自己的字串, 而 shared 不可引用模組。
 
 // `cache()` 讓同一次 render 內多個 Server Component 呼叫只會真的打一次 /users/me。
 export const getCurrentUser = cache(async () => {

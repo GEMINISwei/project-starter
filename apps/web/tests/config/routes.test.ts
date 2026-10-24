@@ -95,11 +95,8 @@ describe("PROTECTED_ROUTES", () => {
   })
 
   /**
-   * 這條守的是新增模組時**唯一還會安靜失敗**的一步。
-   *
    * `ENABLED_MODULES` 加了一筆卻忘了在 `app/` 建 route adapter, 側欄會多一個連結、
-   * proxy 會保護那個路徑, 但點下去是 404 —— 沒有編譯錯誤, 也沒有測試會紅。
-   * (反方向不必檢查: adapter 存在但沒登記, 頁面仍可直接訪問, 是刻意允許的。)
+   * proxy 會保護那個路徑, 但點下去是 404 —— 沒有編譯錯誤。
    */
   it("每條路由在 app/ 都有對應的 route adapter", () => {
     const onDisk = routesOnDisk()
@@ -122,6 +119,20 @@ describe("PROTECTED_ROUTES", () => {
     }).map((route) => `${route.path} 應在 app/${AREA_DIRS[route.group]}/ 底下`)
 
     expect(misplaced).toEqual([])
+  })
+
+  /**
+   * 反方向: 頁面建在 `(protected)/` 底下, 模組卻沒加進 `ENABLED_MODULES`。頁面照樣渲染,
+   * 但沒有導覽, proxy 也不擋 (只剩 layout 的登入檢查) —— 沒有錯誤訊息。
+   * 首頁由 proxy 另外處理 (`pathname === "/"`), 不在路由清單裡。
+   */
+  it("受保護區的每個頁面都在路由清單的保護範圍內", () => {
+    const unlisted = [...routesOnDisk()]
+      .filter(([routePath, dir]) => dir.startsWith("(protected)/") && routePath !== "/")
+      .map(([routePath]) => routePath)
+      .filter((routePath) => !isProtectedPathname(routePath))
+
+    expect(unlisted).toEqual([])
   })
 
   // 管理區的 layout 掛在 `admin/` 路徑段上, 網址不在 `/admin` 底下的頁面套不到它。

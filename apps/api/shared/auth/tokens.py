@@ -71,8 +71,7 @@ def create_token(user_data: TokenSubject, env: AppEnvProtocol) -> dict:
         "exp": expires_at(hours=env.expire_hours),
         "username": user_data["username"],
         "sn": env.project_name,
-        # 使用者自己的 token 世代, 換密碼、登出與全員撤銷時 +1。升級前簽發的 token
-        # 另外帶著全站版號 `tv`, 解碼時不看它, 升級才不會把所有人踢下線。
+        # 使用者自己的 token 世代, 換密碼、登出與全員撤銷時 +1。
         "uv": user_data["auth_version"],
         "typ": SESSION_TOKEN_TYPE,
     }
