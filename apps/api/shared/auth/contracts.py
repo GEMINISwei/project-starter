@@ -21,7 +21,6 @@ class AppEnvProtocol(Protocol):
     # 寫在契約上, 「這個模版只簽 HS256」就從註解變成型別檢查會擋的事實。
     jwt_algorithm: Literal["HS256"]
     expire_hours: int
-    token_version: str
 
 
 class PermissionResolverProtocol(Protocol):

@@ -557,6 +557,19 @@ def test_restore_aborts_when_backup_fails(
     assert box.first(f"stop {NGINX}") < box.last(f"start {NGINX}")
 
 
+@pytest.mark.parametrize("mode", ["development", "production"])
+@pytest.mark.parametrize(("answer", "revoked"), [("n\n", False), ("", False), ("y\n", True)])
+def test_revoke_sessions_requires_confirmation(
+    box: Sandbox, mode: str, answer: str, revoked: bool
+) -> None:
+    """所有人都會被登出, 開發機與正式環境都要先確認。"""
+    box.write_env(mode)
+    box.containers(*ALL_RUNNING)
+    result = box.run("db", "revoke-sessions", answer=answer)
+    assert (result.returncode == 0) == revoked
+    assert box.called("revoke-sessions") == revoked
+
+
 # ── help ─────────────────────────────────────────────────────────────────────
 
 

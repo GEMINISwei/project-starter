@@ -355,7 +355,7 @@ async def test_spraying_usernames_from_one_ip_is_rate_limited(
 
 # --- Session 撤銷 (auth_version) -------------------------------------------
 #
-# `auth_version` 讓重設密碼只撤銷目標使用者的既有 session; TOKEN_VERSION 則保留給全域撤銷。
+# `auth_version` 讓重設密碼只撤銷目標使用者的既有 session; 全域撤銷是對每個使用者各 +1。
 
 
 def _token_with_auth_version(username: str, auth_version: int) -> str:

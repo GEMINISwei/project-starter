@@ -22,7 +22,6 @@ services:
       <<: *api-db-env
       JWT_SECRET_KEY: ${JWT_SECRET_KEY:?}
       EXPIRE_HOURS: ${EXPIRE_HOURS:?}
-      TOKEN_VERSION: ${TOKEN_VERSION:-1}
     # 上傳的檔案一律放這裡 (各模組一個子目錄): 寫在別的路徑, 重建容器就消失, make backup 也備份不到。
     volumes:
       - uploads:/app/uploads

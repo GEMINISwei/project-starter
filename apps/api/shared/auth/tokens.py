@@ -63,9 +63,6 @@ def _decode(token: str | None, env: AppEnvProtocol, *, expected_type: str) -> To
         raise LangException(401, TokenError.TOKEN_INVALID)
     if token_type != expected_type:
         raise LangException(401, TokenError.TOKEN_INVALID)
-    if payload.get("tv") != env.token_version:
-        raise LangException(401, TokenError.TOKEN_REVOKED)
-
     return {"username": username, "auth_version": auth_version}
 
 
@@ -74,9 +71,8 @@ def create_token(user_data: TokenSubject, env: AppEnvProtocol) -> dict:
         "exp": expires_at(hours=env.expire_hours),
         "username": user_data["username"],
         "sn": env.project_name,
-        # 不要改接 APP_VERSION, 否則每次改版號都會把所有人踢下線。
-        "tv": env.token_version,
-        # 使用者自己的 token 世代, 換密碼時 +1。
+        # 使用者自己的 token 世代, 換密碼、登出與全員撤銷時 +1。升級前簽發的 token
+        # 另外帶著全站版號 `tv`, 解碼時不看它, 升級才不會把所有人踢下線。
         "uv": user_data["auth_version"],
         "typ": SESSION_TOKEN_TYPE,
     }

@@ -34,8 +34,6 @@ class AppEnv(BaseSettings):
     mode: Literal["development", "production"] = "development"
     # 不要放寬成 str: 設成 `none` 會讓未簽名的 token 通過驗證。
     jwt_algorithm: Literal["HS256"] = "HS256"
-    # 要強制全站重新登入時 +1 (與 APP_VERSION 脫鉤)。
-    token_version: str = "1"  # noqa: S105 —— 這是版本計數器, 名字裡的 token 讓 bandit 誤判成密碼
 
 
 def _load_env() -> AppEnv:

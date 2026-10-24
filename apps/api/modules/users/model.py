@@ -2,6 +2,7 @@ from typing import Literal, TypedDict, cast
 
 from sqlalchemy import Column, ForeignKey, String, Table, select, update
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
 
@@ -72,7 +73,7 @@ class UserTable(BaseTable):
     # 每個使用者自己的 token 世代。重設密碼時 +1, 讓那個人的所有既有 session 與
     # WebSocket ticket 立刻失效。
     #
-    # 與 env 的 TOKEN_VERSION 不同: 後者是全域撤銷, 這個欄位只撤銷單一使用者的憑證。
+    # 全員撤銷 (`make db revoke-sessions`) 也是每一列各 +1, 沒有另一個全站的版號。
     auth_version: Mapped[int] = mapped_column(default=1)
 
     # `lazy="raise"` 而不是預設的 lazy load: async session 裡的隱式 lazy load 會丟
@@ -172,6 +173,21 @@ class UserTable(BaseTable):
         只影響這一個帳號: 世代號存在使用者自己的那一列上, 其他人的 token 照常有效。
         """
         return await cls._bump_auth_version(id, {}, session)
+
+    @classmethod
+    async def revoke_all_sessions(cls, session: AsyncSession | None = None) -> int:
+        """讓**所有**使用者的既有 session 立刻失效, 回傳影響的人數。
+
+        每個人以自己目前的世代 +1 (在 SQL 裡算), 跟 `_bump_auth_version` 同一個理由:
+        執行期間有人換密碼也不會把版本號寫回舊值。
+        """
+        db = resolve_session(session)
+        statement = update(cls).values(updated_at=utc_now(), auth_version=cls.auth_version + 1)
+        # 不加 RETURNING: 只要人數, 不必把整張表的 id 搬回來。UPDATE 拿到的一定是
+        # CursorResult, 但 execute 的型別註記只寫到 Result。
+        result = cast(CursorResult, await db.execute(statement))
+        db.expire_all()
+        return result.rowcount
 
     @classmethod
     async def _bump_auth_version(

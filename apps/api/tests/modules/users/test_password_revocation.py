@@ -1,5 +1,6 @@
-"""撤銷 session 的兩個方法對真的資料庫做了什麼: `set_password_and_revoke_sessions()`
-(換密碼) 與 `revoke_sessions()` (登出), 兩者共用同一段 SQL。
+"""撤銷 session 的方法對真的資料庫做了什麼: `set_password_and_revoke_sessions()`
+(換密碼) 與 `revoke_sessions()` (登出) 共用同一段 SQL, `revoke_all_sessions()`
+(全員登出, `make db revoke-sessions`) 是同一個 `+1` 套在整張表上。
 
 這是「把既有 session 踢下線」的唯一實作, 而它守的兩件事**都只有真的
 PostgreSQL 證明得了**:
@@ -173,3 +174,32 @@ async def test_revoke_sessions_keeps_the_password(user_db):
         )
 
     assert password == "old-hash"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_revoke_all_sessions_bumps_every_user(user_db):
+    """每個人以**自己目前的**世代 +1: 在 SQL 裡算, 不是寫入同一個常數。"""
+    async with session_scope() as session:
+        other = UserTable(username="veteran", password="hash", nickname="Veteran", auth_version=5)
+        session.add(other)
+        await session.flush()
+        other_id = str(other.id)
+
+    async with session_scope():
+        await UserTable.revoke_all_sessions()
+
+    assert await _auth_version(user_db) == 2
+    assert await _auth_version(other_id) == 6
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_revoke_all_sessions_returns_affected_count(user_db):
+    async with session_scope() as session:
+        session.add(UserTable(username="second", password="hash", nickname="Second"))
+
+    async with session_scope():
+        affected = await UserTable.revoke_all_sessions()
+
+    assert affected == 2
