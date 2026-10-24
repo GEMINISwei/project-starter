@@ -306,12 +306,16 @@ make db superuser
 
 ### 讓所有人登出
 
-需要讓**所有人**的 token 立刻失效時：把 `.env` 的 `TOKEN_VERSION` 加 1，照〈[套用 `.env` 的變更](#套用-env-的變更)〉
-重新部署。單一使用者的撤銷不需要動主機（見 [`features.md`](features.md#撤銷)）。
+```bash
+make db revoke-sessions
+```
+
+確認後所有使用者的 token 立刻失效（包含執行的人自己），不用改 `.env`、不用重新部署。用在帳號被盜、
+懷疑 token 外流的時候；之後所有人同時重新登入的負擔見 [`features.md`](features.md#撤銷)。
 
 ### 更換 `JWT_SECRET_KEY`
 
-金鑰外洩時要換掉金鑰本身，`TOKEN_VERSION` 加 1 擋不住（理由見 [`features.md`](features.md#撤銷)）。
+金鑰外洩時要換掉金鑰本身，`make db revoke-sessions` 擋不住（理由見 [`features.md`](features.md#撤銷)）。
 在主機上產生新值換掉 `.env` 的 `JWT_SECRET_KEY`（產法與 `make init` 相同），再照
 〈[套用 `.env` 的變更](#套用-env-的變更)〉重新部署。舊金鑰簽的 token 會全部失效，所有人都要重新登入。
 

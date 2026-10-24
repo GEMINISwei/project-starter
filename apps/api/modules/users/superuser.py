@@ -1,4 +1,7 @@
-"""建立超級管理者。唯一的入口是 CLI (`make db superuser`, 見 `scripts/db.py create-superuser`)。
+"""只給 CLI 用的帳號操作: 建立超級管理者 (`make db superuser`) 與全員登出
+(`make db revoke-sessions`)。
+
+兩者的授權模型相同: 呼叫者已經有伺服器的 shell 存取權, 所以都不接在任何 router 上。
 
 這是**僅有的**能產生超級管理者的路徑 (一般的建立使用者永遠不行, 見
 `service.validate_role_ids`), 所以和一般的使用者管理分開放, 一眼看得出邊界。
@@ -16,7 +19,7 @@ from shared.http.errors import LangException
 
 from .errors import UserError
 from .model import UserTable
-from .schema import SuperAdminCreate, UserOperate
+from .schema import SessionRevocation, SuperAdminCreate, UserOperate
 
 
 async def create_super_admin(form_data: SuperAdminCreate) -> UserOperate:
@@ -46,3 +49,11 @@ async def create_super_admin(form_data: SuperAdminCreate) -> UserOperate:
         # 上面查過一次, 這裡只會是查完之後才被別人搶走的 username。
         raise LangException(409, UserError.USERNAME_EXISTS) from exc
     return UserOperate.model_validate(created)
+
+
+async def revoke_all_sessions() -> SessionRevocation:
+    """讓所有使用者都要重新登入 (帳號被盜、懷疑 token 外流時)。
+
+    `JWT_SECRET_KEY` 本身外洩時這不夠: 拿到金鑰的人能自己簽新世代的 token, 那時要換金鑰。
+    """
+    return SessionRevocation(affected=await UserTable.revoke_all_sessions())

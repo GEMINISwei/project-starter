@@ -8,6 +8,7 @@
 #   make db migrate              對運行中的環境套用未執行的 migration (development only)
 #   make db migration "說明"     依 model 的變更產生一支 migration, 不需要啟動環境 (development only)
 #   make db superuser            建立擁有全部權限的超級管理者
+#   make db revoke-sessions      讓所有使用者都要重新登入 (帳號被盜、懷疑 token 外流時)
 #
 # 除了 migration, 都是對 `make start` 起來的那套容器操作。備份用 make backup (資料庫與上傳檔案一起)。
 set -euo pipefail
@@ -147,6 +148,13 @@ cmd_superuser() {
     db_cli_tty create-superuser
 }
 
+# 開發機也要確認: 執行的人自己也會被登出, 而且沒有辦法復原。
+cmd_revoke_sessions() {
+    require_running
+    confirm "所有使用者都會被登出、必須重新登入，確定？"
+    db_cli revoke-sessions
+}
+
 action="${1:-}"
 shift || true
 case "${action}" in
@@ -156,5 +164,6 @@ case "${action}" in
     migrate)   cmd_migrate ;;
     migration) cmd_migration "$@" ;;
     superuser) cmd_superuser ;;
+    revoke-sessions) cmd_revoke_sessions ;;
     *)         usage ;;
 esac

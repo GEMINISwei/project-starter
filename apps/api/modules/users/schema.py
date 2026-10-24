@@ -83,6 +83,9 @@ class UserOperate(BaseModel):
     id: str
 
 
+class SessionRevocation(BaseModel):
+    affected: int
+
 
 class UserToken(BaseModel):
     access_token: str

@@ -140,7 +140,7 @@ shared 綁著這裡的版本，升級時一起升。
    `pydantic`、`PyJWT`、`bcrypt`（版本見 `apps/api/pyproject.toml`）。
 2. 組裝層提供三樣東西，再呼叫 `shared/platform.py` 的 `create_platform_app()`（範例：`app/server.py`）：
    - 滿足 `PlatformEnv` 的設定物件：`project_name`、`postgres_url`、`jwt_secret_key`、
-     `jwt_algorithm`、`expire_hours`、`token_version`（範例：`app/config.py`）。
+     `jwt_algorithm`、`expire_hours`（範例：`app/config.py`）。
    - 繼承 `BasePermission`、含一個 `ALL = WILDCARD` 成員的權限 enum（範例：`app/permissions.py`）。
    - 啟用的 module manifest 清單（範例：`app/registry.py`）。
 3. 要用 `check_user_permission()` 的話，某一個 module 的 manifest 要提供 `current_user_resolver`
