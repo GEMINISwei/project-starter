@@ -52,8 +52,9 @@ flowchart LR
 | [`AGENTS.md`](AGENTS.md) | 給 AI agent 的規則與陷阱 |
 | [`docs/architecture.md`](docs/architecture.md) | 依賴規則、模組介面、目錄結構、前後端契約 |
 | [`docs/development.md`](docs/development.md) | 指令、測試策略、程式碼風格、CI |
-| [`docs/extending.md`](docs/extending.md) | 新增模組、權限、migration、語系 |
-| [`docs/operations.md`](docs/operations.md) | 部署、帳號、Session、限流、備份 |
+| [`docs/features.md`](docs/features.md) | 內建功能怎麼運作：帳號、角色、Session、密碼、限流、語系 |
+| [`docs/extending.md`](docs/extending.md) | 開新案時的擴充項目：新增模組、權限、migration、語系 |
+| [`docs/operations.md`](docs/operations.md) | 部署、主機設定、備份與救援 |
 
 ## 開新專案時
 
