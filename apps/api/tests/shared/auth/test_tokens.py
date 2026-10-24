@@ -13,7 +13,6 @@ class MockEnv:
     expire_hours: int = 8
     project_name: str = "test-project"
     version: str = "1.0.0"
-    token_version: str = "1"
     # 至少 32 bytes: 與 app/config.py 的 MIN_JWT_SECRET_LENGTH 對齊。PyJWT 會對過短的
     # HMAC 金鑰發出 InsecureKeyLengthWarning, 而測試替身本來就不該比正牌設定寬鬆。
     jwt_secret_key: str = "test_secret_key_for_unit_test_at_least_32_chars"
@@ -61,17 +60,8 @@ def test_parse_token_wrong_project_name_raises_401():
     assert exc_info.value.status_code == 401
 
 
-def test_parse_token_wrong_token_version_raises_401():
-    env_v1 = MockEnv(token_version="1")
-    env_v2 = MockEnv(token_version="2")
-    token_data = create_token({"username": "alice", "auth_version": 1}, env_v1)
-    with pytest.raises(LangException) as exc_info:
-        parse_token(token_data["access_token"], env_v2)
-    assert exc_info.value.status_code == 401
-
-
 def test_parse_token_survives_app_version_bump():
-    """改 app version 不應該讓既有 token 失效 (token 只綁 token_version)。"""
+    """改 app version 不應該讓既有 token 失效。"""
     env_v1 = MockEnv(version="1.0.0")
     env_v2 = MockEnv(version="2.0.0")
     token_data = create_token({"username": "alice", "auth_version": 1}, env_v1)
@@ -90,3 +80,23 @@ def test_parse_token_rejects_missing_required_claim(missing_claim: str):
         parse_token(malformed, env)
 
     assert exc_info.value.status_code == 401
+
+
+def test_create_token_has_no_token_version_claim():
+    """全域撤銷改由資料庫的 `auth_version` 負責, token 不再帶全站版號。"""
+    env = MockEnv()
+    token = create_token({"username": "alice", "auth_version": 1}, env)["access_token"]
+    payload = jwt.decode(token, env.jwt_secret_key, algorithms=[env.jwt_algorithm])
+
+    assert "tv" not in payload
+
+
+def test_parse_token_ignores_legacy_token_version_claim():
+    """升級前簽發的 token 還帶著 `tv`, 升級本身不應該把所有人踢下線。"""
+    env = MockEnv()
+    token = create_token({"username": "alice", "auth_version": 1}, env)["access_token"]
+    payload = jwt.decode(token, env.jwt_secret_key, algorithms=[env.jwt_algorithm])
+    payload["tv"] = "7"
+    legacy = jwt.encode(payload, env.jwt_secret_key, algorithm=env.jwt_algorithm)
+
+    assert parse_token(legacy, env)["username"] == "alice"
