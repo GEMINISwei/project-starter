@@ -6,7 +6,7 @@ vi.mock("@/shared/api/request.server", () => ({ apiGet }))
 const pagination = await import("@/shared/pagination/fetch.server")
 
 // 與專案無關的路徑並放寬型別 (理由同 tests/shared/api/request.server.test.ts): `url` 的型別是
-// 「這個專案有哪些分頁端點」, 寫死成 `/roles/` 的話 shared 一移植就編譯不過。
+// 「這個專案有哪些分頁端點」, 寫死成 `/roles/` 的話刪掉 roles 時會跟著壞。
 const fetchPaginatedList = pagination.fetchPaginatedList as unknown as (
   options: Omit<Parameters<typeof pagination.fetchPaginatedList>[0], "url"> & { url: string },
 ) => ReturnType<typeof pagination.fetchPaginatedList>

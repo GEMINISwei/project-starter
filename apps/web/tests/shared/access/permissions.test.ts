@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest"
 import type { Permission } from "@/shared/api/entities"
 import { canAccessRoute, coversPermissions, hasAllPermission } from "@/shared/access/permissions"
 
-// 用與專案無關的權限值: `Permission` 是後端契約產生的聯集, 換一個專案就是另一組值, 而這裡
-// 只驗判斷邏輯。寫成這個專案真的有的權限 (`users:read`) 的話, shared 一移植就編譯不過。
+// 用與專案無關的權限值: 這裡只驗判斷邏輯。寫成這個專案真的有的權限 (`users:read`) 的話,
+// 刪掉那個模組時這支 shared 的測試會跟著壞。
 const READ = "things:read" as unknown as Permission
 const OTHER = "others:read" as unknown as Permission
 

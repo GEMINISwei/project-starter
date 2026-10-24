@@ -4,8 +4,7 @@
 //
 // **這裡只放平台契約要求後端一定要有的型別** (`Permission`、`Language`), 業務 entity
 // (UserInfo、RoleInfo…) 不進來: 由用到它的模組在自己的 `types.ts` 以
-// `Schema<"UserInfo">` (`@/shared/api/contract`) 命名。這樣 shared 不認識任何業務,
-// 整包複製到一個沒有 users/roles 的專案也編譯得過 (`tests/shared/portability` 守)。
+// `Schema<"UserInfo">` (`@/shared/api/contract`) 命名, 刪掉模組時型別跟著一起消失。
 
 import type { components } from "./generated/schema"
 
