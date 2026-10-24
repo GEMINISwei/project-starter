@@ -16,6 +16,7 @@ from app.permissions import Permission
 from modules.roles.public import RoleTable
 from shared.auth import passwords
 from shared.auth.contracts import CurrentUser
+from shared.db.session import release_connection
 from shared.db.table import is_unique_violation
 from shared.http.errors import LangException, ensure_found
 
@@ -143,6 +144,8 @@ async def reset_user_password(id: str, form_data: UserResetPassword) -> UserOper
     if Permission.ALL in target["permissions"]:
         raise LangException(403, UserError.CANNOT_RESET_SUPER_PASSWORD)
 
+    # bcrypt 期間不佔連線 (理由見 `release_connection`)。
+    await release_connection()
     password_hash = await passwords.hash_password_async(form_data.password)
 
     # 同時把 auth_version +1, 這個人所有既有的 session 立刻失效。

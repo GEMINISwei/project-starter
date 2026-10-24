@@ -23,6 +23,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -101,6 +102,24 @@ def active_session() -> AsyncSession:
             "HTTP 之外的入口（WebSocket、CLI、背景工作）必須自己包在 session_scope() 裡。"
         )
     return session
+
+
+async def release_connection() -> None:
+    """結束目前只讀過的交易, 把連線還回連線池; 之後的查詢會自動再拿一條。
+
+    給請求中途要做慢的非資料庫工作 (bcrypt) 的路徑用: 那段時間佔著連線, 連線池就會被
+    排隊中的請求佔滿, 連帶讓所有其他請求拿不到連線。
+
+    **已經寫過資料就拒絕**: 中途結束交易會讓 middleware「回應是錯誤就整批回滾」對那些寫入
+    失效。有沒有寫過問 PostgreSQL (交易拿到 transaction id 了沒有), 涵蓋 ORM 與直接下的 SQL。
+    """
+    session = _current_session.get()
+    if session is None or not session.in_transaction():
+        return
+    wrote = await session.scalar(text("SELECT pg_current_xact_id_if_assigned() IS NOT NULL"))
+    if wrote:
+        raise RuntimeError("這次請求已經寫過資料, 不能中途歸還連線")
+    await session.rollback()
 
 
 def resolve_session(session: AsyncSession | None) -> AsyncSession:
