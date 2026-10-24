@@ -36,6 +36,9 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
+          # make check migrate 要和最近的 release tag 比對; 預設只抓一個 commit、不抓 tag,
+          # 找不到 tag 時檢查會當成「還沒發版」而略過。
+          fetch-depth: 0
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           enable-cache: true

@@ -233,8 +233,82 @@ jobs:
   # 每套系統一個 job, job 名稱是 `deploy (<environment>)`, 失敗的那套可以單獨 Re-run。
   # 一次一套: 同一台主機上的多套系統同時備份、拉 image、跑 migration 會互搶資源。
   # fail-fast 關掉: 預設會在一套失敗時取消其他還在跑的, 可能砍在 migration 中途。
+  # migration 只往前: 主機資料庫的 revision 不在要部署的這一版裡 (回滾跨過了 migration, 或兩邊分岔),
+  # 舊版的 migrate 會找不到它而失敗。整組都檢查過才部署任何一套, 否則可能前幾套已經回滾、
+  # 後面的被拒絕, 同一組跑著不同版本。這個 job 不動主機: 不備份、不 checkout、不停 nginx。
+  migration-check:
+    needs: [version, targets]
+    name: migration check (${{ matrix.environment }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix: ${{ fromJSON(needs.targets.outputs.matrix) }}
+    environment: ${{ matrix.environment }}
+    permissions:
+      contents: read
+    steps:
+      # 讀資料庫 revision 的腳本用 workflow 自己這份: 主機上的 checkout 與要部署的 tag 都可能是
+      # 還沒有 `make db revision` 的舊版。
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: scripts
+      - uses: actions/checkout@v7
+        with:
+          ref: refs/tags/${{ needs.version.outputs.tag }}
+          path: target
+          sparse-checkout: apps/api/migrations/versions
+      - name: 檢查 secrets
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          ENVIRONMENT: ${{ matrix.environment }}
+        run: |
+          missing=()
+          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_PATH DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS; do
+            [ -n "${!name}" ] || missing+=("${name}")
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "environment ${ENVIRONMENT} 缺少 secrets：${missing[*]}" >&2
+            exit 1
+          fi
+      - name: 準備 SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+      # 這份 Makefile 與 scripts/ 經 SSH 的 stdin 送到主機的暫存目錄, 接上主機的 .env 跑
+      # `make db revision`; 主機的 repo 目錄一個檔案都不動。
+      - name: 資料庫不會往回
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          remote="$(cat <<EOF
+          set -euo pipefail
+          tmp="\$(mktemp -d)"
+          trap 'rm -rf "\${tmp}"' EXIT
+          tar -x -C "\${tmp}"
+          ln -s $(printf %q "${DEPLOY_PATH}")/.env "\${tmp}/.env"
+          cd "\${tmp}"
+          make db revision
+          EOF
+          )"
+          revision="$(tar -c Makefile scripts | ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" \
+            -o BatchMode=yes "${DEPLOY_USER}@${DEPLOY_HOST}" "bash -c $(printf %q "${remote}")")"
+          source scripts/lib/migrations.sh
+          check_migration_direction target/apps/api/migrations/versions "${revision}"
+
   deploy:
-    needs: [version, targets, build]
+    needs: [version, targets, build, migration-check]
     # matrix 有 group 與 environment 兩個值, 不指定名稱的話 job 會叫 `deploy (production, production-a)`;
     # summary 靠 `deploy (` 開頭認出這些 job。
     name: deploy (${{ matrix.environment }})

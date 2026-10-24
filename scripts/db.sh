@@ -9,6 +9,7 @@
 #   make db migration "說明"     依 model 的變更產生一支 migration, 不需要啟動環境 (development only)
 #   make db superuser            建立擁有全部權限的超級管理者
 #   make db revoke-sessions      讓所有使用者都要重新登入 (帳號被盜、懷疑 token 外流時)
+#   [內部] make db revision      印出資料庫目前的 migration revision; 全新主機什麼都不印 (部署用)
 #
 # 除了 migration, 都是對 `make start` 起來的那套容器操作。備份用 make backup (資料庫與上傳檔案一起)。
 set -euo pipefail
@@ -158,6 +159,22 @@ cmd_revoke_sessions() {
     db_cli revoke-sessions
 }
 
+# deploy.yml 在部署任何一套之前讀它, 判斷這次部署會不會讓資料庫往回 (scripts/lib/migrations.sh)。
+# stdout 只放 revision 本身, 才能被 $() 接住。全新主機 (還沒有資料 volume) 什麼都不印。
+# 有資料 volume 但資料庫沒在跑時失敗, 不當成全新主機: 那會讓回滾安靜地通過檢查。
+cmd_revision() {
+    local volumes
+    require_env COMPOSE_PROJECT_NAME
+    require_mode
+    volumes="$(docker volume ls -q)" || { echo "無法列出 docker volume" >&2; exit 1; }
+    grep -qx "${COMPOSE_PROJECT_NAME}_${MODE}_postgres_data" <<< "${volumes}" || return 0
+    require_running
+    # 資料庫建好了、但還沒跑過任何 migration 時沒有這張表。
+    if [ "$(postgres_tool psql -tAq -c "SELECT to_regclass('public.alembic_version') IS NOT NULL")" = t ]; then
+        postgres_tool psql -tAq -c "SELECT version_num FROM alembic_version"
+    fi
+}
+
 action="${1:-}"
 shift || true
 case "${action}" in
@@ -168,5 +185,6 @@ case "${action}" in
     migration) cmd_migration "$@" ;;
     superuser) cmd_superuser ;;
     revoke-sessions) cmd_revoke_sessions ;;
+    revision)  cmd_revision ;;
     *)         usage ;;
 esac

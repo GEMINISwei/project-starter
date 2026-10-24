@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 #
-# 檢查與測試: make check [lint|contract|types|test|build|integration] (不帶參數 = 前五項依序全跑)
+# 檢查與測試: make check [lint|contract|migrate|types|test|build|integration] (不帶參數 = 前六項依序全跑)
 #
-#   make check               lint → contract → types → test → build, 前後端都跑, 不需要 Docker (送出前跑這個)
+#   make check               lint → contract → migrate → types → test → build, 前後端都跑, 不需要 Docker (送出前跑這個)
 #   make check lint          ruff + import-linter + eslint + dependency-cruiser + knip + shellcheck + compose 檔
 #   make check contract      重產契約與前端型別到暫存目錄, 確認與 repo 裡的一致 (只讀, 不改檔)
+#   make check migrate       已發版的 migration 沒有被修改或刪除 (和最近的 release tag 比對)
 #   make check types         mypy + tsc
 #   make check test          pytest + vitest (帶覆蓋率), 沒有資料庫的 integration 測試會 skip
 #   make check build         前端 production build, 並確認 Next 有認到 proxy.ts
@@ -19,6 +20,8 @@ source "$(dirname "$0")/lib/pg.sh"
 source "$(dirname "$0")/lib/compose.sh"
 # shellcheck source=scripts/lib/contract.sh
 source "$(dirname "$0")/lib/contract.sh"
+# shellcheck source=scripts/lib/migrations.sh
+source "$(dirname "$0")/lib/migrations.sh"
 
 # deny_on_production 看的是 .env 的 MODE, 要先載入。
 load_env
@@ -68,6 +71,13 @@ lint_compose() {
         fi
     done
     rm -f "${env_file}"
+}
+
+# 部署判斷資料庫「一致」靠的是 revision id: 已發版的 migration 被改了內容而 id 不變的話,
+# 那道檢查會誤判成一致, 改過的結構也永遠不會套用到已經跑過它的資料庫上。
+run_migrate() {
+    step "migrate"
+    check_released_migrations apps/api/migrations/versions
 }
 
 run_types() {
@@ -150,13 +160,14 @@ run_contract() {
 }
 
 case "${1:-all}" in
-    all)         run_lint; run_contract; run_types; run_test; run_build ;;
+    all)         run_lint; run_contract; run_migrate; run_types; run_test; run_build ;;
     lint)        run_lint ;;
     types)       run_types ;;
     test)        run_test ;;
     build)       run_build ;;
     integration) run_integration ;;
     contract)    run_contract ;;
+    migrate)     run_migrate ;;
     *)
         sed -n '/^#   make check/s/^#   //p' "$0" >&2
         exit 1

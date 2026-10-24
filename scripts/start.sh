@@ -100,13 +100,27 @@ if [ "${MODE}" = production ]; then
 fi
 check_nginx_config
 
+# compose 要等 migrate 跑完才知道它失敗, 那時線上的 api 已經被換成新的容器而起不來, 結果就是停機。
+# 所以先用要上線的 image 單獨跑一次: 失敗就停在這裡, 線上服務維持原狀 (PostgreSQL 的 DDL 在交易裡,
+# 失敗會整個撤回)。成功之後 up 裡的 migrate 沒有待執行的 migration, 直接結束。
+migrate_first() {
+    if ! app_compose run --rm -T "$@" migrate; then
+        echo "migration 失敗，沒有切換任何服務（原因見上方訊息）" >&2
+        exit 1
+    fi
+}
+
 if [ "${MODE}" = development ]; then
+    migrate_first
     app_compose up -d --remove-orphans
 else
     if [ -n "${API_IMAGE:-}${WEB_IMAGE:-}" ]; then
         require_env API_IMAGE WEB_IMAGE
-        IMAGE_PULL_POLICY=always app_compose up -d --remove-orphans
+        export IMAGE_PULL_POLICY=always
+        migrate_first --pull always
+        app_compose up -d --remove-orphans
     else
+        migrate_first --build
         app_compose up -d --build --remove-orphans
     fi
 fi
