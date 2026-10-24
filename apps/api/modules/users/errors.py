@@ -8,6 +8,10 @@ class UserError(BaseError):
     CANNOT_DISABLE_SUPER = LangText(zh="無法停用超級管理者帳號", en="Cannot Disable Super Admin")
     CANNOT_DISABLE_SELF = LangText(zh="無法停用自己的帳號", en="Cannot Disable Self")
     CURRENT_PASSWORD_MISMATCH = LangText(zh="目前密碼錯誤", en="Current Password Is Incorrect")
+    PASSWORD_CHANGED_CONCURRENTLY = LangText(
+        zh="密碼剛被其他操作變更，請重新登入後再試",
+        en="Password Was Just Changed Elsewhere, Please Sign In Again and Retry",
+    )
     ROLE_NOT_FOUND = LangText(zh="角色不存在", en="Role Not Found")
     ROLE_DISABLED = LangText(zh="角色已停用", en="Role Disabled")
     CANNOT_RESET_SUPER_PASSWORD = LangText(

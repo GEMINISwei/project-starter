@@ -147,6 +147,8 @@ class UserTable(BaseTable):
         id: str,
         password_hash: str,
         session: AsyncSession | None = None,
+        *,
+        expected_auth_version: int | None = None,
     ) -> dict | None:
         """換掉密碼並讓該使用者所有既有 session 立刻失效。
 
@@ -162,8 +164,13 @@ class UserTable(BaseTable):
         自己手上那張 token, 所以要當場補簽一張新的 (見 `account.change_own_password`)。
         那個值一定要是 SQL 算出來的這一個, 不能拿呼叫端手上的舊值 +1 —— 併發時推算出來
         的會是別人的世代, 補簽的新 token 一送出就是失效的。
+
+        `expected_auth_version` 有給時, 只在資料庫的世代號仍是那個值時才寫入, 否則回傳 None:
+        讀取與寫入之間 (中間隔著 bcrypt) 有別的請求換過密碼或登出時, 不能覆寫。
         """
-        return await cls._bump_auth_version(id, {"password": password_hash}, session)
+        return await cls._bump_auth_version(
+            id, {"password": password_hash}, session, expected_auth_version
+        )
 
     @classmethod
     async def revoke_sessions(cls, id: str, session: AsyncSession | None = None) -> dict | None:
@@ -194,6 +201,7 @@ class UserTable(BaseTable):
         id: str,
         values: dict,
         session: AsyncSession | None,
+        expected_auth_version: int | None = None,
     ) -> dict | None:
         """把 `auth_version` 在 **SQL 裡** +1, 連同 `values` 一起寫入, 回傳寫入後的世代號。
 
@@ -205,9 +213,12 @@ class UserTable(BaseTable):
             return None
 
         db = resolve_session(session)
+        conditions = [cls.id == row_id]
+        if expected_auth_version is not None:
+            conditions.append(cls.auth_version == expected_auth_version)
         statement = (
             update(cls)
-            .where(cls.id == row_id)
+            .where(*conditions)
             .values(**values, updated_at=utc_now(), auth_version=cls.auth_version + 1)
             .returning(cls.id, cls.auth_version)
         )

@@ -7,6 +7,7 @@
 from shared.auth import passwords
 from shared.auth.contracts import AppEnvProtocol, CurrentUser
 from shared.auth.tokens import create_token
+from shared.db.session import release_connection
 from shared.http.errors import LangException, ensure_found
 
 from .errors import UserError
@@ -19,6 +20,9 @@ async def login_user(form_data: UserLogin, env: AppEnvProtocol) -> UserToken:
         username=form_data.username,
         include_password=True,
     )
+    # bcrypt 期間不佔連線。登入不寫入任何資料, 不必再讀一次: 這段時間內換了密碼或被停用的話,
+    # token 帶的世代或帳號狀態在下一個請求就對不上。
+    await release_connection()
     # 帳號不存在時也要比對一次 (見 `verify_login_password`), 所以先比對、再判斷存不存在。
     password_matched = await passwords.verify_login_password(
         form_data.password, None if user_data is None else user_data["password"]
@@ -41,6 +45,9 @@ async def change_own_password(
 
     **舊密碼不符不能回 401**: 前端把 401 一律解釋成 session 過期並導回登入頁,
     「密碼打錯一個字」會變成「被登出」。所以是 403。
+
+    兩次 bcrypt 期間不佔連線, 寫入時以讀到的世代號為條件: 這段時間內另一個請求換了密碼或
+    登出的話, 舊密碼是對著過期的雜湊比對的, 不能覆寫, 回 409。
     """
     user_data = ensure_found(
         await UserTable.find_detail_by_username(
@@ -49,6 +56,7 @@ async def change_own_password(
         ),
         UserError.NOT_FOUND,
     )
+    await release_connection()
 
     if not await passwords.verify_password_async(
         plain_password=form_data.current_password,
@@ -56,16 +64,15 @@ async def change_own_password(
     ):
         raise LangException(403, UserError.CURRENT_PASSWORD_MISMATCH)
 
-    # bcrypt 要在進入資料庫操作之前算完, 交易才不會多持有鎖 100–300ms。
     password_hash = await passwords.hash_password_async(form_data.new_password)
 
-    updated = ensure_found(
-        await UserTable.set_password_and_revoke_sessions(
-            id=current_user["id"],
-            password_hash=password_hash,
-        ),
-        UserError.NOT_FOUND,
+    updated = await UserTable.set_password_and_revoke_sessions(
+        id=current_user["id"],
+        password_hash=password_hash,
+        expected_auth_version=user_data["auth_version"],
     )
+    if updated is None:
+        raise LangException(409, UserError.PASSWORD_CHANGED_CONCURRENTLY)
 
     return UserToken.model_validate(
         create_token(
