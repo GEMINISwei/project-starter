@@ -122,7 +122,7 @@ make gen-types
 ### 6. 檢查
 
 ```bash
-make check               # lint + contract + types + test + build
+make check               # lint + contract + migrate + types + test + build
 make check integration   # 需要資料庫的測試 + model 與 migration 一致
 ```
 
@@ -212,7 +212,12 @@ autogenerate 固定會漏三件事，產出一定要讀：
 | 改名會被看成「drop 一個、add 一個」 | 改寫成 `op.alter_column(..., new_column_name=...)` |
 | 不能在交易裡跑的 DDL（`CREATE INDEX CONCURRENTLY`） | 當成獨立的維運操作 |
 
-- **migration 不會隨程式碼回退**。改名與刪除要拆成兩次發版：先加新的、兩邊並存，下一版才刪舊的。
+- **migration 只往前**：已發版的 migration 不可修改或刪除（`make check migrate` 和最近的 release tag
+  比對），要改結構就新增一支。發 0.0.1 之前沒有 tag，可以直接改初始 migration。
+- **兩版之間多了 migration 就不能回滾**，部署前的檢查會拒絕（見
+  [`operations.md`](operations.md#回滾與-migration)）。
+- 改名與刪除仍建議拆成兩次發版（先加新的、兩邊並存，下一版才刪舊的）：部署時 migrate 先跑、
+  程式後換，中間幾秒舊程式會跑在新結構上。
 - 保持**一個 head**（`tests/test_migrations.py` 守），分岔了用 `alembic merge`。
 - migration 裡**不要 import model**，用 `sa` 與 `op`；不要自己開交易或 `COMMIT`。
 - 資料回填寫在 migration，不要寫進 `shared/platform.py` 的 lifespan。

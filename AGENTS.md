@@ -34,6 +34,8 @@
 13. **`apps/web/proxy.ts` 留在原位**：放錯位置 Next 照樣 build 成功、路由保護整層消失
     （`make check build` 確認輸出有 `ƒ Proxy (Middleware)`）。
 14. **compose 旗標不要自己組**，一律用 `scripts/lib/compose.sh`。
+15. **migration 只往前**：已發版的 migration 不可修改或刪除，要改結構就新增一支（`make check migrate`）。
+    兩版之間多了 migration 就不能回滾，部署前的檢查會拒絕（[說明](docs/operations.md#回滾與-migration)）。
 
 各條由哪個工具或測試擋，見 [`development.md`](docs/development.md#架構本身也有測試)。
 完整規則見 [`architecture.md`](docs/architecture.md#強制依賴規則)。

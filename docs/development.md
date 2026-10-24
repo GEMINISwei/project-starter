@@ -63,7 +63,7 @@ make services [volumes|logs [服務]|restart|down]   # 不帶參數 = 版本與 
 make backup                                  # 資料庫與上傳檔案一起備份，期間對外服務暫停
 make db   psql|restore [檔案]|reset|migrate|migration "說明"|superuser
 make uploads restore [檔案]
-make check [lint|contract|types|test|build|integration]   # 不帶參數 = 前五項，送出前跑
+make check [lint|contract|migrate|types|test|build|integration]   # 不帶參數 = 前六項，送出前跑
 make gen-types                               # 改過後端 schema／權限／語系後必跑
 ```
 
@@ -157,6 +157,9 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 | `scripts/` 的 shell 寫法 | shellcheck（`make check lint`） |
 | compose 展得開、用到的變數 `.env.example` 都有 | `docker compose config`（`make check lint`） |
 | 契約與前端型別是最新的 | `make check contract`（只比對、不改檔） |
+| 已發版的 migration 沒有被修改或刪除 | `make check migrate`（`apps/api/tests/test_migration_checks.py`） |
+| 部署不會讓資料庫往回、整組都檢查過才部署 | `deploy.yml` 的 `migration-check`（`apps/api/tests/test_migration_checks.py`、`test_deploy_targets.py`） |
+| `make start` 先單獨跑 migrate，失敗不切換服務 | `apps/api/tests/test_stack_scripts.py` |
 | `shared/` 用到的 CSS 變數都定義在 shared 裡 | `apps/web/tests/shared/ui/tokens.test.ts` |
 
 規則本身見 [`architecture.md`](architecture.md#強制依賴規則)。

@@ -51,8 +51,9 @@ nginx 模板改了也用 `make start`：它會先跑 `nginx -t` 再重建 nginx�
 同一台主機要跑多套，就各用一個目錄，`.env` 的 `COMPOSE_PROJECT_NAME` 與 `SYSTEM_PORT` 不重複
 （見〈[新增一套系統](#新增一套系統)〉）。
 
-啟動順序是 `postgres → migrate → api → web → nginx`。api 等 migration **成功結束**才啟動，
-所以 migration 失敗時不會有服務對外開放。沒有待執行的 migration 時 `migrate` 直接結束。
+`make start` 先用要上線的 image **單獨跑一次 migrate**，成功才切換服務：失敗就停在這裡，線上的服務
+維持原狀（PostgreSQL 的 DDL 在交易裡，失敗會整個撤回）。之後的啟動順序是
+`postgres → migrate → api → web → nginx`，這時已經沒有待執行的 migration，`migrate` 直接結束。
 
 prod overlay 比 dev 多了 **log 上限**與**記憶體上限**（api、web 各 512M，postgres 1G）。
 api 週期性重啟時，先懷疑記憶體上限。
@@ -107,7 +108,9 @@ environment（見下方〈新增一套系統〉），workflow 不用改。`produ
 
 1. 要部署的 tag 必須是 `v<APP_VERSION>`（`apps/api/app/config.py`），不一致就停。
 2. 列出 repo 裡屬於這些組的 environment；有任何一組找不到就停，並列出現有的組。
-3. 重跑一次 CI（`ci.yml`），沒過不部署。
+3. 重跑一次 CI（`ci.yml`），沒過不部署。同時逐套讀主機資料庫的 migration revision
+   （`migration check (<environment>)`）：任何一套的資料庫比要部署的版本新，**整組都不部署**，
+   主機什麼都不動（見〈[回滾與 migration](#回滾與-migration)〉）。
 4. 建兩份 production image 推到 GHCR：`ghcr.io/<帳號>/<repo>-api:<組名>` 與 `-web:<組名>`（全小寫）。
    只建一次，這次部署的每一組各標一個組名。image 只標組名，執行中的版本看 `APP_VERSION`
    （設定頁顯示的就是它）；不同組用不同標籤，先行測試的組部署新版時不會蓋掉其他組的 image。
@@ -262,12 +265,22 @@ tag），第一版是 `make release 0.0.1`。
 gh workflow run deploy.yml --ref main -f tag=v0.1.0 -f target="production staging"
 ```
 
-**migration 不會倒退**：新版改過
-資料表的話，舊程式可能讀不了新結構，這時要用部署前的備份 `make db restore`（會失去備份之後的資料）。
-部署前的備份標的是當時線上的版本，所以回滾到 `v0.1.0` 後，`make services` 上方的版本是 `v0.1.0`，
-`make db restore` 列出的就是 `v0.1.0` 時留下的備份 —— **前提是它還沒被清掉**：部署後只留最近
-`BACKUP_KEEP` 組，不分版號，之後又部署過很多次的話，那一版的備份可能已經不在了。
-回滾預期只用在嚴重問題，平常部署的應該是穩定版本；真的需要長期保留某一版，自己把那組備份搬出 `backups/`。
+#### 回滾與 migration
+
+**migration 只往前，回滾只換程式。** 要部署的版本和線上版本的 migration 一樣時，回滾照常；
+兩版之間多了 migration（資料庫比要部署的版本新）時，部署前的檢查會拒絕，整組都不動。
+這時有兩條路：
+
+- **往前修**（建議）：修好之後發一個新版本。
+- **還原部署前的備份**（會失去備份之後的資料）：在主機上 `git checkout v<舊版號>`，`make db restore`
+  選那一版留下的備份（資料庫連同 migration 的版本一起退回），再 `make start`。
+
+`make db restore` 只列出與 checkout 版本一致的備份，部署前的備份標的是當時線上的版本 ——
+**前提是它還沒被清掉**：部署後只留最近 `BACKUP_KEEP` 組，不分版號，之後又部署過很多次的話，
+那一版的備份可能已經不在了。真的需要長期保留某一版，自己把那組備份搬出 `backups/`。
+
+在主機上手動 `git checkout` 舊版再 `make start` 也一樣：單獨跑的 migrate 會失敗而不切換服務，
+這時 checkout 回原本的 tag 即可。
 
 ### 可觀測性只到 stdout
 
@@ -457,6 +470,7 @@ make uploads restore backups/x.tar   # 直接指定檔案
 make backup allow-fresh              # 同 make backup，但全新主機（還沒有資料 volume）時略過（部署用）
 make backup prune 10                 # 只留最近 10 組，同名的 .dump 與 .tar 一起刪（部署後自動跑）
 make version                         # 這個目錄的版本（APP_VERSION），例如 v0.0.2
+make db revision                     # 資料庫目前的 migration revision，全新主機什麼都不印（部署前的檢查用）
 ```
 
 `backups/` 只在這台機器上，**正式環境要自己安排排程與異地保存**，並定期實際還原一次 ——
