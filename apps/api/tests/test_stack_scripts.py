@@ -547,6 +547,17 @@ def test_psql_reads_credentials_inside_container(box: Sandbox) -> None:
     assert "PGPASSWORD" not in call
 
 
+def test_psql_prompt_shows_project_name(box: Sandbox) -> None:
+    """每套系統的資料庫都叫 app, 同時連好幾套時要從提示字元分得出是哪一套。"""
+    box.write_env("development")
+    box.containers(*ALL_RUNNING)
+    result = box.run("db", "psql")
+    assert result.returncode == 0, result.stderr
+    call = next(call for call in box.calls() if " psql " in call)
+    assert f"PROMPT1={PROJECT}%R" in call
+    assert f"PROMPT2={PROJECT}%R" in call
+
+
 @pytest.mark.parametrize(
     ("command", "tool"), [(("backup",), "pg_dump"), (("db", "restore"), "pg_restore")]
 )
