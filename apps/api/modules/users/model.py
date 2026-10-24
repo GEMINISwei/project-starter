@@ -70,8 +70,7 @@ class UserTable(BaseTable):
     password: Mapped[str]
     nickname: Mapped[str]
     is_disabled: Mapped[bool] = mapped_column(default=False)
-    # 每個使用者自己的 token 世代。重設密碼時 +1, 讓那個人的所有既有 session 與
-    # WebSocket ticket 立刻失效。
+    # 每個使用者自己的 token 世代。換密碼與登出時 +1, 讓那個人的所有既有 session 立刻失效。
     #
     # 全員撤銷 (`make db revoke-sessions`) 也是每一列各 +1, 沒有另一個全站的版號。
     auth_version: Mapped[int] = mapped_column(default=1)
@@ -149,7 +148,7 @@ class UserTable(BaseTable):
         password_hash: str,
         session: AsyncSession | None = None,
     ) -> dict | None:
-        """換掉密碼並讓該使用者所有既有 session/WS ticket 立刻失效。
+        """換掉密碼並讓該使用者所有既有 session 立刻失效。
 
         **這兩件事必須是同一個資料庫操作。** 拆成「先改密碼、再撤銷」的話, 中間任何一次
         崩潰都會留下「密碼已換、舊 session 還活著」的狀態 —— 而那正是這個功能存在的理由

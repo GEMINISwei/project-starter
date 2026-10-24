@@ -92,8 +92,8 @@ make gen-types
    ```
 
 3. **兩個組裝點都要加**：`config/routes.ts` 的 `ENABLED_MODULES`，以及
-   `config/shell/nav-icons.ts` 的 `NAV_ICONS`。漏了圖示會編譯失敗；**漏了 `ENABLED_MODULES`
-   不會** —— 頁面照樣渲染，只是沒有導覽也沒有 proxy 保護。
+   `config/shell/nav-icons.ts` 的 `NAV_ICONS`。漏了圖示會編譯失敗；漏了 `ENABLED_MODULES`
+   由 `tests/config/routes.test.ts` 擋（頁面在 `app/` 裡卻不在路由清單上）。
 4. 在 `public.server.ts` 具名轉出頁面、`generateMetadata` 與 props 型別，再在**對應區**的
    目錄底下建薄 route adapter（`group: "user"` 放 `(user)/`；`"admin"` 放 `admin/`，`path` 也要以 `/admin/` 開頭）：
 
@@ -110,8 +110,8 @@ make gen-types
    }
    ```
 
-   **Next 特有的 export 要逐一接上，漏掉沒有錯誤訊息**，清單見
-   [`architecture.md`](architecture.md#frontend-module-介面)。
+   **Next 特有的 export 要逐一接上**：Next 本身漏掉不會報錯，由 `tests/app/route-adapters.test.ts` 擋，
+   清單見 [`architecture.md`](architecture.md#frontend-module-介面)。
 5. 模組的 server page 自己再用 `canAccessRoute(permissions, PRODUCTS_ROUTE)` 擋一次（引用自己
    manifest 的常數；模組不能引用 `config/`）。layout 只做粗篩，真正的授權在後端。
 6. 列表頁直接複用：`shared/pagination` 的 `parsePagination()`、`fetchPaginatedList()`；
@@ -122,55 +122,9 @@ make gen-types
 ### 6. 檢查
 
 ```bash
-make check               # lint + types + test + build + portable
+make check               # lint + contract + types + test + build
 make check integration   # 需要資料庫的測試 + model 與 migration 一致
 ```
-
-## 把 shared 帶到另一個專案
-
-兩邊的 `shared/` 可以整包複製到另一個專案直接使用（承諾與限制見
-[`architecture.md`](architecture.md#shared-的可移植性)）。前提是新專案沿用同一條技術線：
-後端 FastAPI + SQLAlchemy 2.0 async（PostgreSQL），前端 Next.js App Router + React。
-shared 綁著這裡的版本，升級時一起升。
-
-### 後端
-
-1. 複製 `apps/api/shared/` 與 `apps/api/tests/shared/`，連同 `tests/` 根目錄的 `__init__.py`、
-   `conftest.py`、`integration.py`。第三方相依：`fastapi`、`sqlalchemy[asyncio]`、`asyncpg`、
-   `pydantic`、`PyJWT`、`bcrypt`（版本見 `apps/api/pyproject.toml`）。
-2. 組裝層提供三樣東西，再呼叫 `shared/platform.py` 的 `create_platform_app()`（範例：`app/server.py`）：
-   - 滿足 `PlatformEnv` 的設定物件：`project_name`、`postgres_url`、`jwt_secret_key`、
-     `jwt_algorithm`、`expire_hours`（範例：`app/config.py`）。
-   - 繼承 `BasePermission`、含一個 `ALL = WILDCARD` 成員的權限 enum（範例：`app/permissions.py`）。
-   - 啟用的 module manifest 清單（範例：`app/registry.py`）。
-3. 要用 `check_user_permission()` 的話，某一個 module 的 manifest 要提供 `current_user_resolver`
-   （回傳 `shared/auth/contracts.py` 的 `CurrentUser`，範例：`modules/users/manifest.py`），
-   token 用 `shared/auth/tokens.py` 的 `create_token()` 簽發。
-4. OpenAPI 裡要有 `Permission` 與 `Language` 兩個 schema，前端 shared 靠它們產型別：
-   `Permission` 只要有任何 schema 欄位標成它就會進去；`Language` 沿用 `modules/languages/`
-   （或照 `tests/shared/minimal_app.py` 的寫法自己帶進去）。
-
-### 前端
-
-1. 複製 `apps/web/shared/` 與 `apps/web/tests/shared/`，連同 `tests/setup.ts`、`tests/stubs/`，
-   以及 `vitest.config.ts` 裡把 `server-only` 換成 stub 的 alias。第三方相依：`next`、`react`、
-   `lucide-react`。`tsconfig.json` 的 `@/*` 要指到專案根。
-2. 從後端產生 `shared/api/generated/schema.d.ts`（`make gen-types` 的做法見 `scripts/gen-types.sh`）。
-3. 文件根依序載入 `shared/ui/styles/` 的 `tokens.css` → 專案的 `theme.css` → `base.css` →
-   `message-page.css`，並包上 `LocaleProvider`、`PublicConfigProvider` 與 `NotifyViewport`
-   （範例：`app/layout.tsx`）。`global-error.tsx` 在 root layout 之外，要自己再載一次 `tokens.css`。
-4. 在 `shared/session/login-contract.ts` 的 `LOGIN_PATH` 提供登入頁並認得 `?reason=`，
-   路由保護以 `ACCESS_TOKEN_COOKIE` 判斷有沒有登入（範例：`modules/auth/`、`proxy.ts`）。
-5. 執行期環境變數：`API_URL`（後端位址）、`EXPIRE_HOURS`（cookie 壽命，與後端同一個值）、
-   `SYSTEM_NAME`（顯示名稱）。
-
-### 確認
-
-`make check portable` 做的就是上面這件事的自動版：把兩邊的 shared 複製到空目錄，後端跑 mypy 與
-pytest，前端用只有平台 schema 的契約跑 `tsc` 與 vitest。新專案可以把 `scripts/check.sh` 的
-`run_portable` 連同 `apps/api/tests/shared/minimal_app.py` 一起帶走。
-
-**在新專案修了 shared 的錯，記得回到模板也修一次**，否則兩份會各自漂移，下次移植又要重踩一遍。
 
 ## 分頁、篩選與交易
 

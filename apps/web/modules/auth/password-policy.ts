@@ -1,4 +1,4 @@
-// 密碼規則。數字對應後端 users 模組的限制 (bcrypt 只看前 72 bytes), 登入、註冊、
+// 密碼規則。數字對應後端 users 模組的限制 (bcrypt 只看前 72 bytes), 登入、
 // 個人設定與使用者管理都用這一份, 由 `public.client.ts` 對外。
 
 import { translate } from "@/shared/i18n/dictionary"

@@ -8,7 +8,7 @@ app（組裝層） → modules（垂直功能） → shared（平台能力）
 
 - `app`：框架入口與組裝點，只決定啟用哪些模組、怎麼掛載。
 - `modules`：一個完整的功能，包含它的資料、規則、API／畫面。
-- `shared`：不認識任何業務名稱、多個模組共用的能力。
+- `shared`：多個模組共用的能力。
 
 這份文件只講**規則與介面**，操作步驟見 [`extending.md`](extending.md)。
 
@@ -45,7 +45,7 @@ app（組裝層） → modules（垂直功能） → shared（平台能力）
 兩個 app 都**沒有 `src/`**：後端 import root 是 `apps/api/`（`from modules.users.public import …`），
 前端 `@/` 指向 `apps/web/`。**新增一層原始碼目錄時，要同步加進兩個檢查工具的掃描範圍**
 （`apps/web/package.json` 的 `check:architecture`、`apps/api/pyproject.toml` 的 `root_packages`），
-漏掉不會報錯，只是那一層不再受邊界規則管。
+漏掉的話那一層不受邊界規則管；兩邊的架構測試會擋。
 
 ## 前後端對照
 
@@ -97,7 +97,7 @@ app（組裝層） → modules（垂直功能） → shared（平台能力）
 | 這個專案的外觀（覆寫設計變數） | `apps/web/app/theme.css` |
 | 單一功能的資料載入、action、權限判斷、型別 | `apps/web/modules/<name>/` |
 | 單一功能的畫面（元件、只服務畫面的 hook、CSS module） | `apps/web/modules/<name>/ui/` |
-| 至少兩個功能用到、不含業務知識的能力 | `apps/web/shared/`、`apps/api/shared/` |
+| 至少兩個功能用到的共用能力 | `apps/web/shared/`、`apps/api/shared/` |
 | 環境設定、啟用清單、Permission enum 的成員 | `apps/api/app/` |
 | 與業務無關的 FastAPI 接線（middleware、例外處理、lifespan） | `apps/api/shared/platform.py` |
 | 單一功能的 router、schema、service、model、權限 metadata | `apps/api/modules/<name>/` |
@@ -151,13 +151,13 @@ app/
 | `page.tsx` | 只有 import、Next 特有 export 的轉接、回傳單一 JSX（測試強制） |
 | `layout.tsx` | session 讀取、`redirect()`、粗略的權限篩選、組裝外殼。**不可有業務規則** |
 | `error`／`global-error`／`not-found`／`loading` | 用 `shared/ui` 的 `MessagePage`／`RouteLoading` 填文案 |
-
-**`<main>` 地標由外框的擁有者提供**：`(protected)` 兩區是外殼（`config/shell/AreaLayout.tsx`），
-頁面與模組不要再渲染 `<main>`（`tests/architecture.test.ts` 擋）；公開頁（登入、註冊）與整頁的
-`MessagePage` 沒有外殼，自己提供。
 | `route.ts` | 不依賴模組、session 或後端的常數回應（目前只有 `healthz`） |
 
-**Next 只讀 route 檔自己的 export，模組裡的不會跟過來**，漏掉沒有錯誤訊息。要逐一接上的：
+**`<main>` 地標由外框的擁有者提供**：`(protected)` 兩區是外殼（`config/shell/AreaLayout.tsx`），
+頁面與模組不要再渲染 `<main>`（`tests/architecture.test.ts` 擋）；公開頁（登入）與整頁的
+`MessagePage` 沒有外殼，自己提供。
+
+**Next 只讀 route 檔自己的 export，模組裡的不會跟過來**，Next 本身漏掉不會報錯。要逐一接上的：
 `metadata`、`generateMetadata`、`viewport`、`generateViewport`、`generateStaticParams`、`dynamic`、
 `dynamicParams`、`revalidate`、`fetchCache`、`runtime`、`preferredRegion`、`maxDuration`、
 `experimental_ppr`。
@@ -242,7 +242,7 @@ OpenAPI 的 `info.version` 固定是 `"1"`：規格要求必填，但前後端�
 
 新增的步驟見 [`extending.md`](extending.md#新增一個功能模組)。原則：前後端同名；public entry
 從**最小**開始設計；業務 entity 型別一律在用到它的模組的 `types.ts` 以 `Schema<"…">` 命名，
-不搬進 shared（理由見〈[shared 的可移植性](#shared-的可移植性)〉）。
+不搬進 shared，刪掉模組時型別才會跟著消失。
 
 **一個模組要能整包刪掉，而且不必改 `shared/`**：
 
@@ -260,27 +260,14 @@ OpenAPI 的 `info.version` 固定是 `"1"`：規格要求必填，但前後端�
 
 `users` 依賴 `roles` 的公開面（顯示角色名稱），這兩個是核心模組，實務上不會刪。
 
-## shared 的可移植性
-
-兩個 app 的 `shared/` 都承諾：**整包複製到另一個專案（沒有這裡的 `app/`、`modules/`、`config/`）
-就能用**，連同 `tests/shared/`。所以 shared 除了不 import 業務程式，還要做到：
-
-| 不能有的 | 改放哪裡 |
-|---|---|
-| 具體的業務端點（`/users/me`）或業務 entity（`UserInfo`） | 擁有它的模組；entity 在模組的 `types.ts` 以 `Schema<"…">` 命名 |
-| 只定義在專案裡的設計變數 | `shared/ui/styles/tokens.css` 給預設值，專案在 `app/theme.css` 覆寫 |
-| 讓 shared 能運作、卻寫在組裝層的接線 | `shared/platform.py`（`create_platform_app()`） |
-| 依賴專案啟用清單的測試 | 後端 `tests/app/`、前端 `tests/` 根目錄或 `tests/modules/` |
+## 前後端 shared 的約定
 
 前後端的 shared 是**一對**：前端假設後端的錯誤格式、`Accept-Language`、`X-Request-ID` 與 token
-cookie 的協定，也假設 OpenAPI 裡一定有 `Permission` 與 `Language` 兩個 schema（新專案沿用
-`modules/languages` 即可，或像 `apps/api/tests/shared/minimal_app.py` 自己帶進來）。
+cookie 的協定，也假設 OpenAPI 裡一定有 `Permission` 與 `Language` 兩個 schema
+（`shared/api/entities.ts` 從它們衍生型別，少了就是 `tsc` 錯誤）。
 前端 shared 另外要求專案在 `LOGIN_PATH` 提供登入頁並認得 `?reason=`，約定寫在
 `apps/web/shared/session/login-contract.ts`（這個模板由 `modules/auth` 提供）。
 
-實際移植的步驟見 [`extending.md`](extending.md#把-shared-帶到另一個專案)。
-
-`make check portable`（`make check` 與 CI 都會跑）實際把兩邊的 shared 複製到暫存目錄：後端跑
-mypy 與 pytest；前端用**只有平台 schema** 的契約跑 `tsc` 與 vitest。shared 引用了任何業務
-端點或 entity，就是編譯錯誤。
+shared 的設計變數在 `shared/ui/styles/tokens.css` 給預設值，專案只在 `app/theme.css` 覆寫
+（`tests/shared/ui/tokens.test.ts` 擋只定義在專案裡的變數）。
 

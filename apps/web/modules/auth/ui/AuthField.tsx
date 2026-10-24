@@ -26,7 +26,7 @@ type AuthFieldProps = {
 }
 
 /**
- * 登入/註冊頁的輸入框。
+ * 登入頁的輸入框。
  *
  * 只是 kit `TextInput` 的薄包裝 —— 樣式全部來自 kit, 這裡只多做一件事:
  * `showError` 為假時不把 `error` 往下傳 (送出前不要先罵人)。
