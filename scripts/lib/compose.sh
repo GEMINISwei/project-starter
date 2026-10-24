@@ -105,6 +105,21 @@ db_cli() {
     docker exec -w /app "${COMPOSE_PROJECT_NAME}-api" python scripts/db.py "$@"
 }
 
+# 在 postgres 容器裡跑 PostgreSQL 工具: 帳號與資料庫名稱只寫在 compose, 由容器裡的 sh 讀它自己的
+# 環境變數補上 -U/-d, 主機不必再存一份。走本機 socket, 不需要密碼。
+# 工具與參數維持各自獨立的參數 (不塞進 sh -c 的字串), 錯誤訊息與測試看得出跑的是哪一個。
+# 用法: postgres_tool [-i] <工具> [參數...]   (-i: 從 stdin 讀, 例如 pg_restore)
+postgres_tool() {
+    local flags=()
+    if [ "${1:-}" = "-i" ]; then
+        flags=(-i)
+        shift
+    fi
+    # shellcheck disable=SC2016 # 刻意不在主機展開
+    docker exec ${flags[@]+"${flags[@]}"} "${COMPOSE_PROJECT_NAME}-postgres" \
+        sh -c 'exec "$@" -U "$POSTGRES_USER" -d "$POSTGRES_DB"' sh "$@"
+}
+
 # 需要互動輸入的子指令用這個 (create-superuser 走 getpass, 沒有 TTY 會直接失敗)。
 db_cli_tty() {
     docker exec -it -w /app "${COMPOSE_PROJECT_NAME}-api" python scripts/db.py "$@"
