@@ -225,6 +225,33 @@ CI（`.github/workflows/ci.yml`）跑的就是本機指令：`check`（`make che
 建得起來，且 web image 裡沒有真的 Server Action 金鑰）。**本機綠，CI 就綠。** 部署另由
 `deploy.yml` 在 Publish release 時執行，見 [`operations.md`](operations.md#自動部署)。
 
+### AI 協作的共同作者
+
+AI 參與產生的 commit 一律在訊息最後加上 `Co-authored-by`，之後看 history 才知道哪些改動是哪家的
+AI、哪個模型做的：
+
+```text
+feat: add product list page
+
+列表改用游標分頁, 資料量成長後 offset 會越來越慢。
+
+Co-authored-by: Claude Opus 5.5 <noreply@anthropic.com>
+```
+
+- **名稱寫到模型與版本**（`Claude Opus 5.5`），不要只寫廠商或工具名：同一家的不同模型能力差很多，
+  回頭追問題時要分得出來。
+- **email 用工具官方設定的值**，工具沒有提供時用 `noreply@<廠商網域>`。這類位址沒有對應的 GitHub 帳號，
+  GitHub 上只顯示成文字、不會連到頭像，紀錄的作用一樣在。
+- trailer 放在訊息最後，前面空一行，一位共同作者一行；同一個 commit 有多個 AI 參與就各寫一行。
+- Git 與 GitHub 都不強制這行，漏了不會報錯，所以靠每個 commit 自己帶。squash 時 GitHub 會把分支上的
+  trailer 帶進 `main` 的內文，合併時不要把它們刪掉。
+
+查某段期間各 commit 的共同作者：
+
+```bash
+git log --format='%h %s%n  %(trailers:key=Co-authored-by,valueonly,separator=%x2C )'
+```
+
 ### 相依升級
 
 系統上線後**不追最新版，只在有漏洞時升**（`.github/dependabot.yml`）：
