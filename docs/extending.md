@@ -1,6 +1,7 @@
 # 擴充指南
 
-「要做 X 該怎麼做」的步驟。依賴邊界與模組介面的**規則**在 [`architecture.md`](architecture.md)。
+用這個模板開新案時，可以加上的擴充項目與做法。內建功能怎麼運作見 [`features.md`](features.md)，
+依賴邊界與模組介面的**規則**在 [`architecture.md`](architecture.md)。
 
 範例一律照抄現成模組，兩邊都從 **roles** 開始（標準的 CRUD：列表、建立、修改、停用）：
 後端 `apps/api/modules/roles/`、前端 `apps/web/modules/roles/`。需要更進一步的寫法時再參考
@@ -276,8 +277,7 @@ autogenerate 固定會漏三件事，產出一定要讀：
 
 ## 語系（i18n）
 
-前後端同一個語系：語系存在 `locale` cookie，每個 API 請求都帶 `Accept-Language`，
-後端的錯誤訊息跟著 UI 走。
+語系怎麼在前後端之間傳遞見 [`features.md`](features.md#語系)。
 
 **字串放在擁有它的那一層的 `i18n.ts`**，沒有全站字典：
 
