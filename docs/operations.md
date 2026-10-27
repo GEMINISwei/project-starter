@@ -105,7 +105,7 @@ environment（見下方〈新增一套系統〉），workflow 不用改。`produ
 - **兩個 Variable 各自判斷**：發布的是哪一種，就只看對應的那一個。
 - **沒設定或空白就失敗**，這次一套都不部署，執行頁面上寫明是哪一個 Variable 沒設。
 - **列出的組有任何一個找不到 environment**（例如打錯字），整次都不部署，並列出現有的組。
-- **沒列出的組不會更新**。Summary 會列出「這次沒有部署的組」，要補就對同一個 tag 按 Run workflow。
+- **沒列出的組不會更新**。執行頁面的 Summary 會列出「這次沒有部署的組」，要補就對同一個 tag 按 Run workflow。
 
 先行測試的流程：發布 `v0.0.3` 時勾 pre-release → `PRE_RELEASE_TARGETS` 的組（例如 `canary`）先更新 →
 觀察沒問題後，編輯這個 release、取消勾選 pre-release → `PUBLISH_TARGETS` 的組更新。
@@ -127,8 +127,9 @@ environment（見下方〈新增一套系統〉），workflow 不用改。`produ
    bind mount 的）→ 拉 image 並重啟（`make start`）→ `make services` → 清掉被取代的舊 image →
    只留最近 `BACKUP_KEEP` 組備份。
    **一套失敗不會中斷其他套**。
-6. 執行頁面的 **Summary** 列出每套的結果與失敗的步驟，以及這次沒有部署的組。失敗的那套點進它的
-   job 看 log，修好之後按 **Re-run failed jobs**，只會重跑失敗的那幾套。
+6. 每套的結果看執行頁面左側的 **job 列表**（一套一行，失敗的標紅叉）。**Annotations** 會寫出
+   停在主機上的哪一步（例如「備份失敗」、「啟動服務失敗」、「連不上主機」）。點進失敗的 job，
+   失敗的步驟會自動展開 log；修好之後按 **Re-run failed jobs**，只會重跑失敗的那幾套。
 
 一次部署可能包含好幾組，所以**整個 repo 的部署共用一個排隊群組**，依序跑。
 GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進第三個時，**原本在等的那個會被取消**。

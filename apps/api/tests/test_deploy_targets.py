@@ -165,6 +165,43 @@ def test_deploy_waits_for_migration_check_of_every_system() -> None:
     assert "environment: ${{ matrix.environment }}" in check
 
 
+def test_targets_summary_lists_groups_not_deployed() -> None:
+    # 部署結果看 job 列表就夠, 但沒列在這次的組 (例如 Variable 漏設) 在列表上看不出來,
+    # 只有 targets 知道, 所以由它寫進 Summary。
+    step = re.search(r"^          \{\n(.*?)^          \} >> \"\$\{GITHUB_STEP_SUMMARY\}\"$",
+                     _job("targets"), flags=re.MULTILINE | re.DOTALL)
+    assert step, "targets job 沒有寫 Summary"
+    assert "這次沒有部署的組" in step.group(1)
+    assert "${others}" in step.group(1)
+
+
+def _host_script() -> list[str]:
+    match = re.search(r"- name: 部署到主機\n(.*?)(?=^      - |\Z)", _deploy_job(),
+                      flags=re.MULTILINE | re.DOTALL)
+    assert match, "deploy job 找不到「部署到主機」"
+    return match.group(1).splitlines()
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["make backup allow-fresh", "git checkout", "docker login", "make start", "make services"],
+)
+def test_deploy_reports_failed_host_step_as_error(command: str) -> None:
+    # 主機上整段腳本只回一個 exit code, Annotations 只會寫 exit code 1; 每一步先記下名稱,
+    # 失敗時由 ERR trap 印成 ::error::, 不必點進 log 就知道停在哪。
+    lines = _host_script()
+    assert any("trap" in line and "::error::" in line and "ERR" in line for line in lines)
+    index = next((i for i, line in enumerate(lines) if command in line), None)
+    assert index is not None, f"「部署到主機」裡找不到 {command}"
+    assert "step=" in lines[index - 1], f"{command} 之前沒有記下步驟名稱"
+
+
+def test_deploy_reports_ssh_connection_failure_as_error() -> None:
+    # ssh 連不上時以 255 結束, 主機端的 trap 根本沒機會跑。
+    script = "\n".join(_host_script())
+    assert re.search(r"255.*::error::", script)
+
+
 def test_migration_check_uses_target_tag() -> None:
     check = _job("migration-check")
     assert "ref: refs/tags/${{ needs.version.outputs.tag }}" in check

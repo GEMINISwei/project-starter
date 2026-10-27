@@ -26,7 +26,7 @@ run-name: >-
 #   build    建兩份 production image 推到 GHCR, 每個要部署的組各標一個組名 (例如 :production)
 #   deploy   每套系統各一個 job, 依序 SSH 到主機: 備份 → checkout 同一個 tag → 拉 image 並重啟
 #            (make start) → 清掉舊 image 與過舊的備份
-#   summary  在執行頁面的 Summary 列出每套系統的結果
+# 各套的結果看執行頁面的 job 列表, 不另外彙總; job 有列表上看不到的資訊才各自寫進 Summary。
 #
 # 組名 = environment 名稱第一個 `-` 之前的部分: `production` 與 `production-*` 是 production 組。
 # 新增一套系統只要建一個符合命名的 environment, 不必改這個檔。
@@ -116,7 +116,6 @@ jobs:
       actions: read
     outputs:
       groups: ${{ steps.list.outputs.groups }}
-      others: ${{ steps.list.outputs.others }}
       matrix: ${{ steps.list.outputs.matrix }}
     steps:
       # 挑選腳本取自這份 workflow 所在的 commit, 不是要部署的 tag: 回滾到比這個功能還舊的 tag
@@ -154,13 +153,18 @@ jobs:
           selected="$("${script}" select "${groups[@]}" <<< "${names}" 2> err)" || fail "$(cat err)（來自 ${source}）"
           others="$("${script}" others "${groups[@]}" <<< "${names}")"
 
+          # 各套的部署結果看 job 列表; 沒列在這次的組 (例如 Variable 漏設) 列表上看不出來,
+          # 不會自動跟上, 要補就對這個 tag 按 Run workflow。
           groups_line="$(cut -f1 <<< "${selected}" | sort -u | paste -sd ' ' -)"
           {
             echo "### 部署到：${groups_line}（依序）"
             cut -f2 <<< "${selected}" | sed 's/^/- /'
+            if [ -n "${others}" ]; then
+              echo
+              echo "**這次沒有部署的組**：$(paste -sd ' ' - <<< "${others}")"
+            fi
           } >> "${GITHUB_STEP_SUMMARY}"
           echo "groups=${groups_line}" >> "${GITHUB_OUTPUT}"
-          echo "others=$(paste -sd ' ' - <<< "${others}")" >> "${GITHUB_OUTPUT}"
           echo "matrix=$(jq -R -s -c '
             split("\n") | map(select(length > 0) | split("\t") | {group: .[0], environment: .[1]})
             | {include: .}' <<< "${selected}")" >> "${GITHUB_OUTPUT}"
@@ -310,7 +314,7 @@ jobs:
   deploy:
     needs: [version, targets, build, migration-check]
     # matrix 有 group 與 environment 兩個值, 不指定名稱的話 job 會叫 `deploy (production, production-a)`;
-    # summary 靠 `deploy (` 開頭認出這些 job。
+    # 部署結果就看 job 列表, 一套一行, 失敗的那套直接按 Re-run。
     name: deploy (${{ matrix.environment }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -400,65 +404,39 @@ jobs:
           IMAGE_SOURCE: ${{ needs.build.outputs.source }}
           BACKUP_KEEP: ${{ vars.BACKUP_KEEP || '10' }}
         run: |
+          # 整段腳本在主機上只回一個 exit code, Annotations 只會寫 exit code 1。每一步先記下名稱,
+          # 失敗時由 ERR trap 印成 ::error::, 經 ssh 的 stdout 回到 runner, 不必點進 log 就知道停在哪。
+          # ssh 本身連不上時以 255 結束, 主機端的 trap 沒機會跑, 由這一端補上。
           {
             echo 'set -euo pipefail'
+            echo 'step="準備部署目錄"'
+            echo "trap 'echo \"::error::\${step}失敗\"' ERR"
             echo 'DOCKER_CONFIG="$(mktemp -d)"; export DOCKER_CONFIG'
             echo 'trap "rm -rf \"\${DOCKER_CONFIG}\"" EXIT'
             echo '[ ! -d ~/.docker/cli-plugins ] || ln -s ~/.docker/cli-plugins "${DOCKER_CONFIG}/cli-plugins"'
             printf 'cd %q\n' "${DEPLOY_PATH}"
+            echo 'step="備份"'
             echo 'make backup allow-fresh'
+            echo 'step="取得 tag"'
             echo 'git fetch --force --tags origin'
+            printf 'step=%q\n' "checkout ${TAG}"
             printf 'git checkout --detach %q\n' "refs/tags/${TAG}"
+            echo 'step="登入 GHCR"'
             printf "printf '%%s' %q | docker login ghcr.io -u %q --password-stdin\n" \
               "${GITHUB_TOKEN}" "${GITHUB_ACTOR}"
             printf 'export API_IMAGE=%q WEB_IMAGE=%q\n' "${API_IMAGE}" "${WEB_IMAGE}"
+            echo 'step="啟動服務"'
             echo 'make start'
+            echo 'step="檢查服務狀態"'
             echo 'make services'
+            echo 'step="清理舊 image"'
             printf 'docker image prune -f --filter %q\n' \
               "label=org.opencontainers.image.source=${IMAGE_SOURCE}"
             printf 'make backup prune %q || echo "::warning::清理舊備份失敗，請上主機手動 make backup prune"\n' \
               "${BACKUP_KEEP}"
           } | ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" -o BatchMode=yes \
-                "${DEPLOY_USER}@${DEPLOY_HOST}" 'bash -s'
-
-  # 一組有好幾套系統時, 一張表看出哪套失敗、停在哪一步, 再到那套的 job 按 Re-run。
-  # filter=latest: Re-run 失敗的 job 後, 表上是每套最新一次的結果。
-  summary:
-    needs: [version, targets, deploy]
-    if: ${{ always() && needs.targets.result == 'success' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      actions: read
-    steps:
-      - name: 彙總各系統的結果
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ needs.version.outputs.tag }}
-          DEPLOY_GROUPS: ${{ needs.targets.outputs.groups }}
-          OTHERS: ${{ needs.targets.outputs.others }}
-        run: |
-          rows="$(gh api --paginate \
-            "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?filter=latest" \
-            --jq '.jobs[] | select(.name | startswith("deploy (")) |
-              ((.steps // []) | map(select(.conclusion == "failure")) | .[0].name // "") as $step |
-              "| \(.name | ltrimstr("deploy (") | rtrimstr(")")) | " +
-              (if .conclusion == "success" then "✅ 成功"
-               elif .conclusion == "failure" then "❌ 失敗於「\($step)」"
-               else "⚪ \(.conclusion // .status)" end) +
-              " | [log](\(.html_url)) |"')"
-          {
-            echo "### ${TAG} → ${DEPLOY_GROUPS} 的部署結果"
-            if [ -z "${rows}" ]; then
-              echo "沒有任何系統開始部署（前面的步驟沒有通過）。"
-            else
-              echo '| 系統 | 結果 | |'
-              echo '|---|---|---|'
-              echo "${rows}"
-            fi
-            # 沒列在這次的組 (例如 Variable 漏設) 不會自動跟上, 要補就對這個 tag 按 Run workflow。
-            if [ -n "${OTHERS}" ]; then
-              echo
-              echo "**這次沒有部署的組**：${OTHERS}"
-            fi
-          } >> "${GITHUB_STEP_SUMMARY}"
+                "${DEPLOY_USER}@${DEPLOY_HOST}" 'bash -s' || {
+            status=$?
+            [ "${status}" -ne 255 ] || echo "::error::連不上主機（SSH 以 255 結束）"
+            exit "${status}"
+          }
