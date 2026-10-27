@@ -404,23 +404,39 @@ jobs:
           IMAGE_SOURCE: ${{ needs.build.outputs.source }}
           BACKUP_KEEP: ${{ vars.BACKUP_KEEP || '10' }}
         run: |
+          # 整段腳本在主機上只回一個 exit code, Annotations 只會寫 exit code 1。每一步先記下名稱,
+          # 失敗時由 ERR trap 印成 ::error::, 經 ssh 的 stdout 回到 runner, 不必點進 log 就知道停在哪。
+          # ssh 本身連不上時以 255 結束, 主機端的 trap 沒機會跑, 由這一端補上。
           {
             echo 'set -euo pipefail'
+            echo 'step="準備部署目錄"'
+            echo "trap 'echo \"::error::\${step}失敗\"' ERR"
             echo 'DOCKER_CONFIG="$(mktemp -d)"; export DOCKER_CONFIG'
             echo 'trap "rm -rf \"\${DOCKER_CONFIG}\"" EXIT'
             echo '[ ! -d ~/.docker/cli-plugins ] || ln -s ~/.docker/cli-plugins "${DOCKER_CONFIG}/cli-plugins"'
             printf 'cd %q\n' "${DEPLOY_PATH}"
+            echo 'step="備份"'
             echo 'make backup allow-fresh'
+            echo 'step="取得 tag"'
             echo 'git fetch --force --tags origin'
+            printf 'step=%q\n' "checkout ${TAG}"
             printf 'git checkout --detach %q\n' "refs/tags/${TAG}"
+            echo 'step="登入 GHCR"'
             printf "printf '%%s' %q | docker login ghcr.io -u %q --password-stdin\n" \
               "${GITHUB_TOKEN}" "${GITHUB_ACTOR}"
             printf 'export API_IMAGE=%q WEB_IMAGE=%q\n' "${API_IMAGE}" "${WEB_IMAGE}"
+            echo 'step="啟動服務"'
             echo 'make start'
+            echo 'step="檢查服務狀態"'
             echo 'make services'
+            echo 'step="清理舊 image"'
             printf 'docker image prune -f --filter %q\n' \
               "label=org.opencontainers.image.source=${IMAGE_SOURCE}"
             printf 'make backup prune %q || echo "::warning::清理舊備份失敗，請上主機手動 make backup prune"\n' \
               "${BACKUP_KEEP}"
           } | ssh -i ~/.ssh/deploy_key -p "${DEPLOY_PORT:-22}" -o BatchMode=yes \
-                "${DEPLOY_USER}@${DEPLOY_HOST}" 'bash -s'
+                "${DEPLOY_USER}@${DEPLOY_HOST}" 'bash -s' || {
+            status=$?
+            [ "${status}" -ne 255 ] || echo "::error::連不上主機（SSH 以 255 結束）"
+            exit "${status}"
+          }
