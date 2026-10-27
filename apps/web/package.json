@@ -1,0 +1,85 @@
+{
+  "name": "web",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "//engines": [
+    ".nvmrc 只寫 major (給 nvm、CI 與 Dockerfile 的版本線), 這裡是下限, 由 scripts/init.sh 讀。",
+    "不開 engine-strict: 它會連帶檢查每個相依的 engines, 誤傷面太大。",
+    "上限鎖 25: 跨 Node major 要同時改這裡、.nvmrc 與 Dockerfile 的 NODE_VERSION。"
+  ],
+  "engines": {
+    "node": ">=24.15.0 <25"
+  },
+  "scripts": {
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
+    "start": "next start",
+    "typecheck": "next typegen --webpack && tsc --noEmit",
+    "lint": "eslint && npm run check:architecture && npm run check:deadcode",
+    "check:architecture": "depcruise app config modules shared proxy.ts instrumentation.ts --config .dependency-cruiser.cjs",
+    "check:deadcode": "knip",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "//scripts": [
+    "刻意沒有 gen-types: 契約與型別檔的路徑只在 scripts/lib/common.sh 定義一份。",
+    "請在 repo 根目錄跑 `make gen-types`。"
+  ],
+  "//overrides": [
+    "只釘「沒有直接呼叫、但帶著 advisory 的傳遞相依」, 修補版要在原本的相容範圍內, 每條都附移除條件。",
+    "js-yaml: openapi-typescript 的傳遞相依, 只在 gen-types 時跑; 4.3.2 起修掉 merge key 的 CPU 消耗問題。",
+    "移除條件: openapi-typescript 自己升上去之後 (`npm ls js-yaml` 確認)。"
+  ],
+  "overrides": {
+    "js-yaml": "^4.3.2"
+  },
+  "dependencies": {
+    "lucide-react": "^1.57.0",
+    "next": "^16.4.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "server-only": "^0.0.1"
+  },
+  "//devDependencies": [
+    "`@types/node` 跟著執行期的 Node major (.nvmrc), 不是 npm 的 latest。",
+    "`typescript` 停在 5.x: openapi-typescript 要 ^5、typescript-eslint 要 <6.1, 兩個都是硬 peer。",
+    "移除條件: `npm view openapi-typescript peerDependencies` 與 `npm view typescript-eslint peerDependencies` 都放寬。",
+    "`vite` 直接列出: 不指定的話 plugin-react 與 vitest 會讓樹裡出現兩個 vite。",
+    "`eslint` 停在 9.x: 見 eslint.config.mjs。",
+    "已知、目前修不掉的 advisory: eslint-config-next → @next/eslint-plugin-next → fast-glob → micromatch → braces",
+    "(braces 的所有版本都在範圍內, 沒有修補版; npm 建議的「修法」是把 eslint-config-next 降到 14)。",
+    "只在 lint 時處理我們自己的原始碼路徑, 不碰外部輸入。移除條件: `npm audit` 不再列出 braces。"
+  ],
+  "devDependencies": {
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.8",
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.1.2",
+    "@vitest/coverage-v8": "^5.0.5",
+    "babel-plugin-react-compiler": "1.0.0",
+    "dependency-cruiser": "18.6.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.4.2",
+    "jsdom": "^30.1.3",
+    "knip": "^6.41.0",
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
+  },
+  "//allowScripts": [
+    "允許執行安裝腳本的套件 (`npm approve-scripts`)。npm 之後的版本會擋下沒列在這裡的腳本。",
+    "fsevents: vite 在 macOS 的原生檔案監看。unrs-resolver: eslint import resolver 用 napi-postinstall 補上平台的原生綁定。",
+    "只寫名稱不釘版本 (`--no-allow-scripts-pin`): 每次升版 (安全更新或整批升級) 釘版本的核准都會失效。",
+    "新增套件時看到「not yet covered by allowScripts」, 先讀過它的安裝腳本再核准。"
+  ],
+  "allowScripts": {
+    "fsevents": true,
+    "unrs-resolver": true
+  }
+}

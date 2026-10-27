@@ -1,0 +1,169 @@
+[project]
+name = "api"
+version = "0.0.1"
+# 釘單一 minor: 放寬的話本機、CI 與 image 會各自解到不同的 Python。
+# **升 Python 要同時動四處**: 這一行、`[tool.ruff]` 的 target-version、`[tool.mypy]` 的
+# python_version、Dockerfile 的 FROM, 再跑 `uv lock`。只改 Dockerfile 的話 CI 照樣綠。
+requires-python = ">=3.14,<3.15"
+# 正式環境相依一律 `==`: lock 是解出來的結果, 這裡是我們同意的版本 ——
+# 沒有上限的話, 下一次 `uv lock` 可以在沒人決定的情況下跨過 major。
+dependencies = [
+    "fastapi==0.143.2",
+    "uvicorn[standard]==0.54.0",
+    # `[asyncio]` 會拉進 greenlet, 不要改成裸的 "sqlalchemy": 少了它要到執行期才丟
+    # `MissingGreenlet`, 安裝時沒有任何警告。
+    "sqlalchemy[asyncio]==2.1.4",
+    "asyncpg==0.32.0",
+    "pydantic-settings==2.16.0",
+    # 用 PyJWT 而非 python-jose: 只簽 HS256, 後者會拉進用不到的非對稱加密鏈 (含帶著
+    # timing attack advisory 的 ecdsa)。套件名寫正規化的小寫: Dependabot 的 uv 更新器拿這裡的
+    # 字面名稱去比對 uv.lock (一律小寫), 大小寫不同會找不到而整批更新失敗。
+    "pyjwt==2.15.1",
+    "python-multipart==0.0.32",
+    "bcrypt==5.0.0",
+    # 是正式環境相依: compose 的 migrate service 用 api image 跑 `alembic upgrade head`。
+    "alembic==1.20.0",
+]
+
+# dev group 用 `>=`: 不進正式環境, 跟著上游走較早吃到新規則。真正在擋的是 uv.lock
+# (一律 `--frozen`), 所以跑 `uv lock` 時記得看一眼 diff 裡有沒有跨 major。
+[dependency-groups]
+dev = [
+    "ruff>=0.17.1",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "pytest-cov>=7.1.0",
+    "httpx==0.28.1",
+    "mypy>=2.4.0",
+    "import-linter==2.15",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_mode = "strict"
+testpaths = ["tests"]
+markers = [
+    "integration: 需要真的連上 PostgreSQL 的測試（本機可用 -m 'not integration' 略過）",
+]
+
+[tool.coverage.run]
+# 不寫 `["."]`: 那會把 tests/ 與 scripts/ 算進分母。
+source = ["app", "modules", "shared"]
+
+[tool.coverage.report]
+# 防退步的地板, 不是目標 (見 docs/development.md)。要讓本機沒有 PostgreSQL 時
+# (integration 自動 skip, 約 77%) 也過得了, 再留餘裕。**不要推到貼齊**: 刪掉一段
+# 測得很好的程式碼也會讓比例下降, 那是正確的改動被誤報。
+fail_under = 74
+# 只列出有缺漏的檔案, 全綠的不用佔版面。
+skip_covered = true
+
+[tool.ruff]
+# ruff 算顯示寬度 (中文一字 2 欄), 前端 ESLint 算字元數。見 docs/development.md〈程式碼風格〉。
+line-length = 100
+target-version = "py314"
+src = ["."]
+
+[tool.ruff.lint]
+# ASYNC 抓 async 函式裡的阻塞呼叫; ARG 抓沒用到的參數 (在 service 層通常代表查詢條件
+# 被悄悄忽略)。C901 與 PLR0915 是防退步的地板, 擋「長到沒人敢動」, 不是逼人拆碎。
+select = ["E", "F", "I", "N", "W", "UP", "B", "ASYNC", "S", "RUF", "ARG", "C901", "PLR0915", "TID251"]
+ignore = [
+    # 全形標點在中文註解裡是正確用法, 這三條只會產生雜訊。
+    "RUF001",
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.pylint]
+max-statements = 40
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI 的依賴注入就是放在參數預設值上, B008 對它們是誤報。
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Form",
+    "fastapi.Header",
+    "fastapi.Cookie",
+    "shared.auth.dependency.check_user_permission",
+]
+
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+# 錯誤訊息會直接顯示在畫面上, 要跟著請求語系走; 裸的 HTTPException 只帶得了一種語言。
+"fastapi.HTTPException".msg = "用 shared.http.errors 的 LangException + LangText"
+"starlette.exceptions.HTTPException".msg = "用 shared.http.errors 的 LangException + LangText"
+
+[tool.ruff.lint.per-file-ignores]
+# LangException 本身就是 HTTPException 的子類。
+"shared/http/errors.py" = ["TID251"]
+# ARG: monkeypatch 的 stub 必須完整比對被取代者的簽名。
+"tests/**" = ["S101", "S105", "S106", "ARG001", "ARG002", "ARG004"]
+"scripts/**" = ["S404", "S603", "S607"]
+# autogenerate 的產物會有很長的單行, 只放寬行長; 其餘規則照樣擋。
+"migrations/versions/**" = ["E501"]
+# `__table_args__` 與 `seed_data` 是宣告式設定, 不需要 ClassVar 註記。
+"modules/**/model.py" = ["RUF012"]
+
+[tool.mypy]
+python_version = "3.14"
+mypy_path = "."
+# tests/ 也檢查: 測試是最常被照抄的程式碼。不寫 `["."]` 是為了排除 scripts/。
+files = ["app", "modules", "shared", "main.py", "tests"]
+# 刻意不開 strict: 先擋最會出事的那類問題, 等程式碼穩定後再逐模組收緊。
+check_untyped_defs = true
+warn_redundant_casts = true
+
+[[tool.mypy.overrides]]
+# 這是 AGENTS.md 硬規則「後端 service 回傳建構好的 pydantic model」的執行者:
+# 漏寫註記的函式整個不受檢查而且沒有症狀, 寫了註記, service 回傳 dict 才會被 `return-value` 擋下。
+module = ["shared.*", "app.*", "modules.*"]
+disallow_untyped_defs = true
+
+# 刻意不跑 `ruff format`: 它會在全形括號前補半形空白, 在中文註解裡是退步。
+# 會影響正確性的排版由 `ruff check` 擋, 其餘靠 review (docs/development.md〈程式碼風格〉)。
+
+# ── 依賴邊界 (import-linter) ──────────────────────────────────────────────────────
+# app → modules → shared。`uv run lint-imports` 檢查, `make check lint` 會跑。
+# 只檢查直接 import (allow_indirect_imports): 「A 經由 B 的公開入口間接用到 B 的內部」是合法的。
+# 例外規則描述的是「允許什麼」, 目前剛好沒人用也不該報錯 (unmatched_ignore_imports_alerting)。
+[tool.importlinter]
+root_packages = ["app", "modules", "shared"]
+
+[[tool.importlinter.contracts]]
+name = "shared 不可引用 app 或 modules"
+type = "forbidden"
+source_modules = ["shared"]
+forbidden_modules = ["app", "modules"]
+
+[[tool.importlinter.contracts]]
+name = "跨模組只能引用對方的 public"
+type = "independence"
+modules = ["modules.*"]
+ignore_imports = ["modules.** -> modules.*.public"]
+unmatched_ignore_imports_alerting = "none"
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+# 唯一例外是 Permission enum: 它要是所有模組的聯集才能進 OpenAPI (見 docs/architecture.md)。
+name = "modules 不可引用組裝層（app.permissions 除外）"
+type = "forbidden"
+source_modules = ["modules"]
+forbidden_modules = ["app"]
+ignore_imports = ["modules.** -> app.permissions"]
+unmatched_ignore_imports_alerting = "none"
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "組裝層只能引用模組的 public 或 manifest"
+type = "forbidden"
+source_modules = ["app"]
+forbidden_modules = ["modules"]
+ignore_imports = ["app.** -> modules.*.public", "app.** -> modules.*.manifest"]
+unmatched_ignore_imports_alerting = "none"
+allow_indirect_imports = true

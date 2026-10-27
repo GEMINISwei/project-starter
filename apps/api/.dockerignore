@@ -1,0 +1,15 @@
+# **模式要帶 `**/`。** docker 的 .dockerignore 用的是 Go 的 filepath.Match 語義,
+# `__pycache__/` 只比對得到**根目錄**那一層 —— 巢狀的一個都擋不掉, 而且完全沒有症狀
+# (image 建得起來、服務也跑得好好的)。實測過: 修這行之前, 正式 image 裡帶著
+# `modules/*/__pycache__`, 包含已經從 repo 剝除的模組留下的 .pyc。
+.venv/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage*
+tests/
+logs/
+backups/
+.env*

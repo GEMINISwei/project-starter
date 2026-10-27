@@ -1,0 +1,52 @@
+# api 與 migrate 掛同一組來源 (錨點只寫一次): 新增 migration 後不必重建 image,
+# 再跑一次 `make start` 就會套用。migrate 漏掉 migrations/ 的話會說「沒有待執行的」。
+#
+# 逐一列出而不是掛整個 apps/api: 整包會遮掉 image 裡的 .venv, 換成主機的 macOS 版本,
+# 症狀是看不出原因的 `exec format error`。
+# 單檔 bind mount 會釘住 inode (rename 式存檔看不到更新), main.py 與 alembic.ini 幾乎不會動。
+x-api-source: &api-source
+  - ../../apps/api/app:/app/app
+  - ../../apps/api/modules:/app/modules
+  - ../../apps/api/shared:/app/shared
+  - ../../apps/api/scripts:/app/scripts
+  - ../../apps/api/migrations:/app/migrations
+  - ../../apps/api/main.py:/app/main.py
+  - ../../apps/api/alembic.ini:/app/alembic.ini
+
+services:
+  api:
+    volumes: *api-source
+
+  migrate:
+    volumes: *api-source
+
+  web:
+    build:
+      target: dev
+    environment:
+      # `next dev` 在執行期編譯, 所以 id salt 也在這時讀。不設的話每次重啟都換一把,
+      # 開著的分頁會拿到 "Server Action was not found"。
+      NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:?}
+    volumes:
+      # 與 api 相反, **整包掛**: Next 的根目錄慣例檔 (proxy.ts 這類) 逐一列出的話,
+      # 新增時 dev 容器看不到, 而且沒有任何錯誤訊息。
+      - ../../apps/web:/app
+      # 具名 volume 遮住主機的 node_modules (macOS 版) 與 .next 快取。
+      # 具名而非匿名: 改過相依後可以單獨 `docker volume rm`。
+      - web_node_modules:/app/node_modules
+      - web_next_cache:/app/.next
+
+  nginx:
+    # 平常同 base 只綁 loopback; `make start lan` 改成 0.0.0.0, 讓手機從區網連進來測試。
+    # 這時同網段的人都能自己帶 X-Real-IP, 開發機上可以接受, 正式環境不行 (prod overlay 不碰這裡)。
+    # `!override`: compose 合併 ports 是附加, 不覆寫的話會同時綁兩個位址而撞 port。
+    ports: !override
+      - ${DEV_BIND_ADDRESS:-127.0.0.1}:${SYSTEM_PORT:?}:80
+    volumes:
+      - ../nginx/default.dev.conf.template:/etc/nginx/templates/default.conf.template:ro
+
+volumes:
+  web_node_modules:
+    name: ${COMPOSE_PROJECT_NAME:?}_${MODE:?}_web_node_modules
+  web_next_cache:
+    name: ${COMPOSE_PROJECT_NAME:?}_${MODE:?}_web_next_cache

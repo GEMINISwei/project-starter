@@ -1,0 +1,38 @@
+# 正式環境的 overlay (讓 dev 與 prod 都是 base + 一個 overlay, 腳本不必分兩套)。
+# 只放真的只屬於正式環境的設定。
+
+x-prod-runtime: &prod-runtime
+  # json-file driver 預設無上限, 長跑的部署會把磁碟寫滿。
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+services:
+  api:
+    <<: *prod-runtime
+    # 吃爆記憶體時只有這個容器被 OOM kill, 不會把整台主機 (含 postgres) 拖下水。
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  web:
+    <<: *prod-runtime
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  postgres:
+    <<: *prod-runtime
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  nginx:
+    <<: *prod-runtime
+
+  # migrate 刻意不設記憶體上限: 被 OOM kill 的後果是資料改到一半。

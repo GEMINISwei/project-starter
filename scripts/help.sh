@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+#
+# 列出所有指令與子指令。
+#
+# 內容直接讀每支腳本的檔頭: 第一行註解是說明, `#   make …` 開頭的行是子指令。
+# 新增指令或子指令時只要寫好檔頭, 不必再維護第二份清單。
+#
+# `[內部]` 開頭的不列 (部署與腳本自己用的指令, 寫在 docs/operations.md): 子指令寫成
+# `#   [內部] make …` 就不符合上面的格式, 整支腳本則是說明那一行以 `[內部]` 開頭。
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+describe() {
+    awk '
+        NR == 1 && /^#!/ { next }
+        /^#[[:space:]]*$/ { next }
+        /^#/ { sub(/^#[[:space:]]*/, ""); print; exit }
+        { exit }
+    ' "$1"
+}
+
+echo "用法：make <指令> [子指令]"
+for name in "$@"; do
+    script="$SCRIPT_DIR/$name.sh"
+    description="$(describe "$script")"
+    case "$description" in '[內部]'*) continue ;; esac
+    echo
+    printf '  %s\n' "$description"
+    sed -n '/^#   make /s/^#   /    /p' "$script"
+done

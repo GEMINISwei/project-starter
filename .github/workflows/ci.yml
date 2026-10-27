@@ -1,0 +1,138 @@
+name: CI
+
+# 每個 job 跑的就是本機的 make 指令, CI 不另寫一份流程 —— 本機綠, CI 就綠。
+#   check        make check (含契約比對: 重產之後不能跟 repo 裡的不一致)
+#   integration  make check integration (拋棄式 PostgreSQL + alembic check)
+#   images       兩份 production image 建得起來, 且 web image 裡沒有真的 Server Action 金鑰
+#   e2e          make check e2e (拋棄式的正式環境 + Playwright)
+#
+# deploy.yml 以 workflow_call 重用整份: 要部署的 commit 要先通過同一套檢查。它傳 `ref`
+# 指定那個 tag —— 手動觸發時 github.ref 是 main, 不傳的話測的會是 main 而不是要部署的版本。
+#
+# action 的版本: GitHub (actions/*) 與 Docker (docker/*) 官方的用 tag, 第三方的釘 commit SHA
+# —— tag 可以被改指向, 第三方的 tag 被改等於把任意程式碼放進 CI。有漏洞時由 Dependabot 開安全更新, 其餘在整批升級時手動升。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+# 只取消 PR 上的舊 run: 舊 commit 的結果已經沒有意義。main 上連續合併時若取消, 前一個 commit
+# 就永遠沒有 CI 結果, 之後紅燈分不出是誰造成、也沒有綠燈可當部署依據, 所以讓它排隊跑完。
+# 同一群組最多一個在跑、一個在等, 三個以上連續合併時等待中的仍會被取代。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          # make check migrate 要和最近的 release tag 比對; 預設只抓一個 commit、不抓 tag,
+          # 找不到 tag 時檢查會當成「還沒發版」而略過。
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/web/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - run: cd apps/api && uv sync --frozen
+      - run: cd apps/web && npm ci
+      - run: make check
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # CI 沒有 `make init` 產生的 .env, 拋棄式容器的名稱前綴改用 repo 名稱。
+    env:
+      COMPOSE_PROJECT_NAME: ${{ github.event.repository.name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - run: cd apps/api && uv sync --frozen
+      - run: make check integration
+
+  images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/build-push-action@v7
+        with:
+          context: apps/api
+          target: base
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+      - uses: docker/build-push-action@v7
+        with:
+          context: apps/web
+          target: prod
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+          load: true
+          tags: ci-web:check
+      # 真金鑰被烤進 image 時一切照常運作, 只有這裡看得到 (理由見 apps/web/Dockerfile)。
+      # 期望值從 Dockerfile 讀, 不另抄一份。
+      - name: web image 裡只有公開的 id salt
+        run: |
+          salt="$(sed -n 's/^ARG NEXT_ACTIONS_ID_SALT="\(.*\)"$/\1/p' apps/web/Dockerfile)"
+          [ -n "${salt}" ] || { echo "apps/web/Dockerfile 找不到 NEXT_ACTIONS_ID_SALT" >&2; exit 1; }
+          docker run --rm --entrypoint node -e EXPECTED_SALT="${salt}" ci-web:check -e '
+            const key = require("./.next/server/server-reference-manifest.json").encryptionKey
+            if (key !== process.env.EXPECTED_SALT) {
+              console.error("image 裡的 Server Action 金鑰不是 Dockerfile 的公開常數")
+              process.exit(1)
+            }'
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # 同 integration: CI 沒有 .env, 拋棄式 stack 的名稱前綴改用 repo 名稱。
+    env:
+      COMPOSE_PROJECT_NAME: ${{ github.event.repository.name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/web/.nvmrc
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - run: cd e2e && npm ci
+      # 瀏覽器要的系統套件需要 sudo, make check e2e 本身只下載瀏覽器, 所以這一步只在 CI。
+      - run: cd e2e && npx playwright install --with-deps chromium
+      - run: make check e2e
+      # 失敗時的 trace 用 `npx playwright show-trace <zip>` 打開, 看得到每一步的畫面與網路請求。
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+          retention-days: 7

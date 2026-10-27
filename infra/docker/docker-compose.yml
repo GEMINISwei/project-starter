@@ -1,0 +1,141 @@
+# api 與 migrate 是**同一個 image** 的兩種跑法, 共用的部分只寫一次 (錨點),
+# 兩者的 image 字串就不可能飄掉。
+x-api-image: &api-image
+  # 預設是本機建置 (MODE=production 的 `make start`)。之後接 registry 時, 在 shell 匯出
+  # API_IMAGE/WEB_IMAGE/IMAGE_PULL_POLICY=always 即可改成拉 image; 三者是部署參數, 刻意不進 .env。
+  image: ${API_IMAGE:-${COMPOSE_PROJECT_NAME:?}-api:latest}
+  pull_policy: ${IMAGE_PULL_POLICY:-build}
+  build:
+    context: ../../apps/api
+    target: base
+
+x-api-db-env: &api-db-env
+  PROJECT_NAME: ${COMPOSE_PROJECT_NAME:?}
+  MODE: ${MODE:?}
+  POSTGRES_URL: postgresql+asyncpg://app:${POSTGRES_PASSWORD:?}@postgres:5432/app
+
+services:
+  api:
+    <<: *api-image
+    container_name: ${COMPOSE_PROJECT_NAME:?}-api
+    environment:
+      <<: *api-db-env
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?}
+      EXPIRE_HOURS: ${EXPIRE_HOURS:?}
+    # 上傳的檔案一律放這裡 (各模組一個子目錄): 寫在別的路徑, 重建容器就消失, make backup 也備份不到。
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    restart: always
+    expose:
+      - "8000"
+
+  # 一次性的 migration runner。api 等它成功結束才啟動, 所以 migration 失敗時整條鏈
+  # 都不會進入可服務狀態 —— 不可能出現新程式配舊資料。
+  migrate:
+    <<: *api-image
+    container_name: ${COMPOSE_PROJECT_NAME:?}-migrate
+    environment:
+      <<: *api-db-env
+    working_dir: /app
+    command: ["python", "scripts/db.py", "migrate"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # 不能是 always: 失敗的 migration 會無限重跑, compose 永遠等不到成功結束。
+    restart: "no"
+
+  postgres:
+    container_name: ${COMPOSE_PROJECT_NAME:?}-postgres
+    # **跨 major 升級不是換版本號**: 資料目錄格式與 major 綁死, 新版直接讀舊的 PGDATA
+    # 會拒絕啟動, 必須 pg_dump → 換版本 → pg_restore (或 pg_upgrade)。對已部署的下游
+    # 是破壞性動作, 要當成一次獨立改動並在 CHANGELOG 寫清楚步驟。
+    image: postgres:17.11-alpine
+    environment:
+      # 帳號與資料庫名稱寫死: 資料庫只有這個 compose 專案連得到, volume 名稱已經帶專案前綴,
+      # 名稱不同沒有隔離效果。腳本 (make db psql、make backup) 在容器裡讀這兩個值。
+      # 只在第一次建立資料庫時生效, 改了要連 api 的 POSTGRES_URL 一起改, 而且舊 volume 不會跟著變。
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: app
+      # collation 一旦定了就寫進索引, 之後想改要重建整個資料庫, 所以明確指定。
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # `-h 127.0.0.1`: 走 unix socket 的話 initdb 期間就會提早轉綠。
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      start_period: 20s
+      retries: 10
+    restart: always
+
+  web:
+    container_name: ${COMPOSE_PROJECT_NAME:?}-web
+    image: ${WEB_IMAGE:-${COMPOSE_PROJECT_NAME:?}-web:latest}
+    pull_policy: ${IMAGE_PULL_POLICY:-build}
+    build:
+      context: ../../apps/web
+      target: prod
+    environment:
+      API_URL: http://api:8000
+      # EXPIRE_HOURS 決定 cookie 的 maxAge, **必須與 api 的同一份**。
+      SYSTEM_NAME: ${SYSTEM_NAME:?}
+      EXPIRE_HOURS: ${EXPIRE_HOURS:?}
+      # 真正的那一把, image 裡只有公開的 id salt (見 apps/web/Dockerfile)。
+      # 忘了注入會安靜地改用公開值加密, 所以 instrumentation.ts 開機時也會擋。
+      NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:?}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      # 探 /healthz 而不是真實頁面: 頁面會打後端, web 的健康狀態就會跟著 api 一起紅。
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 20s
+      retries: 5
+    restart: always
+    expose:
+      - "3000"
+
+  nginx:
+    container_name: ${COMPOSE_PROJECT_NAME:?}-nginx
+    image: nginx:1.31.8-alpine
+    # 模板內容變了才重建 nginx (bind mount 的內容 compose 看不出來), 值由 scripts/lib/compose.sh 算。
+    labels:
+      project.nginx-config-hash: ${NGINX_CONFIG_HASH:?}
+    # 只綁 loopback: 對外由主機的 reverse proxy 負責, 這層信任它送來的用戶端 IP
+    # (infra/nginx/snippets/trusted-proxy.conf)。綁 0.0.0.0 的話外部可以繞過主機直接連,
+    # 自己帶 X-Real-IP 冒充任何 IP。Docker 直接改 iptables, 主機的 ufw 擋不住它開的 port。
+    ports:
+      - 127.0.0.1:${SYSTEM_PORT:?}:80
+    volumes:
+      - ../nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      # dev 與 prod 模板共用的片段 (安全標頭、proxy 標頭), 兩份模板都 `include` 它們。
+      - ../nginx/snippets:/etc/nginx/snippets:ro
+    depends_on:
+      web:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    restart: always
+
+volumes:
+  postgres_data:
+    name: ${COMPOSE_PROJECT_NAME:?}_${MODE:?}_postgres_data
+  # make uploads 依這個名稱判斷 volume 在不在; 改名的話舊 volume 裡的檔案會被留在原地。
+  uploads:
+    name: ${COMPOSE_PROJECT_NAME:?}_${MODE:?}_uploads
+
