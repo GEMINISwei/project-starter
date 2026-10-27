@@ -26,13 +26,15 @@ run-name: >-
 #   build    建兩份 production image 推到 GHCR, 每個要部署的組各標一個組名 (例如 :production)
 #   deploy   每套系統各一個 job, 依序 SSH 到主機: 備份 → checkout 同一個 tag → 拉 image 並重啟
 #            (make start) → 清掉舊 image 與過舊的備份
+#   cleanup-ghcr  部署完清掉 GHCR 上沒有標籤的舊版本, 再確認每個標籤的 image 都還完整
 # 各套的結果看執行頁面的 job 列表, 不另外彙總; job 有列表上看不到的資訊才各自寫進 Summary。
 #
 # 組名 = environment 名稱第一個 `-` 之前的部分: `production` 與 `production-*` 是 production 組。
 # 新增一套系統只要建一個符合命名的 environment, 不必改這個檔。
 #
 # 一組裡的系統永遠跑同一版, 所以 image 只標組名、不標版號: 版號由 APP_VERSION 回報。
-# 回滾 (Run workflow) 會從舊 tag 重建一次, 所以不需要在 GHCR 或主機上留舊版 image。
+# 回滾 (Run workflow) 會從舊 tag 重建一次, 所以不需要在 GHCR 或主機上留舊版 image:
+# 主機在 deploy 最後清, GHCR 由 cleanup-ghcr 清。
 # 不同組用不同標籤, 先行測試的組部署新版時不會蓋掉其他組正在用的 image。
 #
 # 主機的首次設定與需要的 secrets 見 docs/operations.md〈自動部署〉。
@@ -186,6 +188,7 @@ jobs:
     outputs:
       api-repo: ${{ steps.names.outputs.api-repo }}
       web-repo: ${{ steps.names.outputs.web-repo }}
+      packages: ${{ steps.names.outputs.packages }}
       source: ${{ steps.names.outputs.source }}
     steps:
       - uses: actions/checkout@v7
@@ -204,6 +207,8 @@ jobs:
           {
             echo "api-repo=${base}-api"
             echo "web-repo=${base}-web"
+            # GHCR API 認的 package 名稱不含 ghcr.io/<帳號>/, 給 cleanup-ghcr 用。
+            echo "packages=${base##*/}-api,${base##*/}-web"
             echo "source=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
             for app in api web; do
               echo "${app}-tags<<EOF"
@@ -440,3 +445,40 @@ jobs:
             [ "${status}" -ne 255 ] || echo "::error::連不上主機（SSH 以 255 結束）"
             exit "${status}"
           }
+
+  # 每次 push 都把組名標籤移到新的 image, 舊的變成沒有標籤的版本留在 GHCR, 回滾又是從 tag 重建,
+  # 它們沒有用處, 部署完就清掉。
+  # 部署完才清, 這次部署拉 image 時不會碰到清理; deploy 失敗也照樣清 (image 已經 push 了),
+  # build 沒成功就不清, GHCR 維持原狀。整個 repo 的部署共用排隊群組, 不會有另一次部署推到一半。
+  #
+  # 只刪「沒有標籤、也沒被有標籤的 index 引用」的版本: 多組共用的 image 還掛著別組的標籤,
+  # attestation 底下的 image 本體在 GHCR 上也顯示成 untagged, 這兩種都不能刪。清理工具認得
+  # 這些引用, 但它自己的 validate 只留 warning, 所以清完由 ghcr-verify.sh 逐一確認所有標籤。
+  # 清理失敗只是多留幾份, 下次部署會一起清, 只留警告; 驗證失敗代表 registry 上的 image 壞了,
+  # 這個 job 變紅 —— 線上照常在跑, 但下次部署或 Re-run 會拉不到, 重跑一次部署 (重新 build) 就恢復。
+  cleanup-ghcr:
+    needs: [build, deploy]
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+      # 這個 action 拿得到能刪 package 的 token, 釘在看過程式碼的 commit, tag 被改指向也不會跟著跑。
+      # 它會寫自己的 Summary (清了哪些)。
+      - name: 清掉沒有標籤的舊版本
+        continue-on-error: true
+        uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
+        with:
+          packages: ${{ needs.build.outputs.packages }}
+          delete-untagged: true
+      - name: 確認每個標籤的 image 都還完整
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          API_REPO: ${{ needs.build.outputs.api-repo }}
+          WEB_REPO: ${{ needs.build.outputs.web-repo }}
+        run: .github/scripts/ghcr-verify.sh "${API_REPO}" "${WEB_REPO}"

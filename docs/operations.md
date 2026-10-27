@@ -130,6 +130,15 @@ environment（見下方〈新增一套系統〉），workflow 不用改。`produ
 6. 每套的結果看執行頁面左側的 **job 列表**（一套一行，失敗的標紅叉）。**Annotations** 會寫出
    停在主機上的哪一步（例如「備份失敗」、「啟動服務失敗」、「連不上主機」）。點進失敗的 job，
    失敗的步驟會自動展開 log；修好之後按 **Re-run failed jobs**，只會重跑失敗的那幾套。
+7. 部署完清理 GHCR（`cleanup-ghcr`）：每次 push 都把組名標籤移到新的 image，舊的變成沒有標籤的版本，
+   回滾又是從 tag 重建，它們沒有用處。只刪**沒有標籤、也沒被有標籤的 index 引用**的版本，
+   再確認 registry 上**所有標籤**（不只這次部署的組）的 image 都還完整，結果寫在 Summary。
+   清理失敗只留警告（下次部署會一起清）；確認失敗這個 job 會變紅，線上照常在跑，
+   但下次部署或 Re-run 會拉不到 image，重跑一次部署（重新 build）就會恢復。
+
+**不要在 GHCR 網頁上把 untagged 全選刪掉**：image 帶 attestation 時，標籤指向的是一份目錄（index），
+真正的 image 和 attestation 在列表上也顯示成 untagged，刪掉之後那個標籤就拉不到了。
+要手動清就對最近一個 tag 按 Run workflow，清理與確認會照上面的規則跑。
 
 一次部署可能包含好幾組，所以**整個 repo 的部署共用一個排隊群組**，依序跑。
 GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進第三個時，**原本在等的那個會被取消**。
@@ -187,6 +196,8 @@ GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進�
 - [ ] 第一次推上去之後，到 GHCR 的 package 設定確認 Visibility：image 裡有完整的程式碼（但沒有機密），
       **私有 repo 要設 Private**；公開 repo 的 image 內容等於原始碼，設 Public 也可以，而且免費。
       **改成 Public 之後就改不回 Private**
+- [ ] 同一個時候確認 `-api` 與 `-web` 兩個 package 的 **Manage Actions access** 有這個 repo，
+      角色是 **Admin**：`cleanup-ghcr` 要刪除舊版本。權限不夠時清理只留警告，舊版本會一直累積
 - [ ] 要改每套保留的備份組數時，在 Variables 加 `BACKUP_KEEP`（正整數，沒設就是 10）；
       放在 repo 層級是所有系統的預設，個別 environment 也設的話以那份為準。設成不是正整數的值，
       那套系統在連上主機之前就會失敗
@@ -267,7 +278,9 @@ tag），第一版是 `make release 0.0.1`。
 **部署到其他組，或重新部署某個版本（回滾）**：Actions → Deploy → **Run workflow**，branch 選 `main`，
 填一個已經存在的 tag（例如上一版的 `v0.1.0`）與 `target`（要部署的組，多組用空格分開）。
 它走同一套流程（版號檢查、CI、從那個 tag 重建這一組的 image、逐套備份與部署），只是不建新的 tag；
-發新版仍然要走發布 release。回滾一樣是**整組一起**。也可以用指令觸發：
+發新版仍然要走發布 release。回滾一樣是**整組一起**。GHCR 不保留舊版 image，回滾一律從 tag 重建，
+重建出來的 image 與當初不會逐 byte 相同（相依由 lock 檔固定，差異在 base image 的系統層）。
+也可以用指令觸發：
 
 ```bash
 gh workflow run deploy.yml --ref main -f tag=v0.1.0 -f target="production staging"
