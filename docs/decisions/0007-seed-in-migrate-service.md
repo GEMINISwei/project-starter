@@ -21,4 +21,4 @@
 - api 加副本不受影響。
 - 系統角色在資料庫裡的改動會在下次部署時被覆蓋，這是刻意的。
 
-寫法見 [`extending.md`](../extending.md#初始資料seed)。
+寫法見 [`extending/seed.md`](../extending/seed.md)。

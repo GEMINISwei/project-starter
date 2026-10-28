@@ -17,7 +17,7 @@ shell，不需要保管任何註冊代碼。
 預設只有一個內建角色 `super_admin`（權限 `*`，涵蓋所有操作與日後新增的權限）。
 它**不能經由 API 指派**，只能由 `make db superuser` 產生。新建的使用者沒指定角色時沒有任何權限；
 需要 `member` 之類的預設角色，在 `RoleTable.seed_data` 新增（見
-[`extending.md`](../extending.md#初始資料seed)）。系統角色（有 `code` 的）的權限、名稱與啟用狀態
+[`extending/seed.md`](../extending/seed.md)）。系統角色（有 `code` 的）的權限、名稱與啟用狀態
 都由模板擁有，不能經由 API 修改，畫面上的名稱依 `code` 查前端字典。
 
 ### 後台只開放給超級管理者

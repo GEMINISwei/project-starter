@@ -21,7 +21,7 @@ const nextConfig: NextConfig = {
   agentRules: false,
   experimental: {
     // 固定值, 刻意不開放設定: Next 把它序列化進 build 產物, 執行期改不了。這是防護用的天花板,
-    // 各功能的上限寫在功能裡 (docs/extending.md 的「上傳檔案」)。nginx 兩份模板的
+    // 各功能的上限寫在功能裡 (docs/extending/uploads.md)。nginx 兩份模板的
     // client_max_body_size 要相同, tests/next.config.test.ts 守。
     serverActions: {
       bodySizeLimit: "16mb",

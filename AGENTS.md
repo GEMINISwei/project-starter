@@ -4,7 +4,7 @@
 [`architecture.md`](docs/architecture.md)（依賴規則、模組介面）、
 [`development.md`](docs/development.md)（指令、測試、風格）、
 [`features/`](docs/features/README.md)（帳號、角色、Session、限流等內建功能）、
-[`extending.md`](docs/extending.md)（新增模組／權限／migration／i18n）、
+[`extending/`](docs/extending/README.md)（新增模組／權限／migration／i18n）、
 [`operations.md`](docs/operations.md)（部署、備份、主機設定）、
 [`decisions/`](docs/decisions/README.md)（刻意不採用主流做法的設計決策，提議改掉之前先讀）。
 
@@ -37,7 +37,7 @@
 14. **compose 旗標不要自己組**，一律用 `scripts/lib/compose.sh`。
 15. **migration 以最近的 `v*` tag 為界**（含 prerelease）：tag 之前的只往前，不可修改或刪除，要改結構就新增一支
     （`make check migrate`）；tag 之後新增的還沒跑在任何主機上，同一個功能的可以併成一支，再 `make db reset`
-    （[說明](docs/extending.md#發版之前可以整理)）。兩版之間多了 migration 就不能回滾，部署前的檢查會拒絕
+    （[說明](docs/extending/migrations.md#發版之前可以整理)）。兩版之間多了 migration 就不能回滾，部署前的檢查會拒絕
     （[說明](docs/operations.md#回滾與-migration)）。
 
 各條由哪個工具或測試擋，見 [`development.md`](docs/development.md#架構本身也有測試)。
@@ -65,7 +65,7 @@
   （[說明](docs/development.md#改程式不改測試)）。
 - **CSS 只用設計變數**（名字與預設值在 `shared/ui/styles/tokens.css`，專案在 `app/theme.css` 覆寫），
   不寫死色值或尺寸（`style={{…}}` 也一樣）。
-- **使用者看得到的字串都要中英兩份**，放在擁有它那一層的 `i18n.ts`（[說明](docs/extending.md#語系i18n)）。
+- **使用者看得到的字串都要中英兩份**，放在擁有它那一層的 `i18n.ts`（[說明](docs/extending/i18n.md)）。
 - 不留未使用的匯出（knip 擋）；行長、函式長度、複雜度有上限（lint 擋）。
 - 註解寫**為什麼**，不寫做了什麼；演進過程寫進 commit message。
 - **程式碼裡的註解與 docstring 用半形標點**（`, : ; ( )`，後面空一格），全形的會被編輯器標成易混淆字元。
@@ -96,10 +96,10 @@
 - **權限的顯示標籤與分類只寫在後端**（各模組 `permissions.py` 的 `PermissionSpec`），前端不另存一份。
 - **route function、pydantic model、enum 的 docstring 會進公開 API 文件**，內部說明寫在一般註解。
 - **上傳的檔案存在 `/app/uploads/<模組>/`**：存到別的路徑不會報錯，但重建容器就消失、`make backup` 也備份不到
-  （[說明](docs/extending.md#上傳檔案)）。
+  （[說明](docs/extending/uploads.md)）。
 - **上傳的請求固定上限 16MB，不開放設定**：超過時使用者只看到一般錯誤，所以每個上傳功能要自己定上限，
   後端回傳 `LangText` 錯誤、前端送出前先檢查；需要更大的檔案時改用串流或直傳，不要調高上限
-  （[說明](docs/extending.md#大小上限)）。
+  （[說明](docs/extending/uploads.md#大小上限)）。
 - **後端直接送到畫面的非錯誤文字**（推播、事件訊息）也要走 `LangText` + `resolve_text()`。
 - **主機的 reverse proxy 要覆寫 `X-Real-IP` 與 `X-Forwarded-Proto`**：它在 repo 之外，少了任何一個，
   限流與 cookie 的 `Secure` 都會出錯，而且不會報錯（[說明](docs/operations.md#主機的-reverse-proxy)）。

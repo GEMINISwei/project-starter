@@ -425,7 +425,7 @@ class BaseTable(DeclarativeBase):
 
     @classmethod
     async def ensure_seed(cls, session: AsyncSession | None = None) -> None:
-        """依 `seed_data` / `seed_match_key` 寫入初始資料 (見 docs/extending.md「初始資料」)。
+        """依 `seed_data` / `seed_match_key` 寫入初始資料 (見 docs/extending/seed.md)。
 
         - 有設 `seed_match_key`: 每次都逐筆 upsert。**該欄位必須有唯一約束**, 否則
           PostgreSQL 會直接報錯 —— 這擋掉了「每次 migrate 都多插一筆」。

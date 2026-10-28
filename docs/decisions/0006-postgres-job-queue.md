@@ -20,4 +20,4 @@
 - 吞吐量比專門的佇列低，任務量大到 PostgreSQL 撐不住時要重新檢討。
 - 任務必須能重跑：worker 可能做到一半被重啟。
 
-實作時要注意的事見 [`extending.md`](../extending.md#背景工作尚未內建)。
+實作時要注意的事見 [`extending/background-jobs.md`](../extending/background-jobs.md)。

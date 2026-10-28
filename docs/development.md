@@ -1,6 +1,6 @@
 # 開發指南
 
-本機環境、指令、測試策略、開發流程與程式碼風格。擴充功能見 [`extending.md`](extending.md)，
+本機環境、指令、測試策略、開發流程與程式碼風格。擴充功能見 [`extending/`](extending/README.md)，
 部署與維運見 [`operations.md`](operations.md)。
 
 ## 開發環境
@@ -185,7 +185,7 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 | api 開機時不寫資料，初始資料由 migrate 寫入 | `apps/api/tests/shared/test_platform.py`、`apps/api/tests/scripts/test_db.py` |
 | `shared/` 用到的 CSS 變數都定義在 shared 裡 | `apps/web/tests/shared/ui/tokens.test.ts` |
 | `APP_VERSION` 與 CHANGELOG 的版號一致 | `apps/api/tests/test_version.py` |
-| 文件的相對連結與錨點有效、`features/` 與 ADR 都列在索引、ADR 的取代關係兩邊一致 | `apps/api/tests/test_docs.py`、`test_doc_decisions.py`、`test_doc_decision_supersession.py` |
+| 文件的相對連結與錨點有效、原始碼寫的 `docs/….md` 路徑存在、`extending/`、`features/` 與 ADR 都列在索引、`features/` 的開頭與結尾段落、ADR 的取代關係兩邊一致 | `apps/api/tests/test_docs.py`、`test_doc_features.py`、`test_doc_decisions.py`、`test_doc_decision_supersession.py` |
 
 規則本身見 [`architecture.md`](architecture.md#強制依賴規則)。
 

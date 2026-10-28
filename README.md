@@ -52,7 +52,7 @@ flowchart LR
 | [`docs/architecture.md`](docs/architecture.md) | 依賴規則、模組介面、目錄結構、前後端契約 |
 | [`docs/development.md`](docs/development.md) | 指令、測試策略、程式碼風格、CI |
 | [`docs/features/`](docs/features/README.md) | 功能怎麼運作，一個主題一份：帳號與角色、Session、限流、語系 |
-| [`docs/extending.md`](docs/extending.md) | 開新案時的擴充項目：新增模組、權限、migration、語系 |
+| [`docs/extending/`](docs/extending/README.md) | 開新案時的擴充項目：新增模組、權限、migration、語系 |
 | [`docs/operations.md`](docs/operations.md) | 部署、主機設定、備份與救援 |
 | [`docs/decisions/`](docs/decisions/README.md) | 設計決策（ADR）：刻意不採用主流做法的地方與理由 |
 
@@ -63,4 +63,4 @@ flowchart LR
 3. 照 [`docs/development.md`](docs/development.md#開發流程) 的 checklist 設定 GitHub 一次
    （squash merge、`main` 的 ruleset、Dependency graph、Dependabot 警示與安全更新）。
 4. 在 `apps/web/app/theme.css` 覆寫設計變數決定視覺（名字與預設值在 `shared/ui/styles/tokens.css`）。
-5. 照 [`docs/extending.md`](docs/extending.md#新增一個功能模組) 加入第一個模組。
+5. 照 [`docs/extending/new-module.md`](docs/extending/new-module.md) 加入第一個模組。
