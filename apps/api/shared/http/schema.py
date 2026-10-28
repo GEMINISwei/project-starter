@@ -35,7 +35,7 @@ def _to_utc_isoformat(value: datetime) -> str:
 #
 # 這個模板目前沒有任何回應帶時間欄位, 所以**沒有**靜態檢查在守這條 —— 現在寫一支只會是
 # 一份恆真的測試, 而那比沒有更糟 (同 docs/architecture.md 對 test_i18n_text_usage 的說法)。
-# 守它的是 docs/extending.md〈新增 API 模組〉第 3 步那一段, 以及這裡。
+# 守它的是 docs/extending/new-module.md〈1. 後端模組〉第 3 步那一段, 以及這裡。
 # 真的長出第二、第三個時間欄位之後, 再補一支掃 response schema 的測試才有意義。
 UtcDateTime = Annotated[
     datetime,

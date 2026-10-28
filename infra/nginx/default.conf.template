@@ -10,7 +10,7 @@ server {
     # 防護用的天花板, 與 Next 的 Server Action 上限 (next.config.ts) 相同, 不開放設定。
     # 比 Next 小的話, 介於兩者之間的請求只會拿到 nginx 沒有訊息的 413。兩邊格式不同
     # (`16m`／`16mb`) 共用不了變數, 由 apps/web/tests/next.config.test.ts 對齊。
-    # 給使用者看的上限寫在各功能裡, 見 docs/extending.md 的「上傳檔案」。
+    # 給使用者看的上限寫在各功能裡, 見 docs/extending/uploads.md。
     client_max_body_size 16m;
 
     include /etc/nginx/snippets/security-headers.conf;

@@ -50,7 +50,7 @@ export async function setAccessTokenCookie(token: string) {
  * 清掉 session cookie (登出、token 失效時)。
  *
  * 只刪瀏覽器這一份, token 本身到期前仍然有效 —— 撤銷要由後端把世代號 +1 (登出、換密碼,
- * 見 docs/operations.md〈Session〉), 這裡只是收尾。
+ * 見 docs/features/session.md〈撤銷〉), 這裡只是收尾。
  * 在 Server Component 的算繪階段呼叫會丟例外 (那時不允許寫 cookie), 呼叫端自己決定要不要接住。
  */
 export async function clearAccessTokenCookie() {

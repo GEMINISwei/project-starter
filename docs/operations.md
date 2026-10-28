@@ -53,7 +53,7 @@ nginx 模板改了也用 `make start`：它會先跑 `nginx -t` 再重建 nginx�
 
 `make start` 先用要上線的 image **單獨跑一次 migrate**，成功才切換服務：失敗就停在這裡，線上的服務
 維持原狀。migrate 做兩件事：`alembic upgrade head`，接著補齊初始資料（seed，見
-[`extending.md`](extending.md#初始資料seed)）。migration 失敗時整個撤回（PostgreSQL 的 DDL 在交易裡）；
+[`extending/seed.md`](extending/seed.md)）。migration 失敗時整個撤回（PostgreSQL 的 DDL 在交易裡）；
 seed 失敗時結構已經升上去了，服務一樣不切換，修好之後重跑即可（seed 可以重複執行）。之後的啟動順序是
 `postgres → migrate → api → web → nginx`，這時 `migrate` 再跑一次，沒有待執行的 migration、seed 也已經是最新的。
 

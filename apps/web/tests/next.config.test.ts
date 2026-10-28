@@ -3,7 +3,7 @@
  *
  * Next 把 `bodySizeLimit` 序列化進 build 產物, 執行期改不了; 開放設定就得在 build 與執行期
  * 各留一份再比對。上限只是防護用的天花板, 各功能自己的上限寫在功能裡
- * (見 docs/extending.md 的「上傳檔案」), 所以這個值不需要依部署調整。
+ * (見 docs/extending/uploads.md), 所以這個值不需要依部署調整。
  *
  * nginx 與 Next 的格式不同 (`16m`／`16mb`), 共用不了一個變數, 靠這支測試對齊。nginx 比 Next
  * 小時, 介於兩者之間的請求會在 nginx 拿到沒有訊息的 413, 永遠到不了應用層。

@@ -1,7 +1,7 @@
 """資料庫 CLI (`scripts/db.py`)。
 
 `migrate` 是 compose 的 migrate 服務跑的那一支, `make start` 先單獨跑它、成功才切換服務。
-初始資料 (seed) 也在這一步寫入, 失敗時才會被同一道保護擋下 (見 docs/extending.md〈初始資料〉)。
+初始資料 (seed) 也在這一步寫入, 失敗時才會被同一道保護擋下 (見 docs/extending/seed.md)。
 
 用獨立的資料庫而不是 integration 共用的那一個: 其他測試會在共用的資料庫裡 `create_all`,
 `alembic upgrade` 碰到已經存在的表會直接失敗。

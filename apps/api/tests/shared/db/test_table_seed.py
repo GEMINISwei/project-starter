@@ -5,7 +5,7 @@
 (`modules/roles/model.py` 的 `RoleTable` 就靠它)。兩條分岔 (有沒有 `seed_match_key`)、
 `prepare_seed_item` hook 與一個 `raise` 分支, 少了測試就只有 docstring 在守。
 
-語義見 docs/extending.md 的「初始資料 (Seed)」。
+語義見 docs/extending/seed.md。
 """
 
 import pytest

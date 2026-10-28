@@ -10,7 +10,7 @@ app（組裝層） → modules（垂直功能） → shared（平台能力）
 - `modules`：一個完整的功能，包含它的資料、規則、API／畫面。
 - `shared`：多個模組共用的能力。
 
-這份文件只講**規則與介面**，操作步驟見 [`extending.md`](extending.md)。
+這份文件只講**規則與介面**，操作步驟見 [`extending/`](extending/README.md)。
 
 ## 目錄結構
 
@@ -244,7 +244,7 @@ OpenAPI 的 `info.version` 固定是 `"1"`：規格要求必填，但前後端�
 
 ## 新增與移除 module
 
-新增的步驟見 [`extending.md`](extending.md#新增一個功能模組)。原則：前後端同名；public entry
+新增的步驟見 [`extending/new-module.md`](extending/new-module.md)。原則：前後端同名；public entry
 從**最小**開始設計；業務 entity 型別一律在用到它的模組的 `types.ts` 以 `Schema<"…">` 命名，
 不搬進 shared，刪掉模組時型別才會跟著消失。
 
