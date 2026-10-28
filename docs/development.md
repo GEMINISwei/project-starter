@@ -210,6 +210,9 @@ PR 描述「驗證」段的每條驗收條件後面接一個測試名稱與結�
 - 前端與 E2E：讀得通的中文句子（`未登入導向 /login`、`登出後其他已登入的裝置也會被登出`）
 - 後端：`test_<動作>_<條件>_<結果>`（`test_get_users_without_permission_returns_403`）
 
+驗收條件只寫在 PR，不另寫一份文件或 spec：PR 是動手前討論方向的地方，合併後留下來的是測試名稱，
+它會跟著程式一起被執行，文件則會在下一次改動時悄悄過時。
+
 覆蓋率門檻（`pyproject.toml` 的 `fail_under`、`vitest.config.ts` 的 `thresholds`）是**防退步的地板，
 不是目標**。
 
