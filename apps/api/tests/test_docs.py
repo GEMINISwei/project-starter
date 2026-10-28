@@ -11,11 +11,14 @@ AI agent) 只會找不到內容。錨點用 GitHub 的規則從標題產生, 改
 """
 
 import re
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
+GIT = shutil.which("git") or "/usr/bin/git"
 EXTENDING_DIR = REPO_ROOT / "docs" / "extending"
 DOCS = sorted(
     [
@@ -31,9 +34,6 @@ LINK = re.compile(r"\]\(([^)\s]+)\)")
 HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$", flags=re.MULTILINE)
 EXTERNAL = ("http://", "https://", "mailto:")
 
-# 原始碼以外的目錄: 相依、建置產物與快取裡的 `docs/` 不是這個 repo 的文件。
-SOURCE_ROOTS = ("apps", "infra", "scripts", ".github")
-SKIPPED_DIRS = {"node_modules", ".next", ".venv", "__pycache__", "coverage", "test-results"}
 DOC_PATH = re.compile(r"\bdocs/[A-Za-z0-9_./-]+\.md")
 
 
@@ -90,20 +90,20 @@ def test_link_anchors_match_headings(doc: Path) -> None:
 
 
 def source_files() -> list[Path]:
-    roots = [REPO_ROOT / name for name in SOURCE_ROOTS]
-    files = [path for root in roots for path in root.rglob("*") if path.is_file()]
-    return sorted([REPO_ROOT / "Makefile", *files])
+    """只看 git 追蹤的檔案: 相依、建置產物與快取 (`.pytest_cache` 也會記下文件路徑) 不是原始碼。"""
+    tracked = subprocess.run(  # noqa: S603
+        [GIT, "ls-files", "-z"], cwd=REPO_ROOT, capture_output=True, check=True, text=True
+    ).stdout.split("\0")
+    return [REPO_ROOT / name for name in tracked if name and not name.endswith(".md")]
 
 
 def test_doc_paths_in_source_point_to_existing_files() -> None:
     missing = []
     for path in source_files():
         relative = path.relative_to(REPO_ROOT)
-        if path.suffix == ".md" or SKIPPED_DIRS.intersection(relative.parts):
-            continue
         try:
             text = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
+        except (FileNotFoundError, UnicodeDecodeError):  # 刪了還沒 git rm 的檔案、二進位檔
             continue
         missing += [
             f"{relative}: {target}"

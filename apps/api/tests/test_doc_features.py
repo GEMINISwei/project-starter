@@ -28,7 +28,10 @@ def ids(path: Path) -> str:
 
 
 def code_and_tests(path: Path) -> str:
-    """最後一個 `##` 之後的內容; 由 `test_feature_docs_end_with_code_and_tests` 保證它就是那一段。"""
+    """最後一個 `##` 之後的內容。
+
+    `test_feature_docs_end_with_code_and_tests` 保證它就是「程式與測試」那一段。
+    """
     return H2.split(prose(path))[-1]
 
 
