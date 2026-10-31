@@ -12,6 +12,11 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    // 兩個都是預設值, 明寫是為了關掉 vitest 每次都印的效能提示 (jsdom 建了幾次、worker 開了幾個):
+    // 它只在沒指定 pool／isolate 時出現, 每跑一次就多一段要讀進 AI 上下文的輸出。
+    // 提示建議的 vmThreads／isolate: false 會讓測試檔之間共用狀態, 不換。
+    pool: "forks",
+    isolate: true,
     globals: true,
     // 測試集中在 `tests/`, 與原始碼同構 (同後端的 `testpaths = ["tests"]`)。
     // 明寫 include 而不是用 vitest 預設的全域掃描: 預設會撿走任何位置的 `*.test.ts`,
