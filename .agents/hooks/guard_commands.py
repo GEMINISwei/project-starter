@@ -143,6 +143,43 @@ def self_approval(argv: list[str]) -> bool:
     return runs_script or writes_approval
 
 
+def skips_hooks(subcommand: str, args: list[str]) -> bool:
+    """`--no-verify` 會略過 .githooks/ (commit-msg 檢查 Co-authored-by)。commit 的 `-n` 也是;
+    push 的 `-n` 是 --dry-run, 不算。"""
+    if "--no-verify" in args:
+        return True
+    short_flags = [arg for arg in args if arg.startswith("-") and not arg.startswith("--")]
+    return subcommand == "commit" and any("n" in flags for flags in short_flags)
+
+
+def changes_hooks_path(argv: list[str], subcommand: str, args: list[str]) -> bool:
+    """`git -c core.hooksPath=…` 與 `git config core.hooksPath …` 都會讓 .githooks/ 失效。"""
+    options = argv[1 : len(argv) - len(args) - 1]
+    if any(option.lower().startswith("core.hookspath") for option in options):
+        return True
+    if subcommand != "config" or "core.hookspath" not in [arg.lower() for arg in args]:
+        return False
+    reading = {"--get", "--get-all", "-l", "--list", "--show-origin"} & set(args)
+    return not reading and args[-1] != ".githooks"
+
+
+def git_violation(argv: list[str], cwd: str) -> str | None:
+    subcommand, args = git_subcommand(argv)
+    if subcommand == "push" and pushes_to_main(args, cwd):
+        return "不可以直接 push 到 main：main 只透過 PR 前進（docs/workflow.md〈開發流程〉）。"
+    if subcommand in {"commit", "push", "merge"} and skips_hooks(subcommand, args):
+        return (
+            "不要略過 git hook（--no-verify）：commit-msg 會檢查 Co-authored-by，"
+            "照它的訊息修正後再 commit。"
+        )
+    if changes_hooks_path(argv, subcommand, args):
+        return (
+            "不要改 core.hooksPath：.githooks/ 的檢查會整個失效。"
+            "它應該是 .githooks（make init dev 會設定）。"
+        )
+    return None
+
+
 def violation(argv: list[str], cwd: str) -> str | None:
     if self_approval(argv):
         return (
@@ -151,9 +188,7 @@ def violation(argv: list[str], cwd: str) -> str | None:
         )
     program = argv[0].rsplit("/", 1)[-1]
     if program == "git":
-        subcommand, args = git_subcommand(argv)
-        if subcommand == "push" and pushes_to_main(args, cwd):
-            return "不可以直接 push 到 main：main 只透過 PR 前進（docs/workflow.md〈開發流程〉）。"
+        return git_violation(argv, cwd)
     if program == "gh" and argv[1:3] == ["pr", "merge"]:
         return "PR 由使用者合併，agent 不自己合併。請回報 CI 結果，等使用者處理。"
     if program == "npm" and {"--force", "--legacy-peer-deps"} & set(argv):

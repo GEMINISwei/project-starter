@@ -55,9 +55,10 @@
   （[說明](docs/workflow.md#開發流程)）。
 - **PR 描述固定三段：摘要、驗證（成功失敗都寫）、檢查（給審查者的 checkbox）**。
   `gh pr create --body` 會跳過 [`PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md)，
-  自己帶內文時也照這三段；之後推新 commit 要回頭補摘要與驗證。
+  自己帶內文時也照這三段；之後推新 commit 要回頭補摘要與驗證。PR 標題與三段由 CI 的 `pr` 擋。
 - **每個 commit 最後加 `Co-authored-by: <產品> <模型與版本> <email>`**（例：`Claude Opus 5.5 <noreply@anthropic.com>`），
   email 用工具官方的值，沒有時用 `noreply@<廠商網域>`（[說明](docs/workflow.md#ai-協作的共同作者)）。
+  `.githooks/commit-msg` 會擋，不要用 `--no-verify` 繞過。
 - **動手前先把驗收條件寫進 Draft PR 的「驗證」段，每條對應一個測試名稱**，不另寫成文件；
   寫不出測試名稱的那條就是要先問清楚的地方（[說明](docs/testing.md#驗收條件與測試名稱)）。
 - **先寫測試，寫好才開始實作**，不要邊寫功能邊改測試。單元測試與 `e2e/` 的 E2E 測試都一樣：功能會改到畫面流程時，

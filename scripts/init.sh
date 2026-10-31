@@ -2,7 +2,7 @@
 #
 # 開案: 產生 .env (含 MODE), 開發機另外安裝主機端相依、建立 git 歷史: make init <dev|prod>
 #
-#   make init dev    開發機: 產生 .env (MODE=development)、安裝相依、git init; 可以重跑, 已有的 .env 與 .git 會跳過
+#   make init dev    開發機: 產生 .env (MODE=development)、安裝相依、git init、檢查 AI agent 環境; 可以重跑, 已有的 .env 與 .git 會跳過
 #   make init prod   部署主機: 只產生 .env (MODE=production), 那裡只跑容器, 不必裝 uv 與 Node
 #
 # 一定要指定: 預設成任何一種, 都會有人在另一種主機上習慣性地打 `make init`。
@@ -17,6 +17,8 @@ set -euo pipefail
 
 # shellcheck source=scripts/lib/compose.sh
 source "$(dirname "$0")/lib/compose.sh"
+# shellcheck source=scripts/lib/agent_setup.sh
+source "$(dirname "$0")/lib/agent_setup.sh"
 
 usage() {
     sed -n '/^#   make init/s/^#   //p' "$0" >&2
@@ -178,6 +180,9 @@ init_git() {
         echo "已建立全新的 git 歷史"
     fi
 
+    # .githooks/ 進版控, 但 git 不會自動用它; clone 下來的也一樣, 所以每次都設 (重跑無害)。
+    git config core.hooksPath .githooks
+
     # 這裡刻意不問遠端網址: 本機開發測試常常不想綁任何儲存庫, 而這一步跑完就該能 make start。
     # 正常開案 ("Use this template" 之後 git clone) origin 早就綁好了, 看不到這兩行。
     if ! git remote | grep -q .; then
@@ -194,14 +199,20 @@ case "${1:-}" in
         require_tools openssl uv node npm docker
         require_compose
         check_node_version
+        # AI agent 的環境只有開發機需要, 也在產生 .env、裝相依之前就擋, 不必等裝完一輪才發現。
+        require_python3
+        require_skills_symlink
         create_env development
         install_deps
         init_git
         echo
+        remind_codex_trust
         echo "完成。接著："
         echo "  make start          # 啟動開發環境（首次建置 image 約 2–5 分鐘）"
         echo "  make db superuser   # 啟動後建立第一個超級管理者（網頁上沒有註冊入口）"
         echo "  make check          # 送出前的檢查"
+        echo
+        print_agent_checklist
         ;;
     prod)
         require_tools openssl docker

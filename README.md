@@ -5,10 +5,11 @@ FastAPI + Next.js 全端起始模板，開箱即有認證、角色權限、中�
 
 ## Quickstart
 
-需要 Docker Desktop、`make`、`openssl`、`uv` 與 Node（版本見 [`apps/web/.nvmrc`](apps/web/.nvmrc)）。
+需要 Docker Desktop、`make`、`openssl`、`uv`、Node（版本見 [`apps/web/.nvmrc`](apps/web/.nvmrc)），
+以及 `python3` 3.9 以上（AI agent 的 hook 用；macOS 內建的即可）。
 
 ```bash
-make init dev   # 產生 .env（MODE=development，金鑰自動產生）並安裝相依
+make init dev   # 產生 .env（MODE=development，金鑰自動產生）、安裝相依、啟用 git hook
 make start      # 啟動開發環境（首次建置約 2–5 分鐘）
 ```
 
@@ -60,9 +61,12 @@ flowchart LR
 
 ## 開新專案時
 
-1. 複製這份目錄，`make init dev` 會順便 `git init`。
+1. 在 GitHub 按 **Use this template** 建立 repo，`git clone` 下來後 `make init dev`（產生 `.env`、安裝相依、
+   啟用 `.githooks/`，並檢查 AI agent 需要的環境）。不經 GitHub、直接複製這份目錄時，`make init dev` 會順便 `git init`。
 2. 改寫這份 README、[`LICENSE`](LICENSE) 與 `.env.example` 的 `COMPOSE_PROJECT_NAME` 預設值。
 3. 照 [`docs/workflow.md`](docs/workflow.md#開發流程) 的 checklist 設定 GitHub 一次
-   （squash merge、`main` 的 ruleset、Dependency graph、Dependabot 警示與安全更新）。
-4. 在 `apps/web/app/theme.css` 覆寫設計變數決定視覺（名字與預設值在 `shared/ui/styles/tokens.css`）。
-5. 照 [`docs/extending/new-module.md`](docs/extending/new-module.md) 加入第一個模組。
+   （squash merge、`main` 的 ruleset 與 required checks、Dependency graph、Dependabot 警示與安全更新）。
+4. 照 [`docs/extending/agent-hooks.md`](docs/extending/agent-hooks.md#啟用與停用) 的 checklist 設定要用的 AI agent
+   （Claude、Codex）。少了這一步，hook、skills 與 commit 檢查在那個 agent 上**不會生效，也不會報錯**。
+5. 在 `apps/web/app/theme.css` 覆寫設計變數決定視覺（名字與預設值在 `shared/ui/styles/tokens.css`）。
+6. 照 [`docs/extending/new-module.md`](docs/extending/new-module.md) 加入第一個模組。
