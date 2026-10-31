@@ -178,6 +178,9 @@ init_git() {
         echo "已建立全新的 git 歷史"
     fi
 
+    # .githooks/ 進版控, 但 git 不會自動用它; clone 下來的也一樣, 所以每次都設 (重跑無害)。
+    git config core.hooksPath .githooks
+
     # 這裡刻意不問遠端網址: 本機開發測試常常不想綁任何儲存庫, 而這一步跑完就該能 make start。
     # 正常開案 ("Use this template" 之後 git clone) origin 早就綁好了, 看不到這兩行。
     if ! git remote | grep -q .; then

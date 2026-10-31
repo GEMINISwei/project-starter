@@ -1,0 +1,28 @@
+name: PR
+
+# PR 標題與描述的格式 (.github/scripts/check-pr.sh)。跟 ci.yml 分開: 只改標題或描述時不必重跑整套 CI,
+# 但在 GitHub 上改了標題或描述 (edited) 也要重新檢查。
+# job 名稱 `pr` 要加進 main ruleset 的 required checks (docs/workflow.md〈開發流程〉), 沒加的話紅了照樣能合併。
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      # 標題與描述走環境變數, 不直接嵌進 run: 它們是任何人都能填的文字, 嵌進去等於讓人注入指令。
+      - name: PR 標題與描述
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: .github/scripts/check-pr.sh

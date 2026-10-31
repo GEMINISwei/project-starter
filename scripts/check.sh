@@ -40,6 +40,16 @@ run_lint() {
     (cd apps/web && npm run --silent lint)
     lint_shell
     lint_compose
+    warn_git_hooks
+}
+
+# .githooks/ 要 core.hooksPath 指過去才會生效, 沒設時 commit 照樣成功、不會有任何提示。
+# 只提醒不擋: 這是本機設定, CI 上本來就沒有。
+warn_git_hooks() {
+    [ -n "${CI:-}" ] && return
+    [ "$(git config --get core.hooksPath || true)" = ".githooks" ] && return
+    echo "⚠️  git hook 沒有啟用（.githooks/ 的 commit-msg 不會檢查）：重跑 make init dev，"
+    echo "   或 git config core.hooksPath .githooks。"
 }
 
 # 本機沒裝工具時只提醒、不擋 (`make check` 的承諾是不需要額外安裝); CI 上 (GitHub 會設
@@ -55,7 +65,8 @@ missing_tool() {
 lint_shell() {
     command -v shellcheck > /dev/null 2>&1 || { missing_tool shellcheck; return; }
     # -x: 跟著 `source` 進 lib/, 被引用的函式與變數才不會被當成未定義。
-    shellcheck -x scripts/*.sh scripts/lib/*.sh .github/scripts/*.sh .agents/skills/*/scripts/*.sh
+    shellcheck -x scripts/*.sh scripts/lib/*.sh .github/scripts/*.sh .agents/skills/*/scripts/*.sh \
+        .githooks/*
 }
 
 # 用 .env.example 展開兩種 MODE 的 compose: 抓 YAML 與錨點寫錯, 也抓「compose 用了
