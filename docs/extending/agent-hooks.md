@@ -20,6 +20,8 @@ Claude 與 Codex 的 hook 協定相同（事件名稱、stdin 收的 JSON、回�
 設定檔不共用：`.claude/settings.json` 同時是 Claude 的整份專案設定（權限等），格式跟 Codex 的不同。
 兩份呼叫的事件、matcher 與腳本必須一致，只有參數不同（`apps/api/tests/test_agent_hooks.py` 擋）。
 參數留給兩家行為不同的地方，例如 Codex 的 `PreToolUse` 不支援 `ask`。
+`.codex/hooks.json` 的頂層只能有 `hooks`：多一個欄位（例如拿來寫註解的 `description`），Codex 就整份解析失敗、
+所有 hook 都不載入，而且只在 `hooks/list` 留下警告，說明一律寫在這份文件（測試擋）。
 
 ## 目前有的 hook
 

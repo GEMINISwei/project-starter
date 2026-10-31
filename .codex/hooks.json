@@ -1,5 +1,4 @@
 {
-  "description": "邏輯在 .agents/hooks/, 與 .claude/settings.json 呼叫同樣的腳本 (tests/test_agent_hooks.py 檢查)",
   "hooks": {
     "PreToolUse": [
       {
