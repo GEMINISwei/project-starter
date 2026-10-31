@@ -15,7 +15,6 @@ docs/extending/agent-hooks.md〈啟用與停用〉的每一項, 少了都不會�
 住在 api 底下的理由同 `test_nginx_templates.py`: `make check` 一定會跑到這裡。
 """
 
-import os
 import re
 import shutil
 import subprocess
@@ -41,8 +40,9 @@ def fake_command(bin_dir: Path, name: str, script: str) -> None:
 def run(
     command: str, cwd: Path, bin_dir: Path, env: dict[str, str] | None = None
 ) -> subprocess.CompletedProcess[str]:
-    # PATH 只放假的指令與基本工具所在的目錄: 本機真的 python3、codex 不能混進來。
-    base = {"PATH": f"{bin_dir}{os.pathsep}/bin", "HOME": str(cwd)}
+    # PATH 只放假的指令: 本機真的 python3、codex 不能混進來。不加 /bin —— Ubuntu 的 /bin 就是
+    # /usr/bin, 裡面有 python3。檢查本身只用 bash 內建的指令, 不需要其他工具。
+    base = {"PATH": str(bin_dir), "HOME": str(cwd)}
     # 指令是這支測試自己給的固定值, 不是外部輸入。
     return subprocess.run(  # noqa: S603
         [BASH, "-c", f'source "{LIB}"; {command}'],
