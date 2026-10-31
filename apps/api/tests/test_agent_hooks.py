@@ -97,6 +97,10 @@ BLOCKED = [
     "docker --context x compose ps",
     "docker-compose logs api",
     "FOO=1 docker compose down -v",
+    # 換行是指令的分隔: 第二行不是第一行的參數。
+    "echo hi\ngit push origin main",
+    "cat > x <<EOF\nhi\nEOF\ngit push origin main",
+    "git push \\\n  origin main",
 ]
 
 ALLOWED = [
@@ -110,6 +114,12 @@ ALLOWED = [
     "docker ps",
     "make services logs api",
     "echo docker compose",
+    # heredoc 與 here-string 是資料, 不是指令。
+    "git commit -q -F - <<'EOF'\nnever git push origin main\nEOF",
+    "cat <<-EOF > notes.txt\n\tdocker compose up\n\tEOF",
+    "python3 - <<'EOF'\nprint('.git/agent-approved-test-edits')\nEOF",
+    "grep x <<< 'git push origin main'",
+    "git push \\\n  origin feat/x",
 ]
 
 
