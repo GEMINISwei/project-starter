@@ -108,6 +108,7 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 | 文件的相對連結與錨點有效、原始碼寫的 `docs/….md` 路徑存在、`extending/`、`features/` 與 ADR 都列在索引、`features/` 的開頭與結尾段落、ADR 的取代關係兩邊一致 | `apps/api/tests/test_docs.py`、`test_doc_features.py`、`test_doc_decisions.py`、`test_doc_decision_supersession.py` |
 | skills 只有 `.agents/skills/` 一份、`.claude/skills` 是指向它的 symlink、內文不用某一家專屬的工具、只能手動呼叫的兩家設定一致 | `apps/api/tests/test_agent_skills.py` |
 | hook 腳本擋下該擋的指令、不誤擋一般指令、`.claude/settings.json` 與 `.codex/hooks.json` 呼叫同樣的腳本 | `apps/api/tests/test_agent_hooks.py` |
+| 實作開始後改測試檔要使用者同意、放行只對列出的檔案且有新 commit 就失效、agent 不能繞過確認自己放行 | `apps/api/tests/test_agent_test_guard.py` |
 | lock 檔與 `make gen-types` 的產出列在 `.ignore`（AI agent 的搜尋不撞進去） | `apps/api/tests/test_search_ignore.py` |
 
 規則本身見 [`architecture.md`](architecture.md#強制依賴規則)。
@@ -122,6 +123,10 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 2. 真的覺得測試要改（介面改名、斷言本來就寫錯、漏了情境要補）時，**先停下來說明**那個測試驗證的條件、
    沒過的原因，以及為什麼是測試而不是實作要改。
 3. 得到同意後才動測試檔，並在 PR 描述寫明**原本那個斷言為什麼是錯的**。
+
+AI agent 由 hook 強制這一條：分支相對 `origin/main` 已經改了 `apps/`、`e2e/` 底下的非測試檔案（實作開始了），
+再改測試檔就會停下來等使用者同意（Claude 直接跳確認；Codex 由 agent 執行申請指令、跳確認）。
+做法見 [`agent-hooks.md`](extending/agent-hooks.md#測試鎖定)。
 
 紅燈階段用單項指令跑（`uv run pytest tests/ -k xxx`、`npm run test -- -t "名稱"`），
 `make check` 要等實作完成、全部轉綠才會過。
