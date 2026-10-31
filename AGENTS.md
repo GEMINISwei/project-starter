@@ -2,7 +2,8 @@
 
 這是給 AI agent 的**唯一**指引（不另設 `CLAUDE.md`）。只寫無法從程式碼推導的規則，細節見：
 [`architecture.md`](docs/architecture.md)（依賴規則、模組介面）、
-[`development.md`](docs/development.md)（指令、測試、風格）、
+[`development.md`](docs/development.md)（環境、指令、風格）、[`testing.md`](docs/testing.md)（測試策略、驗收條件）、
+[`workflow.md`](docs/workflow.md)（開發流程、提交、相依升級）、
 [`features/`](docs/features/README.md)（帳號、角色、Session、限流等內建功能）、
 [`extending/`](docs/extending/README.md)（新增模組／權限／migration／i18n）、
 [`operations.md`](docs/operations.md)（部署、備份、主機設定）、
@@ -39,22 +40,24 @@
     （`make check migrate`）；tag 之後新增的還沒跑在任何主機上，同一個功能的可以併成一支，再 `make db reset`
     （[說明](docs/extending/migrations.md#發版之前可以整理)）。兩版之間多了 migration 就不能回滾，部署前的檢查會拒絕
     （[說明](docs/operations.md#回滾與-migration)）。
+16. **skills 只放 `.agents/skills/`**，Claude 與 Codex 共用：`.claude/skills` 是指向它的 symlink，不要在那裡另放；
+    內文不寫某一家專屬的工具，只能手動呼叫的兩家要一起設（[說明](docs/extending/agent-skills.md)）。
 
-各條由哪個工具或測試擋，見 [`development.md`](docs/development.md#架構本身也有測試)。
+各條由哪個工具或測試擋，見 [`testing.md`](docs/testing.md#架構本身也有測試)。
 完整規則見 [`architecture.md`](docs/architecture.md#強制依賴規則)。
 
 ## 寫程式
 
 - **開發流程：Feature Branch → Draft PR → Incremental Commits → Code Review → Squash Merge**。
   不直接 push `main`；PR 標題用 Conventional Commits，因為 squash 後它就是 `main` 的 commit
-  （[說明](docs/development.md#開發流程)）。
+  （[說明](docs/workflow.md#開發流程)）。
 - **PR 描述固定三段：摘要、驗證（成功失敗都寫）、檢查（給審查者的 checkbox）**。
   `gh pr create --body` 會跳過 [`PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md)，
   自己帶內文時也照這三段；之後推新 commit 要回頭補摘要與驗證。
 - **每個 commit 最後加 `Co-authored-by: <產品> <模型與版本> <email>`**（例：`Claude Opus 5.5 <noreply@anthropic.com>`），
-  email 用工具官方的值，沒有時用 `noreply@<廠商網域>`（[說明](docs/development.md#ai-協作的共同作者)）。
+  email 用工具官方的值，沒有時用 `noreply@<廠商網域>`（[說明](docs/workflow.md#ai-協作的共同作者)）。
 - **動手前先把驗收條件寫進 Draft PR 的「驗證」段，每條對應一個測試名稱**，不另寫成文件；
-  寫不出測試名稱的那條就是要先問清楚的地方（[說明](docs/development.md#驗收條件與測試名稱)）。
+  寫不出測試名稱的那條就是要先問清楚的地方（[說明](docs/testing.md#驗收條件與測試名稱)）。
 - **先寫測試，寫好才開始實作**，不要邊寫功能邊改測試。單元測試與 `e2e/` 的 E2E 測試都一樣：功能會改到畫面流程時，
   E2E 也要在實作前寫好。`actions.ts` 與 `ui/*.tsx` 不寫執行期測試；
   畫面有分支時抽進 `capabilities.ts` 再測。不要為了覆蓋率數字補測試。
@@ -62,7 +65,7 @@
   放在 `tests/` 以外不會執行也不會報錯。
 - **實作期間測試檔鎖定**（單元測試與 E2E 都是）：測試變紅時預設它是對的，改實作讓它變綠。要動測試檔（改斷言、刪測試、
   補新測試、測試的輔助檔與資料）之前，先向使用者說明那個測試驗證的條件與沒過的原因，**得到同意才改**
-  （[說明](docs/development.md#改程式不改測試)）。
+  （[說明](docs/testing.md#改程式不改測試)）。
 - **CSS 只用設計變數**（名字與預設值在 `shared/ui/styles/tokens.css`，專案在 `app/theme.css` 覆寫），
   不寫死色值或尺寸（`style={{…}}` 也一樣）。
 - **使用者看得到的字串都要中英兩份**，放在擁有它那一層的 `i18n.ts`（[說明](docs/extending/i18n.md)）。
