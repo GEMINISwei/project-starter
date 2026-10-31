@@ -61,7 +61,7 @@ def repo(tmp_path: Path) -> Path:
     path = tmp_path / "repo"
     path.mkdir()
     git(path, "init", "-q", "-b", "main")
-    for name in (SOURCE, TEST, OTHER_TEST, E2E_SUPPORT, "docs/a.md"):
+    for name in (SOURCE, TEST, OTHER_TEST, E2E_SUPPORT, "README.md"):
         write(path, name)
     git(path, "add", "-A")
     git(path, "commit", "-q", "-m", "base")
@@ -128,7 +128,7 @@ def test_test_edits_are_allowed_before_implementation_starts(agent: str, repo: P
 
 @pytest.mark.parametrize("agent", AGENTS)
 def test_doc_changes_do_not_start_implementation(agent: str, repo: Path) -> None:
-    write(repo, "docs/a.md", "changed\n")
+    write(repo, "README.md", "changed\n")
     assert decision(agent, repo, TEST) is None
 
 
@@ -218,6 +218,23 @@ def test_guard_allows_the_prompted_approval_command(agent: str, repo: Path) -> N
     command = f"{APPROVE_COMMAND} {TEST}"
     payload = {"cwd": str(repo), "tool_name": "Bash", "tool_input": {"command": command}}
     assert not run(GUARD_COMMANDS, [agent], repo, payload).strip()
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "chmod +x .agents/hooks/approve_test_edit.py",
+        "cat .agents/hooks/approve_test_edit.py",
+        "cat .git/agent-approved-test-edits",
+        "ls .git/agent-approved-test-edits",
+    ],
+)
+@pytest.mark.parametrize("agent", AGENTS)
+def test_guard_allows_commands_that_only_mention_the_approval_files(
+    agent: str, command: str, repo: Path
+) -> None:
+    payload = {"cwd": str(repo), "tool_name": "Bash", "tool_input": {"command": command}}
+    assert not run(GUARD_COMMANDS, [agent], repo, payload).strip(), f"誤擋: {command}"
 
 
 def test_test_guard_is_configured_for_edit_tools() -> None:
