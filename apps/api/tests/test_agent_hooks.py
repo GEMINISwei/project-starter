@@ -101,6 +101,14 @@ BLOCKED = [
     "echo hi\ngit push origin main",
     "cat > x <<EOF\nhi\nEOF\ngit push origin main",
     "git push \\\n  origin main",
+    # 跳過 git hook 等於繞過 commit-msg 的檢查。
+    "git commit --no-verify -m x",
+    "git commit -n -m x",
+    "git commit -anm x",
+    "git push --no-verify origin feat/x",
+    "git -c core.hooksPath=/dev/null commit -m x",
+    "git config core.hooksPath /dev/null",
+    "git config --unset core.hooksPath",
 ]
 
 ALLOWED = [
@@ -120,6 +128,10 @@ ALLOWED = [
     "python3 - <<'EOF'\nprint('.git/agent-approved-test-edits')\nEOF",
     "grep x <<< 'git push origin main'",
     "git push \\\n  origin feat/x",
+    # push 的 -n 是 --dry-run, 不是 --no-verify。
+    "git push -n origin feat/x",
+    "git config core.hooksPath .githooks",
+    "git config --get core.hooksPath",
 ]
 
 
