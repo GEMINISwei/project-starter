@@ -9,7 +9,7 @@
 升 Node 時 `apps/web/Dockerfile` 的 `ARG NODE_VERSION` 要手動跟上）。
 
 ```bash
-make init dev   # 產生 .env（MODE=development，金鑰自動產生）、安裝相依、git init
+make init dev   # 產生 .env（MODE=development，金鑰自動產生）、安裝相依、git init、啟用 .githooks/
 make start      # 啟動 postgres → migrate → api → web → nginx（首次建置約 2–5 分鐘）
 ```
 

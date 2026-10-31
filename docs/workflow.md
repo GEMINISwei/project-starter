@@ -37,7 +37,7 @@ GitHub 端要設定一次，流程才不是靠自覺：
   - **Require linear history**：`main` 上不會出現 merge commit，有 bypass 權限的人直接 push 也一樣
   - **Require a pull request before merging**，展開後把 **Allowed merge methods** 改成只留 **Squash**
   - **Require status checks to pass**：把 CI 的四個 job（`check`、`integration`、`images`、`e2e`）
-    加進去，並勾 **Require branches to be up to date before merging**，CI 是跟最新的 `main` 一起跑過的。
+    與 PR 格式檢查的 `pr`（`.github/workflows/pr.yml`）加進去，並勾 **Require branches to be up to date before merging**，CI 是跟最新的 `main` 一起跑過的。
     CI 多了 job 時要回來這裡加：沒列進去的 job 紅了，PR 照樣能合併
 - [ ] Settings → Advanced Security（有的帳號叫 Code security）：三項都要打開，少一項安全更新就不會來
   （套件只收安全更新，見〈相依升級〉）：
@@ -49,7 +49,7 @@ GitHub 端要設定一次，流程才不是靠自覺：
 
 - PR 標題與 commit：[Conventional Commits](https://www.conventionalcommits.org/zh-hant/v1.0.0/)，
   `<type>: <祈使句>`（`feat: add product list page`）。PR 標題是硬規定（squash 後留在 `main`），
-  分支上的 commit 建議照寫。
+  分支上的 commit 建議照寫。PR 標題與描述的三段由 `pr.yml` 檢查，在 GitHub 上修改標題或描述也會重跑。
 - 送出前通過 `make check`，實質改動在 [`CHANGELOG.md`](../CHANGELOG.md) 的 `## [Unreleased]` 留一筆。
 
 CI（`.github/workflows/ci.yml`）跑的就是本機指令：`check`（`make check`，含契約比對）、`integration`（`make check integration`）、`images`（兩份 production image
@@ -74,8 +74,10 @@ Co-authored-by: Claude Opus 5.5 <noreply@anthropic.com>
 - **email 用工具官方設定的值**，工具沒有提供時用 `noreply@<廠商網域>`。這類位址沒有對應的 GitHub 帳號，
   GitHub 上只顯示成文字、不會連到頭像，紀錄的作用一樣在。
 - trailer 放在訊息最後，前面空一行，一位共同作者一行；同一個 commit 有多個 AI 參與就各寫一行。
-- Git 與 GitHub 都不強制這行，漏了不會報錯，所以靠每個 commit 自己帶。squash 時 GitHub 會把分支上的
-  trailer 帶進 `main` 的內文，合併時不要把它們刪掉。
+- **AI agent 做的 commit 由 `.githooks/commit-msg` 檢查**：`AI_AGENT` 環境變數有值時（跨工具的慣例，
+  Claude Code 自己會設，Codex 由專案的 `.codex/config.toml` 補上），沒有 trailer、或名稱沒寫到版本就擋下。
+  人自己 commit 不檢查。git hook 要 `make init dev` 設定 `core.hooksPath` 才會生效（已經 clone 的重跑一次），
+  沒設時 `make check` 會提醒。squash 時 GitHub 會把分支上的 trailer 帶進 `main` 的內文，合併時不要把它們刪掉。
 
 查某段期間各 commit 的共同作者：
 
