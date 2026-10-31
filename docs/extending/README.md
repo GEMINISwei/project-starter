@@ -22,3 +22,4 @@ users：關聯表與篩選（`model.py`）、依授權模型拆檔（`service.py
 | [語系（i18n）](i18n.md) | 加使用者看得到的字串、後端訊息，或加第三種語言 |
 | [更換視覺／導入 Design System](design-system.md) | 要改專案的外觀、導入設計系統 |
 | [AI agent 的 skills](agent-skills.md) | 要把一段流程寫成 Claude 與 Codex 都能用的 skill |
+| [AI agent 的 hooks](agent-hooks.md) | 要在 agent 執行指令或改檔之前擋下某些動作 |

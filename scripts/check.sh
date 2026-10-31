@@ -35,7 +35,8 @@ step() { printf '\n── %s ─────────────────
 
 run_lint() {
     step "lint"
-    (cd apps/api && uv run ruff check . && uv run lint-imports)
+    # .agents/hooks/ 的 hook 腳本不在 api 的 import root 裡, 但同樣是 Python, 套用 api 的 ruff 設定。
+    (cd apps/api && uv run ruff check . ../../.agents/hooks && uv run lint-imports)
     (cd apps/web && npm run --silent lint)
     lint_shell
     lint_compose
