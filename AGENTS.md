@@ -42,6 +42,8 @@
     （[說明](docs/operations.md#回滾與-migration)）。
 16. **skills 只放 `.agents/skills/`**，Claude 與 Codex 共用：`.claude/skills` 是指向它的 symlink，不要在那裡另放；
     內文不寫某一家專屬的工具，只能手動呼叫的兩家要一起設（[說明](docs/extending/agent-skills.md)）。
+17. **hook 的邏輯只放 `.agents/hooks/`**：`.claude/settings.json` 與 `.codex/hooks.json` 只負責呼叫，
+    兩份的事件、matcher 與腳本要一致（[說明](docs/extending/agent-hooks.md)）。被 hook 擋下時照理由做，不要換個寫法繞過。
 
 各條由哪個工具或測試擋，見 [`testing.md`](docs/testing.md#架構本身也有測試)。
 完整規則見 [`architecture.md`](docs/architecture.md#強制依賴規則)。
