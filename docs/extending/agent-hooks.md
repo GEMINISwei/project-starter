@@ -27,7 +27,7 @@ Claude 與 Codex 的 hook 協定相同（事件名稱、stdin 收的 JSON、回�
 
 | 腳本 | 事件 | 擋什麼 |
 |---|---|---|
-| `guard_commands.py` | `PreToolUse`（shell 指令） | push 到 `main`、`gh pr merge`、`npm` 的 `--force`／`--legacy-peer-deps`、直接下 `docker compose`、繞過確認自己放行測試檔 |
+| `guard_commands.py` | `PreToolUse`（shell 指令） | push 到 `main`、用 `--no-verify` 略過 git hook（`commit -n` 也算）、改 `core.hooksPath`、`gh pr merge`、`npm` 的 `--force`／`--legacy-peer-deps`、直接下 `docker compose`、繞過確認自己放行測試檔 |
 | `guard_tests.py` | `PreToolUse`（改檔） | 實作開始後改測試檔，見下一節 |
 
 ## 測試鎖定
