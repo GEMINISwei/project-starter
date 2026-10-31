@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shlex
 import subprocess
 import sys
@@ -30,11 +31,36 @@ PUSH_OPTIONS_WITH_VALUE = {"-o", "--push-option", "--repo", "--receive-pack", "-
 MAIN_REFS = {"main", "refs/heads/main"}
 PYTHONS = {"python", "python3", "uv", "uvx"}
 READ_ONLY = {"cat", "ls", "head", "tail", "less", "stat", "file", "wc", "grep", "rg", "test", "["}
+# `<<EOF`、`<<-'EOF'`、`<< "EOF"`; `<<<` 是 here-string, 不算。
+HEREDOC = re.compile(r"(?<!<)<<-?(?!<)\s*(['\"]?)(\w+)\1")
+
+
+def logical_lines(command: str) -> str:
+    """去掉 heredoc 的內容, 並把換行當成指令的分隔。
+
+    heredoc 是資料不是指令: commit 訊息裡寫到 `git push origin main` 不該被擋。
+    shlex 把換行當空白, 不換成 `;` 的話, 第二行的指令會被當成第一行的參數而漏擋。
+    """
+    lines: list[str] = []
+    delimiters: list[str] = []
+    pending = ""
+    for line in command.split("\n"):
+        if delimiters:
+            if line.strip() == delimiters[0]:
+                delimiters.pop(0)
+            continue
+        delimiters += [match.group(2) for match in HEREDOC.finditer(line)]
+        if line.endswith("\\"):  # 續行
+            pending += line[:-1] + " "
+            continue
+        lines.append(pending + line)
+        pending = ""
+    return " ; ".join([*lines, pending])
 
 
 def simple_commands(command: str) -> Iterator[list[str]]:
     """把整行拆成一個個簡單指令的 argv; `bash -c "…"` 的內容也展開來看。"""
-    lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
+    lexer = shlex.shlex(logical_lines(command), posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
     try:
         tokens = list(lexer)
