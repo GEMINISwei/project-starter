@@ -42,3 +42,6 @@ backups/
 # Playwright (e2e/) 的輸出: 失敗時的 trace 與 HTML 報告
 test-results/
 playwright-report/
+
+# Claude 的個人設定 (專案共用的是 .claude/settings.json)
+.claude/settings.local.json
