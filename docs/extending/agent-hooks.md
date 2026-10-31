@@ -63,18 +63,21 @@ agent 用 shell 指令（`sed -i`、重新導向）改測試檔時不會被攔�
 
 ## 啟用與停用
 
-開新專案（或換一台電腦）時照這份做一次。每一項少了都**不會報錯**，只是那一層檢查安靜地不生效：
+開新專案（或換一台電腦）時照這份做一次。每一項少了都**不會報錯**，只是那一層檢查安靜地不生效。
+標「init 檢查」的由 `make init dev` 擋下或提醒（`scripts/lib/agent_setup.sh`），其餘讀不到狀態，init 結束時會印出來提醒。
+部署主機（`make init prod`）不跑 agent，不需要這些。
 
-- [ ] **`make init dev`**：把 `core.hooksPath` 設成 `.githooks`，commit-msg 才會檢查 `Co-authored-by`。
+
+- [ ] **`make init dev`**（init 設定）：把 `core.hooksPath` 設成 `.githooks`，commit-msg 才會檢查 `Co-authored-by`。
   已經 clone 的重跑一次即可；沒設時 `make check` 會提醒。
-- [ ] **PATH 上有 `python3` 3.9 以上**：hook 直接用它執行（macOS 內建的 3.9 即可）。
+- [ ] **PATH 上有 `python3` 3.9 以上**（init 檢查，沒有就擋）：hook 直接用它執行（macOS 內建的 3.9 即可）。
   沒有的話 Claude 只顯示 hook 錯誤、照常執行指令，等於沒有守衛。
 - [ ] **Claude**：第一次開啟專案時確認信任，`.claude/settings.json` 的 hook 與權限、`.claude/skills` 才會載入。
   Claude Code 自己會設 `AI_AGENT`，不用另外設定。
-- [ ] **Codex**：信任專案的 `.codex/`，`config.toml`（設定 `AI_AGENT`）、`hooks.json` 與 `rules/` 才會載入；
+- [ ] **Codex**（init 檢查：裝了 Codex 卻還沒信任時提醒）：信任專案的 `.codex/`，`config.toml`（設定 `AI_AGENT`）、`hooks.json` 與 `rules/` 才會載入；
   再用 `/hooks` 逐一確認每個 hook。hook 內容改了要重新確認。
 - [ ] **Windows**：先 `git config --global core.symlinks true`（並開啟開發人員模式）再 clone，
-  `.claude/skills` 才會是 symlink；否則 Claude 讀不到任何 skill（`make check` 會擋）。
+  `.claude/skills` 才會是 symlink；否則 Claude 讀不到任何 skill（init 檢查，不是 symlink 就擋）。
 
 裝好之後，請 agent 執行 `docker compose version` 確認會被指令守衛擋下。
 選這個指令是因為 hook 沒生效時它也只是印出版本，不會造成任何影響。

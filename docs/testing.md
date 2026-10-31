@@ -111,6 +111,7 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 | 實作開始後改測試檔要使用者同意、放行只對列出的檔案且有新 commit 就失效、agent 不能繞過確認自己放行 | `apps/api/tests/test_agent_test_guard.py` |
 | AI agent 的 commit 帶寫到模型與版本的 `Co-authored-by`、Codex 執行的指令帶 `AI_AGENT` | `.githooks/commit-msg`（`apps/api/tests/test_githooks.py`） |
 | PR 標題是 Conventional Commits、描述有摘要／驗證／檢查三段且不是模板原樣 | CI 的 `pr`（`.github/scripts/check-pr.sh`、`apps/api/tests/test_pr_checks.py`） |
+| `make init dev` 擋下缺少 `python3` 3.9 以上、`.claude/skills` 不是 symlink，裝了 Codex 卻沒信任專案時提醒；`make init prod` 不做這些 | `apps/api/tests/test_init_agent_setup.py` |
 | lock 檔與 `make gen-types` 的產出列在 `.ignore`（AI agent 的搜尋不撞進去） | `apps/api/tests/test_search_ignore.py` |
 
 規則本身見 [`architecture.md`](architecture.md#強制依賴規則)。

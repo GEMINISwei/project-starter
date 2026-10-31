@@ -62,7 +62,7 @@ flowchart LR
 ## 開新專案時
 
 1. 在 GitHub 按 **Use this template** 建立 repo，`git clone` 下來後 `make init dev`（產生 `.env`、安裝相依、
-   啟用 `.githooks/`）。不經 GitHub、直接複製這份目錄時，`make init dev` 會順便 `git init`。
+   啟用 `.githooks/`，並檢查 AI agent 需要的環境）。不經 GitHub、直接複製這份目錄時，`make init dev` 會順便 `git init`。
 2. 改寫這份 README、[`LICENSE`](LICENSE) 與 `.env.example` 的 `COMPOSE_PROJECT_NAME` 預設值。
 3. 照 [`docs/workflow.md`](docs/workflow.md#開發流程) 的 checklist 設定 GitHub 一次
    （squash merge、`main` 的 ruleset 與 required checks、Dependency graph、Dependabot 警示與安全更新）。
