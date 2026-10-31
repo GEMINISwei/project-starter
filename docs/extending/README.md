@@ -21,3 +21,4 @@ users：關聯表與篩選（`model.py`）、依授權模型拆檔（`service.py
 | [背景工作（尚未內建）](background-jobs.md) | 要寄信、匯出、排程這類不該卡住請求的工作 |
 | [語系（i18n）](i18n.md) | 加使用者看得到的字串、後端訊息，或加第三種語言 |
 | [更換視覺／導入 Design System](design-system.md) | 要改專案的外觀、導入設計系統 |
+| [AI agent 的 skills](agent-skills.md) | 要把一段流程寫成 Claude 與 Codex 都能用的 skill |

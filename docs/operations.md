@@ -192,7 +192,7 @@ GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進�
   `deploy.yml` 就是會執行的那份，workflow 裡「只能從 main 執行」的檢查可以在那個 branch 上被刪掉；
   environment 的規則由 GitHub 判斷，其他 ref 拿不到這套系統的 secrets。少了 `main` 那條，
   回滾與部署到其他組會在 deploy job 被 GitHub 擋下（environment protection rules）。
-  `main` 要有 ruleset（見 [`development.md`](development.md)），它上面的 `deploy.yml` 才一定經過 PR。
+  `main` 要有 ruleset（見 [`workflow.md`](workflow.md#開發流程)），它上面的 `deploy.yml` 才一定經過 PR。
 - [ ] 第一次推上去之後，到 GHCR 的 package 設定確認 Visibility：image 裡有完整的程式碼（但沒有機密），
       **私有 repo 要設 Private**；公開 repo 的 image 內容等於原始碼，設 Public 也可以，而且免費。
       **改成 Public 之後就改不回 Private**
@@ -251,7 +251,7 @@ docker builder prune
 停用期間，它的舊 image 可能在其他套更新之後被清掉；資料不受影響。重新啟用時對目前的 tag 按一次
 Run workflow 就會拉回來。
 
-**發版**：先盤點相依落後多少、要不要整批升級（見 [`development.md`](development.md#相依升級)），
+**發版**：先盤點相依落後多少、要不要整批升級（見 [`workflow.md`](workflow.md#相依升級)），
 再 `make release <版號>` → 看過 diff 後 commit、push → 在 GitHub 建 release，tag 填 `v<版號>`，按 Publish
 （要先行測試就勾 pre-release，見上方〈自動部署〉）。
 

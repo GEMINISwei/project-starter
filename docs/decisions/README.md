@@ -31,3 +31,6 @@
 | [0006](0006-postgres-job-queue.md) | 背景工作用 worker 容器與 PostgreSQL 佇列，不導入 Redis | 採用，尚未實作 |
 | [0007](0007-seed-in-migrate-service.md) | 初始資料由 migrate 服務寫入，不用 Alembic 資料 migration | 採用 |
 | [0008](0008-no-built-in-error-tracking.md) | 不內建錯誤追蹤與告警 | 採用 |
+| [0009](0009-make-and-bash-commands.md) | 指令介面用 Makefile 加 bash 腳本 | 採用 |
+| [0010](0010-full-repo-checkout-on-hosts.md) | 部署主機上 git clone 整份 repo | 採用 |
+| [0011](0011-e2e-required-in-ci.md) | Playwright E2E 是 CI 與部署的必要檢查 | 採用 |

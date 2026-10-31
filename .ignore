@@ -1,0 +1,12 @@
+# ripgrep 的排除清單 (語法同 .gitignore)。這些檔案要進版控, 但不該出現在搜尋結果裡:
+# Claude 與 Codex 的搜尋底層都是 ripgrep, 搜一個端點名稱撞進幾百 KB 的 lock 檔或契約,
+# 整段結果都要讀進 AI 的上下文。要看內容時直接開檔, 或 `rg --no-ignore`。
+# 編輯器的搜尋 (VS Code 預設也讀這份) 一樣會略過它們。由 tests/test_search_ignore.py 檢查。
+
+# 相依的 lock 檔
+**/package-lock.json
+**/uv.lock
+
+# make gen-types 的產出 (路徑定義在 scripts/lib/common.sh)
+contracts/openapi.json
+apps/web/shared/api/generated/

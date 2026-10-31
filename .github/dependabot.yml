@@ -1,5 +1,5 @@
 # 系統上線後不追最新版, 只在有漏洞時升: 每週的升版 PR 沒人有空逐一驗證, 合進去反而增加變動風險。
-# 代價是相依會慢慢落後, 由人在發版前盤點、整批升級 (見 docs/development.md〈相依升級〉)。
+# 代價是相依會慢慢落後, 由人在發版前盤點、整批升級 (見 docs/workflow.md〈相依升級〉)。
 #
 # - uv、npm、github-actions: `open-pull-requests-limit: 0` 關掉版本更新。安全更新另有自己的上限,
 #   不受這個值影響, 但要在 repo 的 Settings 打開 Dependency graph、Dependabot alerts 與
@@ -8,7 +8,7 @@
 #   但每月一次、只送 patch (例如 nginx 1.31.7 → 1.31.8)。
 # - 沒人追的: api Dockerfile 用 `COPY --from` 複製的 uv 執行檔, Dependabot 不會提, 盤點時掃 image 才看得到。
 #
-# 被 peer 擋住的 major 在這裡 ignore, 理由與移除條件寫在原處 (見 docs/development.md〈相依升級〉)。
+# 被 peer 擋住的 major 在這裡 ignore, 理由與移除條件寫在原處 (見 docs/workflow.md〈相依升級〉)。
 # 拿掉 ignore 的時機就是那裡的移除條件成立的時候。
 version: 2
 

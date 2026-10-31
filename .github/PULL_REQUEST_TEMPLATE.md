@@ -1,5 +1,5 @@
 <!-- PR 標題用 Conventional Commits（`feat: add product list page`）：squash merge 後它就是 main 的 commit。
-     先開 Draft，「驗證」寫完再按 Ready for review。流程見 docs/development.md#開發流程 -->
+     先開 Draft，「驗證」寫完再按 Ready for review。流程見 docs/workflow.md#開發流程 -->
 
 ## 摘要
 

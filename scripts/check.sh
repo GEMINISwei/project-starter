@@ -30,10 +30,13 @@ deny_on_production "make check"
 
 step() { printf '\n── %s ──────────────────────────────────────────\n' "$1"; }
 
+# npm 一律 `--silent`: 不回顯 `> web@0.0.1 lint` 這類指令列 (巢狀的 npm run 也跟著安靜)。
+# 通過時的輸出越短越好, AI agent 一次任務會跑好幾次, 每次都要整段讀進上下文; 錯誤訊息不受影響。
+
 run_lint() {
     step "lint"
     (cd apps/api && uv run ruff check . && uv run lint-imports)
-    (cd apps/web && npm run lint)
+    (cd apps/web && npm run --silent lint)
     lint_shell
     lint_compose
 }
@@ -51,7 +54,7 @@ missing_tool() {
 lint_shell() {
     command -v shellcheck > /dev/null 2>&1 || { missing_tool shellcheck; return; }
     # -x: 跟著 `source` 進 lib/, 被引用的函式與變數才不會被當成未定義。
-    shellcheck -x scripts/*.sh scripts/lib/*.sh .github/scripts/*.sh
+    shellcheck -x scripts/*.sh scripts/lib/*.sh .github/scripts/*.sh .agents/skills/*/scripts/*.sh
 }
 
 # 用 .env.example 展開兩種 MODE 的 compose: 抓 YAML 與錨點寫錯, 也抓「compose 用了
@@ -84,7 +87,7 @@ run_migrate() {
 run_types() {
     step "types"
     (cd apps/api && uv run mypy)
-    (cd apps/web && npm run typecheck)
+    (cd apps/web && npm run --silent typecheck)
 }
 
 run_test() {
@@ -93,7 +96,7 @@ run_test() {
     local log
     log="$(mktemp)"
     (cd apps/api && uv run pytest tests/ -q --cov) | tee "${log}"
-    (cd apps/web && npm run test:coverage)
+    (cd apps/web && npm run --silent test:coverage)
 
     # skip 的 exit code 是 0, 不講的話「資料庫沒起來」跟「全部通過」看起來一樣。
     local skipped
@@ -110,7 +113,7 @@ run_build() {
     step "build"
     local log
     log="$(mktemp)"
-    (cd apps/web && npm run build) | tee "${log}"
+    (cd apps/web && npm run --silent build) | tee "${log}"
     # proxy.ts 放錯位置或匯出名稱不對時, Next 照樣 build 成功, 只是路由保護整層消失。
     if ! grep -q 'Proxy (Middleware)' "${log}"; then
         rm -f "${log}"

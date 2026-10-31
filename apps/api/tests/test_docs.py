@@ -25,6 +25,7 @@ DOCS = sorted(
         *REPO_ROOT.glob("*.md"),
         *(REPO_ROOT / "docs").rglob("*.md"),
         *(REPO_ROOT / ".github").rglob("*.md"),
+        *(REPO_ROOT / ".agents").rglob("*.md"),
     ]
 )
 
@@ -94,7 +95,9 @@ def source_files() -> list[Path]:
     tracked = subprocess.run(  # noqa: S603
         [GIT, "ls-files", "-z"], cwd=REPO_ROOT, capture_output=True, check=True, text=True
     ).stdout.split("\0")
-    return [REPO_ROOT / name for name in tracked if name and not name.endswith(".md")]
+    # git 追蹤的 symlink 可能指向目錄 (`.claude/skills`), 讀它在 Linux 上會拋 IsADirectoryError。
+    paths = (REPO_ROOT / name for name in tracked if name and not name.endswith(".md"))
+    return [path for path in paths if not path.is_dir()]
 
 
 def test_doc_paths_in_source_point_to_existing_files() -> None:

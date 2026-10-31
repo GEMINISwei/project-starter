@@ -20,7 +20,9 @@ export default defineConfig({
     setupFiles: "./tests/setup.ts",
     coverage: {
       provider: "v8",
-      reporter: ["text", "html"],
+      // 終端只印摘要: 逐檔的表格連目錄小計一起印, 每跑一次 make check 就是一大段要讀進 AI 上下文的輸出。
+      // 門檻沒過時照樣報錯; 要看哪幾行沒測到, 開 coverage/index.html。
+      reporter: ["text-summary", "html"],
       // 只統計「有邏輯」的程式碼。兩類**刻意**不列進來 (是取捨, 不是遺漏):
       // - `modules/*/actions.ts`: 帶 `"use server"` 的薄包裝。會出錯的是 URL 與 payload 形狀,
       //   而那兩者由 OpenAPI 產生的型別在編譯期就擋掉了, 寫執行期測試只是在測 mock。
