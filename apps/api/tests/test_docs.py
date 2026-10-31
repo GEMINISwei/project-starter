@@ -25,6 +25,7 @@ DOCS = sorted(
         *REPO_ROOT.glob("*.md"),
         *(REPO_ROOT / "docs").rglob("*.md"),
         *(REPO_ROOT / ".github").rglob("*.md"),
+        *(REPO_ROOT / ".agents").rglob("*.md"),
     ]
 )
 
