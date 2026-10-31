@@ -36,7 +36,7 @@ step() { printf '\n── %s ─────────────────
 run_lint() {
     step "lint"
     # .agents/hooks/ 的 hook 腳本不在 api 的 import root 裡, 但同樣是 Python, 套用 api 的 ruff 設定。
-    (cd apps/api && uv run ruff check . ../../.agents/hooks && uv run lint-imports)
+    (cd apps/api && uv run ruff check . ../../.agents/hooks && uv run lint-imports --no-logo)
     (cd apps/web && npm run --silent lint)
     lint_shell
     lint_compose
@@ -102,12 +102,19 @@ run_types() {
     (cd apps/web && npm run --silent typecheck)
 }
 
+# `--cov-report=` 不印逐檔的覆蓋率表格, 只留 pytest-cov 的總計與門檻那一行: 通過時表格用不到,
+# 每跑一次就是一大段要讀進 AI 上下文的輸出。沒過時才告訴人去哪裡看 (表格照 pyproject 的設定略過全綠的檔案)。
+coverage_hint() {
+    echo "如果是覆蓋率沒過，看哪些檔案、哪幾行沒測到：cd apps/api && uv run coverage report -m" >&2
+    exit 1
+}
+
 run_test() {
     step "test"
     # 後端輸出同時留一份下來數 skip。用 tee: 測試跑的時候要看得到進度。
     local log
     log="$(mktemp)"
-    (cd apps/api && uv run pytest tests/ -q --cov) | tee "${log}"
+    (cd apps/api && uv run pytest tests/ -q --cov --cov-report=) | tee "${log}" || coverage_hint
     (cd apps/web && npm run --silent test:coverage)
 
     # skip 的 exit code 是 0, 不講的話「資料庫沒起來」跟「全部通過」看起來一樣。
@@ -125,14 +132,21 @@ run_build() {
     step "build"
     local log
     log="$(mktemp)"
-    (cd apps/web && npm run --silent build) | tee "${log}"
+    # 通過時只印一行: 路由清單與進度每次都一樣, 只有出錯時才需要看。
+    if ! (cd apps/web && npm run --silent build) > "${log}" 2>&1; then
+        cat "${log}"
+        rm -f "${log}"
+        exit 1
+    fi
     # proxy.ts 放錯位置或匯出名稱不對時, Next 照樣 build 成功, 只是路由保護整層消失。
     if ! grep -q 'Proxy (Middleware)' "${log}"; then
+        cat "${log}"
         rm -f "${log}"
         echo "build 輸出沒有 Proxy (Middleware)：Next 沒認到 apps/web/proxy.ts，路由保護不會生效" >&2
         exit 1
     fi
     rm -f "${log}"
+    echo "build 通過，Next 有認到 proxy.ts"
 }
 
 # 兩段都需要真的資料庫, 用拋棄式容器而不是 `make start` 那個: 跑一次就會把開發資料洗掉。
@@ -152,7 +166,7 @@ run_integration() {
     export JWT_SECRET_KEY=test_secret_key_that_is_at_least_32_characters
 
     step "integration：完整後端測試"
-    (cd apps/api && REQUIRE_INTEGRATION=1 uv run pytest tests/ -q --cov)
+    (cd apps/api && REQUIRE_INTEGRATION=1 uv run pytest tests/ -q --cov --cov-report=) || coverage_hint
 
     step "integration：model 與 migration 一致（alembic check）"
     # 先清掉測試留下的表, 讓結構完全由 migration 建出來。
