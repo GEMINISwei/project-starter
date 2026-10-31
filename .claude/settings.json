@@ -1,4 +1,9 @@
 {
+  "permissions": {
+    "ask": [
+      "Bash(python3 .agents/hooks/approve_test_edit.py:*)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
@@ -7,6 +12,15 @@
           {
             "type": "command",
             "command": "python3 \"$(git rev-parse --show-toplevel)/.agents/hooks/guard_commands.py\" claude"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/.agents/hooks/guard_tests.py\" claude"
           }
         ]
       }

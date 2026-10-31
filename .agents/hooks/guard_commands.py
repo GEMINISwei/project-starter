@@ -11,11 +11,15 @@
 提早停下來的提醒, 不是安全機制, 真正擋得住的是 git 與 CI。只用標準函式庫, 不必先裝相依。
 """
 
+from __future__ import annotations
+
 import json
 import shlex
 import subprocess
 import sys
 from collections.abc import Iterator
+
+from test_lock import APPROVAL_NAME, APPROVE_COMMAND
 
 SEPARATORS = {"&&", "||", ";", "|", "&", "(", ")", ";;", "|&"}
 WRAPPERS = {"sudo", "env", "command", "exec", "time", "nohup", "xargs"}
@@ -24,6 +28,8 @@ SHELLS = {"sh", "bash", "zsh"}
 GIT_OPTIONS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
 PUSH_OPTIONS_WITH_VALUE = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
 MAIN_REFS = {"main", "refs/heads/main"}
+PYTHONS = {"python", "python3", "uv", "uvx"}
+READ_ONLY = {"cat", "ls", "head", "tail", "less", "stat", "file", "wc", "grep", "rg", "test", "["}
 
 
 def simple_commands(command: str) -> Iterator[list[str]]:
@@ -91,7 +97,32 @@ def pushes_to_main(args: list[str], cwd: str) -> bool:
     return any(refspec.lstrip("+").split(":")[-1] in MAIN_REFS for refspec in refspecs)
 
 
+def self_approval(argv: list[str]) -> bool:
+    """測試鎖定的放行只能經過固定寫法的申請指令: 那個寫法才會被兩家要求使用者確認。
+
+    只擋「換寫法執行申請指令」與「寫入放行檔」; `chmod`、`cat` 這類只是提到檔名的不擋。
+    """
+    if argv[: len(APPROVE_COMMAND)] == APPROVE_COMMAND:
+        return False
+    program = argv[0].rsplit("/", 1)[-1]
+    script = APPROVE_COMMAND[1].rsplit("/", 1)[-1]
+    arguments = [arg for arg in argv[1:] if not arg.startswith("-")]
+    runs_script = program == script or (
+        program in PYTHONS and bool(arguments) and arguments[0].endswith(script)
+    )
+    touches_approval = any(APPROVAL_NAME in arg for arg in argv)
+    writes_approval = touches_approval and (
+        program not in READ_ONLY or bool({">", ">>"} & set(argv))
+    )
+    return runs_script or writes_approval
+
+
 def violation(argv: list[str], cwd: str) -> str | None:
+    if self_approval(argv):
+        return (
+            f"測試檔的放行只能用 `{' '.join(APPROVE_COMMAND)} <測試檔>` 申請，"
+            "它會請使用者確認；不要直接寫放行檔或換寫法呼叫。"
+        )
     program = argv[0].rsplit("/", 1)[-1]
     if program == "git":
         subcommand, args = git_subcommand(argv)
