@@ -6,7 +6,8 @@
 ## 開發環境
 
 需要 Docker Desktop、`make`、`openssl`、`uv` 與 Node.js（版本見 [`apps/web/.nvmrc`](../apps/web/.nvmrc)；
-升 Node 時 `apps/web/Dockerfile` 的 `ARG NODE_VERSION` 要手動跟上）。
+升 Node 時 `apps/web/Dockerfile` 的 `ARG NODE_VERSION` 要手動跟上），以及 PATH 上的 `python3` 3.9 以上：
+AI agent 的 hook 直接用它執行，不經過 api 的虛擬環境（見 [`agent-hooks.md`](extending/agent-hooks.md#啟用與停用)）。
 
 ```bash
 make init dev   # 產生 .env（MODE=development，金鑰自動產生）、安裝相依、git init、啟用 .githooks/
