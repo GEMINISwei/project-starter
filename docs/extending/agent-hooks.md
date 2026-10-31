@@ -25,12 +25,35 @@ Claude 與 Codex 的 hook 協定相同（事件名稱、stdin 收的 JSON、回�
 
 | 腳本 | 事件 | 擋什麼 |
 |---|---|---|
-| `guard_commands.py` | `PreToolUse`（shell 指令） | push 到 `main`、`gh pr merge`、`npm` 的 `--force`／`--legacy-peer-deps`、直接下 `docker compose` |
+| `guard_commands.py` | `PreToolUse`（shell 指令） | push 到 `main`、`gh pr merge`、`npm` 的 `--force`／`--legacy-peer-deps`、直接下 `docker compose`、繞過確認自己放行測試檔 |
+| `guard_tests.py` | `PreToolUse`（改檔） | 實作開始後改測試檔，見下一節 |
+
+## 測試鎖定
+
+把 [`testing.md`](../testing.md#改程式不改測試)〈改程式不改測試〉變成 agent 動手當下的檢查：
+
+- **測試檔**：`apps/*/tests/**`、`e2e/tests/**`，輔助檔與資料也算（判斷在 `.agents/hooks/test_lock.py`）。
+- **實作開始了**：分支相對 `origin/main` 的差異（含還沒 commit 與沒追蹤的）有 `apps/`、`e2e/` 底下的非測試檔案。
+  只改文件或設定不算。不需要任何人標記，從 git 推導。
+- **之後改測試檔要使用者同意**，兩家的方式不同：
+
+| | 攔下 | 使用者怎麼同意 |
+|---|---|---|
+| Claude | hook 回 `ask` | 直接在這次修改的確認上按允許 |
+| Codex | hook 回 `deny`（不支援 `ask`），理由裡請 agent 先說明再申請 | agent 執行 `python3 .agents/hooks/approve_test_edit.py <測試檔>`，`.codex/rules/approve-test-edit.rules` 讓它一定跳確認，按允許後再改就放行 |
+
+放行寫在 `.git/agent-approved-test-edits`（不進版控），**只對列出的檔案、只在目前的 HEAD 上有效**，有新的 commit
+就失效。申請指令的寫法固定：直接寫放行檔、換寫法執行申請指令都會被 `guard_commands.py` 擋下，否則就繞過了確認。
+Claude 也能用同一個申請指令（`.claude/settings.json` 的 `permissions.ask` 讓它一樣要確認），但直接按允許比較方便。
+
+agent 用 shell 指令（`sed -i`、重新導向）改測試檔時不會被攔：hook 只看改檔工具。
 
 ## 新增一個 hook
 
 1. 先在 `apps/api/tests/test_agent_hooks.py` 寫測試：用 subprocess 餵 JSON 進腳本，兩家各跑一次。
-2. 在 `.agents/hooks/` 寫腳本：放行就什麼都不印；要擋就印出
+2. 在 `.agents/hooks/` 寫腳本，**要能在 Python 3.9 上跑**（由 PATH 上的 `python3` 執行，macOS 內建的是 3.9）：
+   開頭加 `from __future__ import annotations`，`.agents/hooks/ruff.toml` 把語法目標設在 3.9。
+   放行就什麼都不印；要擋就印出
    `{"hookSpecificOutput": {"hookEventName": …, "permissionDecision": "deny", "permissionDecisionReason": …}}`。
    理由寫成 agent 看得懂、知道下一步該怎麼做的句子，它會照著做。
 3. 兩份設定各加一段，呼叫寫法固定為

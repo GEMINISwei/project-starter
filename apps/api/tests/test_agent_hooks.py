@@ -11,6 +11,7 @@ hook 是 agent 動手當下的第一道防線: 擋下 git 與 CI 看不到的事
 住在 api 底下的理由同 `test_nginx_templates.py`: `make check` 一定會跑到這裡。
 """
 
+import ast
 import json
 import re
 import shutil
@@ -96,6 +97,10 @@ BLOCKED = [
     "docker --context x compose ps",
     "docker-compose logs api",
     "FOO=1 docker compose down -v",
+    # 換行是指令的分隔: 第二行不是第一行的參數。
+    "echo hi\ngit push origin main",
+    "cat > x <<EOF\nhi\nEOF\ngit push origin main",
+    "git push \\\n  origin main",
 ]
 
 ALLOWED = [
@@ -109,6 +114,12 @@ ALLOWED = [
     "docker ps",
     "make services logs api",
     "echo docker compose",
+    # heredoc 與 here-string 是資料, 不是指令。
+    "git commit -q -F - <<'EOF'\nnever git push origin main\nEOF",
+    "cat <<-EOF > notes.txt\n\tdocker compose up\n\tEOF",
+    "python3 - <<'EOF'\nprint('.git/agent-approved-test-edits')\nEOF",
+    "grep x <<< 'git push origin main'",
+    "git push \\\n  origin feat/x",
 ]
 
 
@@ -161,3 +172,18 @@ def test_claude_and_codex_hook_configs_call_the_same_scripts() -> None:
     )
     missing = [script for _, _, script, _ in claude if not (REPO_ROOT / script).is_file()]
     assert not missing, f"設定呼叫了不存在的腳本: {missing}"
+
+
+HOOK_SCRIPTS = sorted(HOOKS_DIR.glob("*.py"))
+# macOS 內建的 python3; hook 由 PATH 上的 python3 執行, 不是 api 的虛擬環境。
+OLDEST_PYTHON = (3, 9)
+
+
+@pytest.mark.parametrize("script", HOOK_SCRIPTS, ids=lambda path: path.name)
+def test_hook_scripts_run_on_oldest_supported_python(script: Path) -> None:
+    source = script.read_text(encoding="utf-8")
+    # CI 用的是新版 Python, 新語法在這裡不會出錯, 只會在使用者的機器上讓 hook 安靜地失效。
+    ast.parse(source, filename=script.name, feature_version=OLDEST_PYTHON)
+    assert "from __future__ import annotations" in source, (
+        f"{script.name}: 要加 from __future__ import annotations, `str | None` 在 3.9 上才不會出錯"
+    )
