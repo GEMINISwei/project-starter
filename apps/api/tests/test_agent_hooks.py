@@ -186,6 +186,15 @@ def test_claude_and_codex_hook_configs_call_the_same_scripts() -> None:
     assert not missing, f"設定呼叫了不存在的腳本: {missing}"
 
 
+
+def test_codex_hooks_config_has_only_hooks_at_top_level() -> None:
+    # Codex 0.142.5 遇到不認得的頂層欄位會讓整份設定解析失敗,
+    # 兩個守衛都不載入, 只在 hooks/list 留警告
+    config = json.loads(CODEX_HOOKS.read_text(encoding="utf-8"))
+    assert set(config) == {"hooks"}, (
+        f".codex/hooks.json 頂層只能有 hooks, 說明寫進文件: {sorted(config)}"
+    )
+
 HOOK_SCRIPTS = sorted(HOOKS_DIR.glob("*.py"))
 # macOS 內建的 python3; hook 由 PATH 上的 python3 執行, 不是 api 的虛擬環境。
 OLDEST_PYTHON = (3, 9)
