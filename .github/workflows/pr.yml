@@ -4,8 +4,9 @@ name: PR
 # 但在 GitHub 上改了標題或描述 (edited) 也要重新檢查。
 # job 名稱 `pr` 要加進 main ruleset 的 required checks (docs/workflow.md〈開發流程〉), 沒加的話紅了照樣能合併。
 on:
+  # 不聽 `ready_for_review`: 檢查不分 Draft, 轉 Ready 時內容沒變, 重跑結果一定一樣。
   pull_request:
-    types: [opened, edited, synchronize, reopened, ready_for_review]
+    types: [opened, edited, synchronize, reopened]
 
 permissions:
   contents: read
