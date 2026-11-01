@@ -29,6 +29,10 @@ SHELLS = {"sh", "bash", "zsh"}
 GIT_OPTIONS_WITH_VALUE = {"-C", "-c", "--git-dir", "--work-tree", "--namespace"}
 PUSH_OPTIONS_WITH_VALUE = {"-o", "--push-option", "--repo", "--receive-pack", "--exec"}
 MAIN_REFS = {"main", "refs/heads/main"}
+# `git config` 的 git 2.46 起的子指令, 與舊語法裡會改設定的旗標。
+CONFIG_READS = {"get", "list"}
+CONFIG_WRITES = {"set", "unset", "rename-section", "remove-section", "edit"}
+CONFIG_WRITE_FLAGS = {"--add", "--replace-all", "--unset", "--unset-all", "--edit", "-e"}
 PYTHONS = {"python", "python3", "uv", "uvx"}
 READ_ONLY = {"cat", "ls", "head", "tail", "less", "stat", "file", "wc", "grep", "rg", "test", "["}
 # `<<EOF`、`<<-'EOF'`、`<< "EOF"`; `<<<` 是 here-string, 不算。
@@ -159,8 +163,15 @@ def changes_hooks_path(argv: list[str], subcommand: str, args: list[str]) -> boo
         return True
     if subcommand != "config" or "core.hookspath" not in [arg.lower() for arg in args]:
         return False
-    reading = {"--get", "--get-all", "-l", "--list", "--show-origin"} & set(args)
-    return not reading and args[-1] != ".githooks"
+    positional = [arg for arg in args if not arg.startswith("-")]
+    action = positional[0] if positional[0] in CONFIG_READS | CONFIG_WRITES else None
+    if action in CONFIG_READS:
+        return False
+    # 設定名之後的就是值; 舊語法只給設定名、沒帶改設定的旗標時是讀取。
+    key = [arg.lower() for arg in positional].index("core.hookspath")
+    values = positional[key + 1 :]
+    writes = action in CONFIG_WRITES or bool(CONFIG_WRITE_FLAGS & set(args)) or bool(values)
+    return writes and values != [".githooks"]
 
 
 def git_violation(argv: list[str], cwd: str) -> str | None:

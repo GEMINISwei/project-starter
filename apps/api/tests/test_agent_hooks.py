@@ -108,7 +108,14 @@ BLOCKED = [
     "git push --no-verify origin feat/x",
     "git -c core.hooksPath=/dev/null commit -m x",
     "git config core.hooksPath /dev/null",
+    "git config --global core.hooksPath /dev/null",
+    "git config --add core.hooksPath /dev/null",
+    "git config --replace-all core.hooksPath /dev/null",
     "git config --unset core.hooksPath",
+    "git config --unset-all core.hooksPath",
+    # git 2.46 起的子指令寫法。
+    "git config set core.hooksPath /dev/null",
+    "git config unset core.hooksPath",
 ]
 
 ALLOWED = [
@@ -131,7 +138,14 @@ ALLOWED = [
     # push 的 -n 是 --dry-run, 不是 --no-verify。
     "git push -n origin feat/x",
     "git config core.hooksPath .githooks",
+    "git config set core.hooksPath .githooks",
+    # 只給設定名不給值是讀取。
+    "git config core.hooksPath",
+    "git config --local core.hooksPath",
+    "git config --show-origin core.hooksPath",
     "git config --get core.hooksPath",
+    "git config get core.hooksPath",
+    "git config list",
 ]
 
 
