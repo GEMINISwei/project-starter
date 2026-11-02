@@ -18,7 +18,7 @@ users：關聯表與篩選（`model.py`）、依授權模型拆檔（`service.py
 | [上傳檔案](uploads.md) | 功能要收圖片、影片或文件，或要決定上傳的大小上限 |
 | [呼叫 API](api-client.md) | 前端要打後端、寫 Server Action、命名 entity 型別 |
 | [初始資料（Seed）](seed.md) | 資料表要有預設資料，或要改系統角色的定義 |
-| [背景工作（尚未內建）](background-jobs.md) | 要寄信、匯出、排程這類不該卡住請求的工作 |
+| [背景工作（尚未內建）](background-jobs.md) | 要寄信、匯出、處理圖片、排程這類不該卡住請求的工作，或要實作 worker |
 | [語系（i18n）](i18n.md) | 加使用者看得到的字串、後端訊息，或加第三種語言 |
 | [更換視覺／導入 Design System](design-system.md) | 要改專案的外觀、導入設計系統 |
 | [AI agent 的 skills](agent-skills.md) | 要把一段流程寫成 Claude 與 Codex 都能用的 skill |
