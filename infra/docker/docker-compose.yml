@@ -30,12 +30,16 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    # 探測用 bash 的 /dev/tcp (約 4ms): 起一個 python 光 import urllib 就要上百毫秒 CPU,
+    # 每次都是 docker stats 裡的一個尖峰。啟動期間每秒檢查, 之後放慢: 單機 compose 不會因為
+    # unhealthy 重啟容器, healthcheck 實際只用在啟動順序與部署閘門。
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
-      interval: 10s
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8000 && printf 'GET /health HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q ' 200 '"]
+      interval: 30s
       timeout: 5s
-      start_period: 10s
-      retries: 5
+      start_period: 60s
+      start_interval: 1s
+      retries: 3
     restart: always
     expose:
       - "8000"
@@ -75,10 +79,11 @@ services:
     healthcheck:
       # `-h 127.0.0.1`: 走 unix socket 的話 initdb 期間就會提早轉綠。
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
+      interval: 30s
       timeout: 5s
-      start_period: 20s
-      retries: 10
+      start_period: 60s
+      start_interval: 1s
+      retries: 3
     restart: always
 
   web:
@@ -101,11 +106,13 @@ services:
         condition: service_healthy
     healthcheck:
       # 探 /healthz 而不是真實頁面: 頁面會打後端, web 的健康狀態就會跟著 api 一起紅。
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r => { if (!r.ok) process.exit(1) }).catch(() => process.exit(1))"]
-      interval: 10s
+      # 探測方式與間隔的理由同 api。
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/3000 && printf 'GET /healthz HTTP/1.0\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q ' 200 '"]
+      interval: 30s
       timeout: 5s
-      start_period: 20s
-      retries: 5
+      start_period: 60s
+      start_interval: 1s
+      retries: 3
     restart: always
     expose:
       - "3000"

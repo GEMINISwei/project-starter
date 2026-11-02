@@ -10,6 +10,7 @@ Docker 沒有原生的 HTTP 探測, 每次 healthcheck 都在容器裡起一個�
 
 import json
 import re
+import shutil
 import subprocess
 import threading
 from collections.abc import Iterator
@@ -23,6 +24,7 @@ COMPOSE_FILES = sorted((REPO_ROOT / "infra" / "docker").glob("docker-compose*.ym
 BASE_COMPOSE = REPO_ROOT / "infra" / "docker" / "docker-compose.yml"
 INTERPRETERS = {"python", "python3", "node", "npm", "npx"}
 MIN_STEADY_INTERVAL_SECONDS = 30
+BASH = shutil.which("bash") or "/bin/bash"
 
 
 def _healthchecks(path: Path) -> dict[str, dict[str, str]]:
@@ -47,6 +49,7 @@ ALL_HEALTHCHECKS = [
     for path in COMPOSE_FILES
     for service, fields in _healthchecks(path).items()
 ]
+HEALTHCHECK_IDS = [where for where, _ in ALL_HEALTHCHECKS]
 
 
 def _seconds(value: str) -> int:
@@ -60,7 +63,7 @@ def test_compose_files_declare_healthchecks() -> None:
     assert {"api", "web", "postgres"} <= set(_healthchecks(BASE_COMPOSE))
 
 
-@pytest.mark.parametrize(("where", "fields"), ALL_HEALTHCHECKS, ids=[w for w, _ in ALL_HEALTHCHECKS])
+@pytest.mark.parametrize(("where", "fields"), ALL_HEALTHCHECKS, ids=HEALTHCHECK_IDS)
 def test_healthcheck_with_any_service_does_not_start_interpreter(
     where: str, fields: dict[str, str]
 ) -> None:
@@ -69,7 +72,7 @@ def test_healthcheck_with_any_service_does_not_start_interpreter(
     assert command[1] not in INTERPRETERS, f"{where}: 探測不要起直譯器, 改用 bash 或小程式"
 
 
-@pytest.mark.parametrize(("where", "fields"), ALL_HEALTHCHECKS, ids=[w for w, _ in ALL_HEALTHCHECKS])
+@pytest.mark.parametrize(("where", "fields"), ALL_HEALTHCHECKS, ids=HEALTHCHECK_IDS)
 def test_healthcheck_with_any_service_polls_fast_only_while_starting(
     where: str, fields: dict[str, str]
 ) -> None:
@@ -88,7 +91,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.send_response(self.status)
         self.end_headers()
 
-    def log_message(self, format: str, *args: object) -> None:  # noqa: A002
+    def log_message(self, format: str, *args: object) -> None:
         pass
 
 
@@ -107,7 +110,7 @@ def _probe(service: str, port: int) -> int:
     command = json.loads(_healthchecks(BASE_COMPOSE)[service]["test"])
     assert command[:2] == ["CMD", "bash"], f"{service} 的探測不是 bash"
     script = re.sub(r"/dev/tcp/127\.0\.0\.1/\d+", f"/dev/tcp/127.0.0.1/{port}", command[3])
-    return subprocess.run(["bash", *command[2:3], script], timeout=5, check=False).returncode
+    return subprocess.run([BASH, *command[2:3], script], timeout=5, check=False).returncode  # noqa: S603
 
 
 @pytest.mark.parametrize("service", ["api", "web"])

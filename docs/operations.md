@@ -307,6 +307,11 @@ gh workflow run deploy.yml --ref main -f tag=v0.1.0 -f target="production stagin
 
 - **有**：後端寫到 stdout 的請求紀錄（方法、路徑、狀態碼、耗時，**不含 query string**），以及
   web、api、postgres 的 Docker healthcheck。
+- **healthcheck 只管啟動**：它決定啟動順序，也是 `make start` 接回流量前的閘門。執行期間變成 unhealthy
+  **不會重啟容器**（單機 compose 沒有這個機制），只會顯示在 `docker ps`。所以它在啟動期間每秒檢查、
+  之後每 30 秒一次；探測用 bash 而不是 python／node，因為 Docker 每次探測都要在容器裡起一個行程，
+  起直譯器的成本會變成週期性的 CPU 尖峰（`tests/test_compose_healthchecks.py` 擋）。
+  執行期的可用性要從外部確認，例如從另一台機器定期打 `https://<網域>/healthz`。
 - **有** request id：每行紀錄開頭的 `[xxxxxxxx]` 由 nginx 產生，經 Next 傳到後端並回寫到回應標頭，
   同一次操作在三個服務的 log 裡是同一個 id。
 - **看 log** 用 `make services logs [服務]`。正式環境每個容器只留 10MB × 5 份（prod overlay），
