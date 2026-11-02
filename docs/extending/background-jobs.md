@@ -151,7 +151,7 @@ worker 是背景工作，晚幾秒完成沒人察覺，所以可以限速；api�
 | 位置 | 要改什麼 |
 |---|---|
 | `infra/docker/docker-compose.yml` | 新增 worker 服務：共用 `x-api-image` 錨點、換 command、`depends_on` postgres 健康與 migrate 成功結束、掛 `uploads` volume、`restart: always`、`stop_grace_period` |
-| worker 的 healthcheck | 檢查心跳檔夠不夠新（例如 `find /tmp/heartbeat -mmin -1`），**不要起 Python 載入整個 app**：每次要花上秒的 CPU，而且程式卡住時載入照樣成功。間隔同其他服務：啟動期間密集檢查、之後放慢 |
+| worker 的 healthcheck | 檢查心跳檔夠不夠新（例如 `find /tmp/heartbeat -mmin -1`），**不要起 Python 載入整個 app**：每次要花上秒的 CPU，而且程式卡住時載入照樣成功。間隔同其他服務：啟動期間每秒、之後每 30 秒（見〈[可觀測性只到 stdout](../operations.md#可觀測性只到-stdout)〉，`tests/test_compose_healthchecks.py` 擋） |
 | `infra/docker/docker-compose.prod.yml` | log 上限（`*prod-runtime`）、記憶體上限、`cpus:`、較低的 `cpu_shares` |
 | `scripts/backup.sh` | **備份期間也要停 worker**：現在的前提是「停掉 nginx 就沒有寫入」，worker 會繼續寫資料庫與上傳檔案，備份出來的兩邊就對不上 |
 | [`operations.md`](../operations.md) | 正式環境的記憶體上限清單加上 worker；主機記憶體要容得下所有服務的上限加總 |
