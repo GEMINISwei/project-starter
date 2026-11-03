@@ -5,7 +5,12 @@ description: 開好或更新 PR 之後使用：在背景等 CI 跑完並回報�
 
 # 等 CI、合併後同步本機
 
-兩件事都要在背景執行、完成時通知的方式等，不要反覆執行指令去問狀態。
+兩件事都要在背景執行、完成時通知的方式等，不要反覆執行指令去問狀態。時機不同：
+
+- **等 CI**：每次 push 之後。
+- **等合併**：整個 PR 一次，在交給使用者審查時開始（`feature-workflow` 第 7 步做完、回報使用者之前）。
+  開 Draft PR 時還太早：之後還要實作，等的時間拉長，合併時的收尾也可能撞上進行中的工作。
+  開始之後再推 commit（處理審查意見）不影響它，只要回到「等 CI」。
 
 ## 1. 等 CI 跑完
 
@@ -25,13 +30,16 @@ gh pr checks <PR 號碼> --watch --fail-fast
 
 ## 2. 等 PR 關閉，再同步本機
 
-轉成 Ready for review 與合併都由使用者做，不要自己合併。同時在背景執行：
+轉成 Ready for review 與合併都由使用者做，不要自己合併。交給使用者審查時，在背景執行：
 
 ```bash
 .agents/skills/watch-pr/scripts/wait-pr-closed.sh <PR 號碼>
 ```
 
-它在 PR 不再是 `OPEN` 時結束，印出 `MERGED` 或 `CLOSED`。之後不用再問使用者，直接：
+它在 PR 不再是 `OPEN` 時結束，印出 `MERGED` 或 `CLOSED`。session 在那之前結束的話它會跟著消失，
+之後使用者說 PR 已合併或關閉時，照下面同樣的步驟做（第 2 步一樣先確認狀態）。
+
+結束之後不用再問使用者，直接：
 
 1. `git switch main && git fetch --prune && git pull --ff-only`
 2. `MERGED`：刪掉本機的分支。squash merge 後 git 認不出它已合併，要用 `git branch -D`，
