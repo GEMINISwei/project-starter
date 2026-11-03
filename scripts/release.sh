@@ -13,7 +13,8 @@
 # 等 push 之後才由 CI 發現就太晚了。契約只比對不重產 —— 不一致代表 main 上有繞過 CI 的東西,
 # 要先走 PR 修好, 不該默默包進發版的 commit。
 #
-# 只改檔案, 不 commit 也不建 tag: 跑完看過 diff 再 commit, 然後照 docs/operations.md〈發版〉建 release。
+# 只改檔案並切到發版分支, 不 commit 也不建 tag: main 只透過 PR 前進, 版號的修改也一樣。
+# 看過 diff 再 commit、開 PR, 合併後照 docs/operations.md〈發版〉發布 release。
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -34,6 +35,7 @@ require_unreleased_entries
 require_clean_tree
 require_synced_main
 require_untagged_version "${version}"
+require_no_release_branch "${version}"
 check_contract
 
 # 每一處都用「只會命中那一行」的樣式改, 不做全檔取代。
@@ -67,5 +69,9 @@ replace CHANGELOG.md '^## \[Unreleased\]\n' "## [Unreleased]\n\n## [${version}]\
 (cd "${stage}" && find . -type f) | while read -r file; do
     cp "${stage}/${file}" "${file}"
 done
+# 改動帶著一起切過去: 新分支從目前的 HEAD 開, 工作目錄的修改不受影響。
+branch="$(release_branch "${version}")"
+git switch --quiet -c "${branch}"
 echo
-echo "版號已從 ${current} 改成 ${version}。看過 git diff 之後 commit，再建 tag v${version} 的 release。"
+echo "版號已從 ${current} 改成 ${version}，並切到分支 ${branch}。"
+echo "看過 git diff 之後 commit、開 PR（標題 chore(release): v${version}），合併後再發布 release。"

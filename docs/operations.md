@@ -257,12 +257,18 @@ docker builder prune
 Run workflow 就會拉回來。
 
 **發版**：先盤點相依落後多少、要不要整批升級（見 [`workflow.md`](workflow.md#相依升級)），
-再 `make release <版號>` → 看過 diff 後 commit、push → 在 GitHub 建 release，tag 填 `v<版號>`，按 Publish
-（要先行測試就勾 pre-release，見上方〈自動部署〉）。
+再 `make release <版號>` → 它改完檔會切到 `chore/release-v<版號>` 分支，看過 diff 後 commit、開 PR
+（標題 `chore(release): v<版號>`）→ 合併後在 GitHub 建 release，tag 填 `v<版號>`、target 選 `main`，按 Publish
+（要先行測試就勾 pre-release，見上方〈自動部署〉）。版號的修改跟其他改動一樣走 PR，`main` 不直接 push。
+
+交給 agent 時用 `release` 這個 skill（只能手動呼叫）。它把上面的步驟做到合併為止，發布前用
+`.agents/skills/release/scripts/preview.sh <版號> [--prerelease]` 列出要建的 tag、commit、會部署的組與內文
+（取自 CHANGELOG 的版本段落），**使用者同意後**才執行同目錄的 `publish.sh`。agent 直接下 `gh release` 或手動觸發
+Deploy 會被 hook 擋下，`publish.sh` 一定跳確認（[說明](extending/agent-hooks.md#目前有的-hook)）。
 
 `make release` 改檔之前會先檢查，任何一項不過就停、什麼都不改（`scripts/lib/release.sh`）：
 版號是 `X.Y.Z` 且不帶前導零、比目前的 `APP_VERSION` 大（逐段比數字）、CHANGELOG 還沒有這個版號、
-`[Unreleased]` 不是空的、工作目錄乾淨、在 `main` 且與 `origin/main` 一致、tag `v<版號>` 不存在、
+`[Unreleased]` 不是空的、工作目錄乾淨、在 `main` 且與 `origin/main` 一致、tag `v<版號>` 與發版分支都不存在、
 契約與程式碼一致。契約不一致時不會在這裡重產：那代表 `main` 上有繞過 CI 的東西，先走 PR 修好。
 
 還沒發過版的專案 `APP_VERSION` 是 `0.0.0`，CHANGELOG 的 `[0.0.0]` 是專案初始化的基準點（沒有對應的
