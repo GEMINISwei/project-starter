@@ -36,7 +36,7 @@ GitHub 端要設定一次，流程才不是靠自覺：
   - **Restrict deletions**、**Block force pushes**：建 ruleset 時預設勾起，保持勾選
   - **Require linear history**：`main` 上不會出現 merge commit，有 bypass 權限的人直接 push 也一樣
   - **Require a pull request before merging**，展開後把 **Allowed merge methods** 改成只留 **Squash**
-  - **Require status checks to pass**：把 CI 的四個 job（`check`、`integration`、`images`、`e2e`）
+  - **Require status checks to pass**：把 CI 的三個 job（`check`、`integration`、`e2e`）
     與 PR 格式檢查的 `pr`（`.github/workflows/pr.yml`）加進去，並勾 **Require branches to be up to date before merging**，CI 是跟最新的 `main` 一起跑過的。
     CI 多了 job 時要回來這裡加：沒列進去的 job 紅了，PR 照樣能合併
 - [ ] Settings → Advanced Security（有的帳號叫 Code security）：三項都要打開，少一項安全更新就不會來
@@ -52,9 +52,15 @@ GitHub 端要設定一次，流程才不是靠自覺：
   分支上的 commit 建議照寫。PR 標題與描述的三段由 `pr.yml` 檢查，在 GitHub 上修改標題或描述也會重跑。
 - 送出前通過 `make check`，實質改動在 [`CHANGELOG.md`](../CHANGELOG.md) 的 `## [Unreleased]` 留一筆。
 
-CI（`.github/workflows/ci.yml`）跑的就是本機指令：`check`（`make check`，含契約比對）、`integration`（`make check integration`）、`images`（兩份 production image
-建得起來，且 web image 裡沒有真的 Server Action 金鑰）、`e2e`（`make check e2e`）。**本機綠，CI 就綠。** 部署另由
+CI（`.github/workflows/ci.yml`）跑的就是本機指令：`check`（`make check`，含契約比對）、`integration`（`make check integration`）、
+`e2e`（`make check e2e`，並確認 web image 裡沒有真的 Server Action 金鑰）。**本機綠，CI 就綠。** 部署另由
 `deploy.yml` 在 Publish release 時執行，見 [`operations.md`](operations.md#自動部署)。
+
+為了省時間，CI 有兩處與本機不同，檢查的內容不變：
+
+- `e2e` 先用 GitHub Actions 的快取建好 api 與 web 的 image，再以 `API_IMAGE`、`WEB_IMAGE` 交給 `make check e2e`，
+  不在沒有快取的 runner 上重建。建法（target、快取 scope）與 `deploy.yml` 的 build 相同。
+- `check` 快取 `apps/web/node_modules`，`.nvmrc`、`package.json`、`package-lock.json` 都沒變時跳過 `npm ci`。
 
 ### AI 協作的共同作者
 
