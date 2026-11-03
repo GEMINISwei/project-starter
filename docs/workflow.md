@@ -64,6 +64,8 @@ CI（`.github/workflows/ci.yml`）跑的就是本機指令：`check`（`make che
 - `e2e` 先用 GitHub Actions 的快取建好 api 與 web 的 image，再以 `API_IMAGE`、`WEB_IMAGE` 交給 `make check e2e`，
   不在沒有快取的 runner 上重建。建法（target、快取 scope）與 `deploy.yml` 的 build 相同。
 - `check` 快取 `apps/web/node_modules`，`.nvmrc`、`package.json`、`package-lock.json` 都沒變時跳過 `npm ci`。
+- `check` 下載固定版本的 shellcheck（版本在 `scripts/lib/shellcheck.sh`，核對 sha256），不用 runner 內建的那一版：
+  版本不同時同一份腳本會一邊綠一邊紅。本機的版本不同時 `make check lint` 會提醒，CI 上不同則失敗。
 
 ### AI 協作的共同作者
 
@@ -103,7 +105,7 @@ git log --format='%h %s%n  %(trailers:key=Co-authored-by,valueonly,separator=%x2
 - **Docker image**：漏洞資料庫不涵蓋 image，所以每月開一次 PR，只送 patch（例如 nginx 1.31.7 → 1.31.8）。
 - **整批升級**：在發版前盤點落後多少再決定範圍——開分支、升級、`make check`、實際建置 image 跑起來，
   再開 PR。api Dockerfile 用 `COPY --from` 複製的 uv 不在 Dependabot 的範圍內，盤點時要用
-  `docker scout` 之類的工具掃 image 才看得到。Insights → Dependency graph → Dependabot 的
+  `docker scout` 之類的工具掃 image 才看得到；CI 下載的 shellcheck 也一樣，版本在 `scripts/lib/shellcheck.sh`。Insights → Dependency graph → Dependabot 的
   「Check for updates」在版本更新關掉後不會開 PR，不能拿來取代盤點。
 
 遇到 peer 相容性阻擋就**停在最新的相容版**，不要 `--force`／`--legacy-peer-deps`，並在設定檔裡

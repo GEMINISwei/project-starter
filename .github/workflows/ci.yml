@@ -65,6 +65,21 @@ jobs:
           key: web-node-modules-${{ runner.os }}-${{ hashFiles('apps/web/.nvmrc', 'apps/web/package.json', 'apps/web/package-lock.json') }}
       - if: steps.web-node-modules.outputs.cache-hit != 'true'
         run: cd apps/web && npm ci
+      # runner 內建的 shellcheck 跟本機的版本不同, 同一份腳本會一邊綠一邊紅。版本取自
+      # scripts/lib/shellcheck.sh (唯一來源), sha256 是 GitHub release 頁面上該檔案的 digest。
+      # 放在 PATH 最前面蓋過內建的那一版; make check 會再確認版本, 沒生效就失敗。
+      - name: 安裝指定版本的 shellcheck
+        env:
+          SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198
+        run: |
+          version="$(sed -n 's/^SHELLCHECK_VERSION="\(.*\)"$/\1/p' scripts/lib/shellcheck.sh)"
+          [ -n "${version}" ] || { echo "scripts/lib/shellcheck.sh 找不到 SHELLCHECK_VERSION" >&2; exit 1; }
+          archive="shellcheck-v${version}.linux.x86_64.tar.xz"
+          curl -fsSLO "https://github.com/koalaman/shellcheck/releases/download/v${version}/${archive}"
+          echo "${SHELLCHECK_SHA256}  ${archive}" | sha256sum -c -
+          mkdir -p "${RUNNER_TEMP}/shellcheck"
+          tar -xJf "${archive}" -C "${RUNNER_TEMP}/shellcheck" --strip-components=1
+          echo "${RUNNER_TEMP}/shellcheck" >> "${GITHUB_PATH}"
       - run: make check
 
   integration:
