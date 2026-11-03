@@ -51,6 +51,9 @@ GitHub 端要設定一次，流程才不是靠自覺：
   `<type>: <祈使句>`（`feat: add product list page`）。PR 標題是硬規定（squash 後留在 `main`），
   分支上的 commit 建議照寫。PR 標題與描述的三段由 `pr.yml` 檢查，在 GitHub 上修改標題或描述也會重跑。
 - 送出前通過 `make check`，實質改動在 [`CHANGELOG.md`](../CHANGELOG.md) 的 `## [Unreleased]` 留一筆。
+- commit 訊息（標題或內文）不能有 GitHub 的 CI 略過標記，`.githooks/commit-msg` 會擋：GitHub 在整份訊息裡找它，
+  squash 又把分支上每個 commit 的訊息併進 `main`，只要一個 commit 帶著它，`main` 就不跑 CI，部署也找不到
+  `main` 的 CI 結果。要略過某些檢查時寫成 workflow 的條件（例如依改到的檔案判斷），不靠訊息。
 
 CI（`.github/workflows/ci.yml`）跑的就是本機指令：`check`（`make check`，含契約比對）、`integration`（`make check integration`）、
 `e2e`（`make check e2e`，並確認 web image 裡沒有真的 Server Action 金鑰）。**本機綠，CI 就綠。** 部署另由
