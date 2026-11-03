@@ -90,3 +90,70 @@ require_untagged_version() {
         return 1
     fi
 }
+
+# 版號的修改也要走 PR (main 只透過 PR 前進): release.sh 改完檔就切到這個分支。
+release_branch() {
+    printf 'chore/release-v%s\n' "$1"
+}
+
+# 上一次發版失敗留下的分支: 切過去會混進舊的修改。origin 的那一份要等 require_synced_main 的 fetch 才看得到。
+require_no_release_branch() {
+    local branch
+    branch="$(release_branch "$1")"
+    if git rev-parse --quiet --verify "refs/heads/${branch}" > /dev/null \
+        || git rev-parse --quiet --verify "refs/remotes/origin/${branch}" > /dev/null; then
+        echo "分支 ${branch} 已經存在：上次發版沒有收尾，先合併或刪掉它" >&2
+        return 1
+    fi
+}
+
+# release 的內文: changelog_section <版號> [檔案], CHANGELOG 中這個版號的段落, 去掉前後的空行。
+# 可以指定檔案: 發布時讀的是 origin/main 上的那一份。
+changelog_section() {
+    local section
+    section="$(awk -v heading="## [$1]" '
+        $0 == heading { found = 1; next }
+        found && /^## \[/ { exit }
+        found { lines[++n] = $0 }
+        END {
+            first = 1; while (first <= n && lines[first] !~ /[^[:space:]]/) first++
+            last = n; while (last >= first && lines[last] !~ /[^[:space:]]/) last--
+            for (i = first; i <= last; i++) print lines[i]
+        }' "${2:-CHANGELOG.md}")"
+    if [ -z "${section}" ]; then
+        echo "CHANGELOG.md 沒有 [$1] 的段落，或段落是空的" >&2
+        return 1
+    fi
+    printf '%s\n' "${section}"
+}
+
+# 指定 commit 上的 APP_VERSION: 要發布的是合併後的 origin/main, 不是工作目錄裡的檔案。
+version_at_ref() {
+    local version
+    version="$(git show "$1:apps/api/app/config.py" 2> /dev/null | sed -n 's/^APP_VERSION = "\(.*\)"$/\1/p')"
+    if [ -z "${version}" ]; then
+        echo "$1 上的 apps/api/app/config.py 找不到 APP_VERSION" >&2
+        return 1
+    fi
+    printf '%s\n' "${version}"
+}
+
+# 發布要做什麼: release_action <none|prerelease|release> <prerelease|release>, 印出 create 或 promote。
+# 先行測試沒問題時改成正式版用同一個 tag (deploy.yml 聽 released), 不另建。
+release_action() {
+    local state="$1" mode="$2"
+    case "${state}" in
+        none) echo create ;;
+        prerelease)
+            if [ "${mode}" = prerelease ]; then
+                echo "這一版已經是 pre-release；要改成正式版就不要帶 --prerelease" >&2
+                return 1
+            fi
+            echo promote
+            ;;
+        *)
+            echo "這一版已經發布成正式版；重新部署請在 Actions 的 Deploy 按 Run workflow" >&2
+            return 1
+            ;;
+    esac
+}

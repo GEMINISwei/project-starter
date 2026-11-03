@@ -4,8 +4,8 @@
 用法 (由 .claude/settings.json 與 .codex/hooks.json 呼叫): guard_commands.py <claude|codex>
 
 兩家的協定相同: stdin 收一個 JSON, 要擋就在 stdout 印 `hookSpecificOutput.permissionDecision`
-為 deny 的 JSON, 放行就什麼都不印。參數保留給兩家行為不同的 hook (例如 Codex 不支援 ask),
-這支用不到。
+為 deny 的 JSON, 放行就什麼都不印。參數給兩家行為不同的地方: 發布 release 時 Claude 回 ask,
+Codex 不支援 ask, 改由 .codex/rules/ 要求確認。
 
 只拆解指令的結構 (`&&`、`;`、`|`、子 shell、`bash -c`), 不做完整的 shell 解析: 這是讓 agent
 提早停下來的提醒, 不是安全機制, 真正擋得住的是 git 與 CI。只用標準函式庫, 不必先裝相依。
@@ -35,6 +35,10 @@ CONFIG_WRITES = {"set", "unset", "rename-section", "remove-section", "edit"}
 CONFIG_WRITE_FLAGS = {"--add", "--replace-all", "--unset", "--unset-all", "--edit", "-e"}
 PYTHONS = {"python", "python3", "uv", "uvx"}
 READ_ONLY = {"cat", "ls", "head", "tail", "less", "stat", "file", "wc", "grep", "rg", "test", "["}
+# 發布 release 會直接部署: agent 只能經過這個固定寫法, 兩家的設定讓它一定跳確認。
+PUBLISH_COMMAND = ".agents/skills/release/scripts/publish.sh"
+# 會觸發部署或改掉已發布版本的 gh 指令。
+DEPLOYING_RELEASE = {"create", "edit", "delete"}
 # `<<EOF`、`<<-'EOF'`、`<< "EOF"`; `<<<` 是 here-string, 不算。
 HEREDOC = re.compile(r"(?<!<)<<-?(?!<)\s*(['\"]?)(\w+)\1")
 
@@ -147,6 +151,27 @@ def self_approval(argv: list[str]) -> bool:
     return runs_script or writes_approval
 
 
+def bypasses_publish(argv: list[str]) -> bool:
+    """換寫法執行 publish.sh (`bash …`、`./…`、從別的目錄) 不會被要求確認。"""
+    if argv[0] == PUBLISH_COMMAND:
+        return False
+    script = PUBLISH_COMMAND.rsplit("/", 1)[-1]
+    program = argv[0].rsplit("/", 1)[-1]
+    arguments = [arg for arg in argv[1:] if not arg.startswith("-")]
+    return program == script or (
+        program in SHELLS and bool(arguments) and arguments[0].endswith(script)
+    )
+
+
+def deploys(argv: list[str]) -> bool:
+    """`gh release create/edit/delete` 與手動觸發 Deploy workflow。"""
+    if argv[1:2] == ["release"]:
+        return bool(argv[2:3]) and argv[2] in DEPLOYING_RELEASE
+    return argv[1:3] == ["workflow", "run"] and any(
+        arg.lower().startswith("deploy") for arg in argv[3:]
+    )
+
+
 def skips_hooks(subcommand: str, args: list[str]) -> bool:
     """`--no-verify` 會略過 .githooks/ (commit-msg 檢查 Co-authored-by)。commit 的 `-n` 也是;
     push 的 `-n` 是 --dry-run, 不算。"""
@@ -197,6 +222,12 @@ def violation(argv: list[str], cwd: str) -> str | None:
             f"測試檔的放行只能用 `{' '.join(APPROVE_COMMAND)} <測試檔>` 申請，"
             "它會請使用者確認；不要直接寫放行檔或換寫法呼叫。"
         )
+    if bypasses_publish(argv) or (argv[0].rsplit("/", 1)[-1] == "gh" and deploys(argv)):
+        return (
+            f"發布 release 會直接部署，只能用 `{PUBLISH_COMMAND} <版號> [--prerelease]`，"
+            "而且要先用 preview.sh 給使用者看過、使用者在對話裡同意之後才執行"
+            "（.agents/skills/release/SKILL.md）。重新部署或回滾由使用者自己觸發。"
+        )
     program = argv[0].rsplit("/", 1)[-1]
     if program == "git":
         return git_violation(argv, cwd)
@@ -219,27 +250,37 @@ def violation(argv: list[str], cwd: str) -> str | None:
     return None
 
 
+def decide(decision: str, reason: str) -> None:
+    json.dump(
+        {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": decision,
+                "permissionDecisionReason": reason,
+            }
+        },
+        sys.stdout,
+        ensure_ascii=False,
+    )
+
+
 def main() -> int:
+    agent = sys.argv[1] if len(sys.argv) > 1 else ""
     payload = json.load(sys.stdin)
     if payload.get("tool_name") != "Bash":
         return 0
     command = payload.get("tool_input", {}).get("command", "")
     cwd = payload.get("cwd") or "."
-    for argv in simple_commands(command if isinstance(command, str) else shlex.join(command)):
+    commands = list(simple_commands(command if isinstance(command, str) else shlex.join(command)))
+    for argv in commands:
         reason = violation(argv, cwd)
         if reason:
-            json.dump(
-                {
-                    "hookSpecificOutput": {
-                        "hookEventName": "PreToolUse",
-                        "permissionDecision": "deny",
-                        "permissionDecisionReason": reason,
-                    }
-                },
-                sys.stdout,
-                ensure_ascii=False,
-            )
+            decide("deny", reason)
             return 0
+    # 發布 release 一定要使用者確認。Claude 的 permissions.ask 也會問, 這裡再回 ask 是因為
+    # 權限模式 (例如自動放行) 可能略過設定檔; Codex 不支援 ask, 由 .codex/rules/ 的 prompt 負責。
+    if agent == "claude" and any(argv[0] == PUBLISH_COMMAND for argv in commands):
+        decide("ask", "發布 release 會直接部署：確認使用者已經看過 preview.sh 的內容並同意發布。")
     return 0
 
 

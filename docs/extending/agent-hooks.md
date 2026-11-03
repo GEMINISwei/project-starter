@@ -27,7 +27,7 @@ Claude 與 Codex 的 hook 協定相同（事件名稱、stdin 收的 JSON、回�
 
 | 腳本 | 事件 | 擋什麼 |
 |---|---|---|
-| `guard_commands.py` | `PreToolUse`（shell 指令） | push 到 `main`、用 `--no-verify` 略過 git hook（`commit -n` 也算）、改 `core.hooksPath`、`gh pr merge`、`npm` 的 `--force`／`--legacy-peer-deps`、直接下 `docker compose`、繞過確認自己放行測試檔 |
+| `guard_commands.py` | `PreToolUse`（shell 指令） | push 到 `main`、用 `--no-verify` 略過 git hook（`commit -n` 也算）、改 `core.hooksPath`、`gh pr merge`、`npm` 的 `--force`／`--legacy-peer-deps`、直接下 `docker compose`、繞過確認自己放行測試檔、直接下 `gh release create/edit/delete` 或手動觸發 Deploy（發布只能經過 `publish.sh`，見下方） |
 | `guard_tests.py` | `PreToolUse`（改檔） | 實作開始後改測試檔，見下一節 |
 
 ## 測試鎖定
@@ -49,6 +49,18 @@ Claude 與 Codex 的 hook 協定相同（事件名稱、stdin 收的 JSON、回�
 Claude 也能用同一個申請指令（`.claude/settings.json` 的 `permissions.ask` 讓它一樣要確認），但直接按允許比較方便。
 
 agent 用 shell 指令（`sed -i`、重新導向）改測試檔時不會被攔：hook 只看改檔工具。
+
+## 發布 release
+
+發布會直接部署，所以 agent 只能用固定寫法的 `.agents/skills/release/scripts/publish.sh`，而且一定跳確認：
+
+| | 怎麼確認 |
+|---|---|
+| Claude | `guard_commands.py` 回 `ask`，`.claude/settings.json` 的 `permissions.ask` 也列了它 |
+| Codex | hook 不支援 `ask`，由 `.codex/rules/publish-release.rules` 的 `prompt` 跳確認 |
+
+`gh release create/edit/delete`、`gh workflow run deploy…` 與換寫法呼叫 `publish.sh`（`bash …`、`./…`）
+兩家都擋下，否則就繞過了確認。這跟測試檔放行的申請指令是同一種做法。
 
 ## 新增一個 hook
 

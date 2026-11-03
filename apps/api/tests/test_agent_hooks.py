@@ -116,6 +116,14 @@ BLOCKED = [
     # git 2.46 起的子指令寫法。
     "git config set core.hooksPath /dev/null",
     "git config unset core.hooksPath",
+    # 發布 release 與手動部署會直接部署, 只能經過固定寫法的 publish.sh (一定跳確認)。
+    "gh release create v0.1.0 --notes x",
+    "gh release edit v0.1.0 --prerelease=false",
+    "gh release delete v0.1.0",
+    "gh workflow run deploy.yml -f tag=v0.1.0",
+    "bash .agents/skills/release/scripts/publish.sh 0.1.0",
+    "./.agents/skills/release/scripts/publish.sh 0.1.0",
+    "cd .agents/skills/release && scripts/publish.sh 0.1.0",
 ]
 
 ALLOWED = [
@@ -146,6 +154,10 @@ ALLOWED = [
     "git config --get core.hooksPath",
     "git config get core.hooksPath",
     "git config list",
+    "gh release view v0.1.0",
+    "gh release list",
+    ".agents/skills/release/scripts/preview.sh 0.1.0",
+    "cat .agents/skills/release/scripts/publish.sh",
 ]
 
 
@@ -174,6 +186,39 @@ def test_guard_ignores_tools_other_than_shell(agent: str, on_feature: Path) -> N
     assert run_guard(agent, "git push origin main", on_feature, tool="Read") is None
 
 
+PUBLISH_COMMAND = ".agents/skills/release/scripts/publish.sh"
+CODEX_RULES = REPO_ROOT / ".codex" / "rules"
+
+
+@pytest.mark.parametrize(
+    "command", [f"{PUBLISH_COMMAND} 0.1.0", f"{PUBLISH_COMMAND} 0.1.0 --prerelease"]
+)
+def test_guard_asks_claude_before_publishing_release(command: str, on_main: Path) -> None:
+    output = run_guard("claude", command, on_main)
+    assert output is not None, f"沒有要求確認: {command}"
+    assert output["hookSpecificOutput"]["permissionDecision"] == "ask"
+
+
+def test_guard_leaves_publishing_release_to_codex_rule(on_main: Path) -> None:
+    # Codex 的 hook 不支援 ask, 由 .codex/rules/ 的 prompt 要求確認。
+    assert run_guard("codex", f"{PUBLISH_COMMAND} 0.1.0", on_main) is None
+
+
+def test_claude_settings_ask_before_publishing_release() -> None:
+    settings = json.loads(CLAUDE_SETTINGS.read_text(encoding="utf-8"))
+    assert f"Bash({PUBLISH_COMMAND}:*)" in settings.get("permissions", {}).get("ask", [])
+
+
+def test_codex_rule_prompts_before_publishing_release() -> None:
+    rules = "\n".join(path.read_text(encoding="utf-8") for path in CODEX_RULES.glob("*.rules"))
+    pattern = re.compile(
+        r'prefix_rule\(\s*pattern\s*=\s*\[\s*"\.agents/skills/release/scripts/publish\.sh"'
+        r'\s*\][^)]*decision\s*=\s*"prompt"',
+        flags=re.DOTALL,
+    )
+    assert pattern.search(rules), ".codex/rules/ 要讓 publish.sh 一定經過使用者確認"
+
+
 def hook_calls(config: dict[str, Any]) -> set[tuple[str, str, str, str]]:
     """(事件, matcher, 腳本, agent 參數)。"""
     calls = set()
@@ -200,7 +245,6 @@ def test_claude_and_codex_hook_configs_call_the_same_scripts() -> None:
     assert not missing, f"設定呼叫了不存在的腳本: {missing}"
 
 
-
 def test_codex_hooks_config_has_only_hooks_at_top_level() -> None:
     # Codex 0.142.5 遇到不認得的頂層欄位會讓整份設定解析失敗,
     # 兩個守衛都不載入, 只在 hooks/list 留警告
@@ -208,6 +252,7 @@ def test_codex_hooks_config_has_only_hooks_at_top_level() -> None:
     assert set(config) == {"hooks"}, (
         f".codex/hooks.json 頂層只能有 hooks, 說明寫進文件: {sorted(config)}"
     )
+
 
 HOOK_SCRIPTS = sorted(HOOKS_DIR.glob("*.py"))
 # macOS 內建的 python3; hook 由 PATH 上的 python3 執行, 不是 api 的虛擬環境。
