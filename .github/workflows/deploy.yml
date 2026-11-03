@@ -22,10 +22,12 @@ run-name: >-
 # 發新版仍然走 release: 手動觸發不建 tag, 版號才不會繞過 release 的紀錄。
 #   version  決定要部署的 tag, 而且必須是 v<APP_VERSION>, 程式回報的版本才對得上 release
 #   targets  決定要部署的組, 列出 repo 裡屬於這些組的 environment (一個 environment = 一套系統)
-#   ci       重用 ci.yml, 要部署的 commit 要通過同一套檢查
-#   build    建兩份 production image 推到 GHCR, 每個要部署的組各標一個組名 (例如 :production)
-#   deploy   每套系統各一個 job, 依序 SSH 到主機: 備份 → checkout 同一個 tag → 拉 image 並重啟
-#            (make start) → 清掉舊 image 與過舊的備份
+#   ci-result  這個 commit 在 main 上的 CI 是否已經成功; 成功就不再跑 ci
+#   ci       重用 ci.yml, 要部署的 commit 要通過同一套檢查 (main 上已經通過時跳過)
+#   build    建兩份 production image 推到 GHCR, 每個要部署的組各標一個組名 (例如 :production),
+#            並輸出兩份的 digest
+#   deploy   每套系統各一個 job, 依序 SSH 到主機: 備份 → checkout 同一個 tag → 依 digest 拉 image
+#            並重啟 (make start) → 清掉舊 image 與過舊的備份 → 部署的 digest 寫進 Summary
 #   cleanup-ghcr  部署完清掉 GHCR 上沒有標籤的舊版本, 再確認每個標籤的 image 都還完整
 # 各套的結果看執行頁面的 job 列表, 不另外彙總; job 有列表上看不到的資訊才各自寫進 Summary。
 #
@@ -33,6 +35,7 @@ run-name: >-
 # 新增一套系統只要建一個符合命名的 environment, 不必改這個檔。
 #
 # 一組裡的系統永遠跑同一版, 所以 image 只標組名、不標版號: 版號由 APP_VERSION 回報。
+# 主機依 digest 拉, 不依組名標籤: 標籤會被之後的部署移走, digest 保證拿到的是這次建的那份。
 # 回滾 (Run workflow) 會從舊 tag 重建一次, 所以不需要在 GHCR 或主機上留舊版 image:
 # 主機在 deploy 最後清, GHCR 由 cleanup-ghcr 清。
 # 不同組用不同標籤, 先行測試的組部署新版時不會蓋掉其他組正在用的 image。
@@ -69,6 +72,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
+      sha: ${{ steps.sha.outputs.sha }}
     steps:
       # 手動觸發可以選任一個 branch 上的 deploy.yml 來跑; 只認 main 上的那份。
       # 這段只讓選錯 branch 時早點失敗、訊息清楚: 別的 branch 上的 deploy.yml 可以把它刪掉,
@@ -109,6 +113,10 @@ jobs:
             echo "tag 是 ${TAG}，但 APP_VERSION 是 ${version}（要 v${version}）" >&2
             exit 1
           fi
+      # ci-result 用它查 main 上的 CI。tag 可能是 annotated tag, 要的是它指向的 commit。
+      - name: tag 指向的 commit
+        id: sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
 
   targets:
     runs-on: ubuntu-latest
@@ -171,15 +179,49 @@ jobs:
             split("\n") | map(select(length > 0) | split("\t") | {group: .[0], environment: .[1]})
             | {include: .}' <<< "${selected}")" >> "${GITHUB_OUTPUT}"
 
+  # 這個 commit 在 main 上已經跑過同一套 CI 而且成功 (push, 或 push 被略過時手動補跑) 就不再跑:
+  # tag 指向的就是合併進 main 的 commit, 重跑的結果相同。PR 的 run 不算, 它測的是 PR 的 head。
+  # 查不到 (main 的 CI 還沒跑完、run 已經過了保存期限、或那次是紅的) 就照舊先跑 CI;
+  # 查詢本身失敗則整次停下, 不默默跳過。判斷腳本取自這份 workflow 的 commit, 理由同 targets。
+  ci-result:
+    needs: [version]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      passed: ${{ steps.check.outputs.passed }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+      - name: main 上的 CI 結果
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ needs.version.outputs.sha }}
+        run: |
+          passed="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SHA}&status=success&per_page=100" \
+            | .github/scripts/ci-passed.sh "${SHA}")"
+          if [ "${passed}" = true ]; then
+            echo "main 上的 CI 已經通過 ${SHA}，不再重跑" >> "${GITHUB_STEP_SUMMARY}"
+          fi
+          echo "passed=${passed}" >> "${GITHUB_OUTPUT}"
+
   # 等 version 與 targets 都通過才跑: tag 或要部署的組不對時一套都不會部署, 先跑 CI 只是白花時間。
   ci:
-    needs: [version, targets]
+    needs: [version, targets, ci-result]
+    if: needs.ci-result.outputs.passed != 'true'
     uses: ./.github/workflows/ci.yml
     with:
       ref: refs/tags/${{ needs.version.outputs.tag }}
 
+  # ci 被跳過時預設會連 build 一起跳過, 所以寫明條件: 上游沒有失敗或取消就跑。
+  # ci-result 失敗也算失敗, 不會在不知道 CI 結果的情況下部署。
   build:
-    needs: [version, targets, ci]
+    needs: [version, targets, ci-result, ci]
+    if: ${{ !cancelled() && !failure() }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -188,6 +230,8 @@ jobs:
     outputs:
       api-repo: ${{ steps.names.outputs.api-repo }}
       web-repo: ${{ steps.names.outputs.web-repo }}
+      api-digest: ${{ steps.api.outputs.digest }}
+      web-digest: ${{ steps.web.outputs.digest }}
       packages: ${{ steps.names.outputs.packages }}
       source: ${{ steps.names.outputs.source }}
     steps:
@@ -221,8 +265,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: printf '%s' "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
       - uses: docker/setup-buildx-action@v4
-      # 與 ci.yml 的 images job 共用 cache scope, 剛跑完的 CI 已經把層暖好了。
+      # 與 ci.yml 的 e2e job 共用 cache scope, 剛跑完的 CI 已經把層暖好了。
+      # digest 給 deploy 用: 主機依 digest 拉, 拿到的一定是這次建的那份 (見 deploy 的說明)。
       - uses: docker/build-push-action@v7
+        id: api
         with:
           context: apps/api
           target: base
@@ -231,6 +277,7 @@ jobs:
           labels: org.opencontainers.image.source=${{ steps.names.outputs.source }}
           cache-from: type=gha,scope=api
       - uses: docker/build-push-action@v7
+        id: web
         with:
           context: apps/web
           target: prod
@@ -318,6 +365,8 @@ jobs:
 
   deploy:
     needs: [version, targets, build, migration-check]
+    # 上游的 ci 可能被跳過, 預設條件會因此連 deploy 一起跳過, 所以寫明要哪些 job 成功。
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.migration-check.result == 'success' }}
     # matrix 有 group 與 environment 兩個值, 不指定名稱的話 job 會叫 `deploy (production, production-a)`;
     # 部署結果就看 job 列表, 一套一行, 失敗的那套直接按 Re-run。
     name: deploy (${{ matrix.environment }})
@@ -404,8 +453,11 @@ jobs:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ needs.version.outputs.tag }}
-          API_IMAGE: ${{ needs.build.outputs.api-repo }}:${{ matrix.group }}
-          WEB_IMAGE: ${{ needs.build.outputs.web-repo }}:${{ matrix.group }}
+          # 依 digest 拉, 不依組名標籤: 之後別次部署會把標籤移到新的 image, 這時重跑這個 job
+          # 依標籤會拿到別版的 image 而不報錯; 依 digest 則拿到這次建的那份, 已經被清掉就直接失敗
+          # (改用 Run workflow 重新部署, 見 docs/operations.md)。
+          API_IMAGE: ${{ needs.build.outputs.api-repo }}@${{ needs.build.outputs.api-digest }}
+          WEB_IMAGE: ${{ needs.build.outputs.web-repo }}@${{ needs.build.outputs.web-digest }}
           IMAGE_SOURCE: ${{ needs.build.outputs.source }}
           BACKUP_KEEP: ${{ vars.BACKUP_KEEP || '10' }}
         run: |
@@ -445,6 +497,19 @@ jobs:
             [ "${status}" -ne 255 ] || echo "::error::連不上主機（SSH 以 255 結束）"
             exit "${status}"
           }
+      # 部署成功才寫: 這時主機跑的就是這兩份。要確認某台主機現在跑哪一份, 拿這裡的 digest 對照
+      # 主機上 `docker inspect --format '{{index .RepoDigests 0}}' <容器>` 的結果。
+      - name: 記下部署的 image
+        env:
+          ENVIRONMENT: ${{ matrix.environment }}
+          API_IMAGE: ${{ needs.build.outputs.api-repo }}@${{ needs.build.outputs.api-digest }}
+          WEB_IMAGE: ${{ needs.build.outputs.web-repo }}@${{ needs.build.outputs.web-digest }}
+        run: |
+          {
+            echo "### ${ENVIRONMENT} 部署的 image"
+            echo "- api：\`${API_IMAGE}\`"
+            echo "- web：\`${WEB_IMAGE}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
 
   # 每次 push 都把組名標籤移到新的 image, 舊的變成沒有標籤的版本留在 GHCR, 回滾又是從 tag 重建,
   # 它們沒有用處, 部署完就清掉。
