@@ -4,7 +4,7 @@
   "type": "module",
   "//": [
     "整套系統 (nginx → web → api → PostgreSQL) 的瀏覽器測試, 不屬於任何一個 app, 所以不放在 apps/ 底下。",
-    "請在 repo 根目錄跑 `make check e2e`: 它會起一套拋棄式的正式環境、建立超管, 再呼叫這裡的 test。",
+    "請在 repo 根目錄跑: 開發中用 `make e2e test` (常駐的 dev 環境, 可只跑指定的 spec), 完整檢查用 `make check e2e` (拋棄式的正式環境)。兩者都會建立超管再呼叫 Playwright。",
     "直接 `npm test` 需要自己提供 E2E_BASE_URL 與超管帳密 (見 playwright.config.ts)。"
   ],
   "engines": {

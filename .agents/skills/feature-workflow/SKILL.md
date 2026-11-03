@@ -13,13 +13,16 @@ description: 開始任何要進 main 的改動時使用（新功能、修正、�
    寫不出測試名稱的那條，先停下來問使用者，不要自己猜。
 3. **先寫測試**：單元測試放該 app 的 `tests/`，與原始碼同構；會改到畫面流程時 E2E 也先寫。
    跑單項確認是紅燈（`uv run pytest tests/ -k xxx`、`npm run test -- -t "名稱"`）。
+   E2E 先 `make e2e up` 起這個 checkout 的常駐環境（dev mode，之後改原始碼不必重建），
+   再用 `make e2e test <檔案>` 或 `make e2e grep "名稱"` 只跑相關的那幾個。
 4. **commit 測試、push、開 Draft PR**：PR 標題用 Conventional Commits；描述照
    [PR 模板](../../../.github/PULL_REQUEST_TEMPLATE.md) 的三段，驗收條件寫進「驗證」並標「待實作」。
    commit 最後加 `Co-authored-by`（寫到模型與版本）。
 5. **實作**：測試檔此時鎖定。測試變紅先改實作；真的認為測試要改，先向使用者說明那個測試驗證的條件、
    沒過的原因，得到同意才改，並在 PR 描述寫明原本的斷言為什麼錯。
 6. **收尾**：照 `AGENTS.md`〈改完之後〉的表補做（migration、`make gen-types`、`make check integration`、
-   `make check e2e`），最後 `make check` 全綠。
+   E2E），最後 `make check` 全綠。E2E 在本機用 `make e2e test` 跑相關的 spec 就好，正式環境 image 的
+   完整版本由 CI 的 `e2e` 跑；改到 nginx、compose 或只有正式環境才有的行為時，本機也跑一次 `make check e2e`。
 7. **更新 PR 描述**：「摘要」對上最新的 diff，「驗證」每條寫上結果（成功失敗都寫），
    「檢查」只列 diff 看不出來、要有人去確認的事。push 之後改用 `watch-pr` 這個 skill 等 CI。
 8. **Ready for review 由使用者決定**，不要自己轉，也不要自己合併。
