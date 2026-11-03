@@ -24,5 +24,9 @@
   發現得晚，但不會漏，因為 CI 的 `e2e` 是必要檢查（[0011](0011-e2e-required-in-ci.md)）。
 - `next dev` 第一次打開頁面時才編譯，第一次跑某個頁面的測試會比較慢；`make e2e up` 先載入登入頁，
   其餘頁面編譯過一次之後就快了。
+- dev 與 build 都用 Next 預設的 Turbopack，不加 `--webpack`（`apps/web/tests/package.test.ts` 擋）。
+  在一個 75 個 E2E 測試的下游專案實測（2 workers）：webpack 的 dev 整套 5.2–5.3 分鐘、約 1000 CPU 秒，
+  第一輪有 4 個測試等頁面第一次編譯而逾時；Turbopack 2.6–2.9 分鐘、約 500 CPU 秒，冷、暖啟動都全過，
+  單一 spec 從 31 秒降到約 12 秒。build 跟著換，是為了不讓 dev 與正式環境再多差一層打包工具。
 - 常駐環境會一直佔著資源，PR 合併後要 `make e2e down`（`watch-pr` 的收尾有這一步）。
 - 本機綠、CI 紅經常是 dev 與正式環境的差異造成時，重新檢討：把差異收斂進 overlay，或改回本機也跑正式環境的版本。

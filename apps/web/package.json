@@ -12,10 +12,10 @@
     "node": ">=24.15.0 <25"
   },
   "scripts": {
-    "dev": "next dev --webpack",
-    "build": "next build --webpack",
+    "dev": "next dev",
+    "build": "next build",
     "start": "next start",
-    "typecheck": "next typegen --webpack && tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "lint": "eslint && npm run check:architecture && npm run check:deadcode",
     "check:architecture": "depcruise app config modules shared proxy.ts instrumentation.ts --config .dependency-cruiser.cjs",
     "check:deadcode": "knip",
