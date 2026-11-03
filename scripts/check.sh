@@ -23,6 +23,8 @@ source "$(dirname "$0")/lib/compose.sh"
 source "$(dirname "$0")/lib/contract.sh"
 # shellcheck source=scripts/lib/migrations.sh
 source "$(dirname "$0")/lib/migrations.sh"
+# shellcheck source=scripts/lib/shellcheck.sh
+source "$(dirname "$0")/lib/shellcheck.sh"
 
 # deny_on_production 看的是 .env 的 MODE, 要先載入。
 load_env
@@ -64,6 +66,7 @@ missing_tool() {
 
 lint_shell() {
     command -v shellcheck > /dev/null 2>&1 || { missing_tool shellcheck; return; }
+    check_shellcheck_version
     # -x: 跟著 `source` 進 lib/, 被引用的函式與變數才不會被當成未定義。
     shellcheck -x scripts/*.sh scripts/lib/*.sh .github/scripts/*.sh .agents/skills/*/scripts/*.sh \
         .githooks/*
