@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test"
+import { ADMIN_STATE } from "./tests/support"
 
 // 網址與超管帳密由 `make check e2e` (scripts/check.sh 的 run_e2e) 或 `make e2e test` (scripts/e2e.sh)
 // 起好環境之後注入。
@@ -10,8 +11,10 @@ if (!baseURL) {
 
 export default defineConfig({
   testDir: "./tests",
-  // users.spec.ts 的一般帳號由畫面建立 (API 沒有對外開放), 之後的測試接著用它, 所以依序跑。
-  workers: 1,
+  // 檔案之間平行, 同一個檔案裡的測試在同一個 worker 依序跑 (一個子功能一個檔案)。
+  // 測試之間只共用準備好的帳號與登入狀態, 不共用彼此的結果 (docs/testing.md〈E2E〉)。
+  // 2 個: runner 同時還要跑整套服務, 再多 CPU 會搶不過來。
+  workers: 2,
   fullyParallel: false,
   // 不重試: 重試會把時序問題藏起來, 偶發失敗要修等待條件, 不是多跑一次。
   retries: 0,
@@ -25,5 +28,13 @@ export default defineConfig({
     locale: "zh-TW",
     trace: "retain-on-failure",
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  projects: [
+    // 超管先登入一次並保存狀態, 其他測試預設載入它; 要從未登入開始的測試自己改成 SIGNED_OUT。
+    { name: "setup", testMatch: /.*\.setup\.ts/ },
+    {
+      name: "chromium",
+      use: { ...devices["Desktop Chrome"], storageState: ADMIN_STATE },
+      dependencies: ["setup"],
+    },
+  ],
 })

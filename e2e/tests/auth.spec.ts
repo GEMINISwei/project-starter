@@ -1,5 +1,8 @@
 import { expect, test } from "@playwright/test"
-import { admin, login } from "./support"
+import { SIGNED_OUT, admin, login } from "./support"
+
+// 這個檔案驗證的是未登入的導向與登入流程本身, 不載入預設的超管登入狀態。
+test.use({ storageState: SIGNED_OUT })
 
 test("未登入進受保護頁面會導向登入頁", async ({ page }) => {
   await page.goto("/settings")
