@@ -62,9 +62,6 @@ CI（`.github/workflows/ci.yml`）跑的就是本機指令：`check`（`make che
   不在沒有快取的 runner 上重建。建法（target、快取 scope）與 `deploy.yml` 的 build 相同。
 - `check` 快取 `apps/web/node_modules`，`.nvmrc`、`package.json`、`package-lock.json` 都沒變時跳過 `npm ci`。
 
-**先寫測試的那個 commit 在訊息加 `[skip ci]`**：實作還沒開始，CI 一定是紅的，跑了只是佔掉一輪
-（GitHub 對 push 與 pull_request 都認這個標記，PR 格式檢查也一起略過）。下一次推實作時照常全部跑。
-
 ### AI 協作的共同作者
 
 AI 參與產生的 commit 一律在訊息最後加上 `Co-authored-by`，之後看 history 才知道哪些改動是哪家的

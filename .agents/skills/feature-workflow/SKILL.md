@@ -15,8 +15,7 @@ description: 開始任何要進 main 的改動時使用（新功能、修正、�
    跑單項確認是紅燈（`uv run pytest tests/ -k xxx`、`npm run test -- -t "名稱"`）。
 4. **commit 測試、push、開 Draft PR**：PR 標題用 Conventional Commits；描述照
    [PR 模板](../../../.github/PULL_REQUEST_TEMPLATE.md) 的三段，驗收條件寫進「驗證」並標「待實作」。
-   commit 最後加 `Co-authored-by`（寫到模型與版本）。這個 commit 的標題加 `[skip ci]`：測試一定是紅的，
-   不必佔一輪 CI（[說明](../../../docs/workflow.md#提交與-ci)）。
+   commit 最後加 `Co-authored-by`（寫到模型與版本）。
 5. **實作**：測試檔此時鎖定。測試變紅先改實作；真的認為測試要改，先向使用者說明那個測試驗證的條件、
    沒過的原因，得到同意才改，並在 PR 描述寫明原本的斷言為什麼錯。
 6. **收尾**：照 `AGENTS.md`〈改完之後〉的表補做（migration、`make gen-types`、`make check integration`、
