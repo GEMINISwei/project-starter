@@ -148,7 +148,10 @@ cd "${REPO_ROOT}"
 case "${1:-}" in
     up)   [ "$#" -eq 1 ] || usage; cmd_up ;;
     test) shift; cmd_test "$@" ;;
-    grep) [ "$#" -eq 2 ] && [ -n "$2" ] || usage; cmd_test --grep "$2" ;;
+    grep)
+        if [ "$#" -ne 2 ] || [ -z "$2" ]; then usage; fi
+        cmd_test --grep "$2"
+        ;;
     down) [ "$#" -eq 1 ] || usage; cmd_down ;;
     *)    usage ;;
 esac
