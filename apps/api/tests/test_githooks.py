@@ -6,6 +6,10 @@
 怎麼知道是 agent 在 commit: `AI_AGENT` 環境變數 (跨工具的慣例; Claude Code 自己會設,
 Codex 由專案的 `.codex/config.toml` 補上)。人自己 commit 時沒有它, 不要求 trailer。
 
+另一條對所有人都適用: 訊息裡不能有 GitHub 的 CI 略過標記。GitHub 在整份訊息裡找它, 而 squash
+預設把分支上每個 commit 的訊息都併進 main 的 commit, 只要一個 commit 帶著它, main 就不跑 CI
+(部署也會因此找不到 main 的 CI 結果)。要略過某些檢查時寫成 workflow 的條件, 不靠訊息。
+
 住在 api 底下的理由同 `test_nginx_templates.py`: `make check` 一定會跑到這裡。
 """
 
@@ -71,6 +75,44 @@ def test_commit_msg_allows_human_commits_without_coauthor(tmp_path: Path) -> Non
 
 def test_commit_msg_allows_merge_commits(tmp_path: Path) -> None:
     assert run_hook("Merge branch 'main' into feat/x\n", tmp_path, "codex").returncode == 0
+
+
+SKIP_MARKERS = [
+    "[skip ci]",
+    "[ci skip]",
+    "[no ci]",
+    "[skip actions]",
+    "[actions skip]",
+    "[Skip CI]",
+]
+
+
+@pytest.mark.parametrize("marker", SKIP_MARKERS)
+@pytest.mark.parametrize("agent", ["codex", None])
+def test_commit_msg_rejects_ci_skip_marker_in_title(
+    marker: str, agent: str | None, tmp_path: Path
+) -> None:
+    result = run_hook(f"test: add x {marker}\n\n{TRAILER}\n", tmp_path, agent)
+    assert result.returncode != 0
+    assert "main" in result.stderr
+
+
+@pytest.mark.parametrize("agent", ["codex", None])
+def test_commit_msg_rejects_ci_skip_marker_in_body(agent: str | None, tmp_path: Path) -> None:
+    message = f"feat: add x\n\n說明裡提到 [skip ci] 也一樣會被 GitHub 認到。\n\n{TRAILER}\n"
+    assert run_hook(message, tmp_path, agent).returncode != 0
+
+
+def test_commit_msg_ignores_ci_skip_marker_in_comments_and_verbose_diff(tmp_path: Path) -> None:
+    # git 會在送出前拿掉 # 開頭的行與 `commit -v` 剪刀線之後的 diff, 那些不會進 commit。
+    message = (
+        f"feat: add x\n\n{TRAILER}\n"
+        "# 註解提到 [skip ci]\n"
+        "# ------------------------ >8 ------------------------\n"
+        '+    marker = "[skip ci]"\n'
+    )
+    result = run_hook(message, tmp_path, "codex")
+    assert result.returncode == 0, result.stderr
 
 
 def test_codex_marks_its_shell_commands_with_ai_agent() -> None:
