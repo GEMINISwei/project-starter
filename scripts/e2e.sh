@@ -5,7 +5,6 @@
 #   make e2e up              起一套這個 checkout 專用的 E2E 環境 (dev mode, 改了原始碼不必重建); 已經起著就沿用
 #   make e2e test <檔案...>   重設資料、重啟 api, 再只跑那幾個 spec
 #   make e2e grep "名稱"      同上, 只跑名稱符合的測試
-#   make e2e all             同上, 跑整套 (換打包工具、升級 Next 這類影響全部頁面的改動)
 #   make e2e down            拆掉這套環境, 連資料一起刪
 #
 # 跟 `make check e2e` 分工: 那邊每次用正式環境的 image 起一套新的、跑整套, 是 CI 的必要檢查;
@@ -151,14 +150,14 @@ case "${1:-}" in
     test)
         shift
         require_stack
-        # 整套要明說: 漏帶檔案就默默跑完全部, 一輪從十幾秒變成好幾分鐘。
+        # 漏帶檔案就默默跑完全部, 一輪從十幾秒變成好幾分鐘。整套交給正式環境的版本 (與 CI 相同);
+        # 真的要在 dev 環境跑全部 (量這套環境本身時), 給 `spec` 這個符合所有檔名的篩選。
         if [ "$#" -eq 0 ]; then
-            echo "make e2e test 要指定 spec 檔案；要跑整套請用 make e2e all" >&2
+            echo "make e2e test 要指定 spec 檔案；要跑整套請用 make check e2e" >&2
             exit 1
         fi
         cmd_test "$@"
         ;;
-    all)  [ "$#" -eq 1 ] || usage; require_stack; cmd_test ;;
     grep)
         if [ "$#" -ne 2 ] || [ -z "$2" ]; then usage; fi
         require_stack
