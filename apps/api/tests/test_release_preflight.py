@@ -222,3 +222,105 @@ def test_tag_created_only_on_origin_is_seen_after_sync(tmp_path: Path, repo: Pat
 
     assert result.returncode != 0
     assert "v0.0.2" in result.stderr
+
+
+# ── 發版的分支 ────────────────────────────────────────────────────────────────
+# main 只透過 PR 前進, 版號的修改也一樣: make release 改完檔就切到這個分支, 再開 PR。
+
+
+def test_new_release_branch_passes(repo: Path) -> None:
+    result = run(repo, "require_no_release_branch", "0.0.2")
+    assert result.returncode == 0, result.stderr
+
+
+def test_existing_local_release_branch_is_rejected(repo: Path) -> None:
+    git(repo, "branch", "chore/release-v0.0.2")
+    result = run(repo, "require_no_release_branch", "0.0.2")
+    assert result.returncode != 0
+    assert "chore/release-v0.0.2" in result.stderr
+
+
+def test_release_branch_only_on_origin_is_rejected(tmp_path: Path, repo: Path) -> None:
+    other = tmp_path / "other"
+    git(tmp_path, "clone", "--quiet", str(repo.parent / "origin.git"), str(other))
+    git(other, "push", "--quiet", "origin", "main:chore/release-v0.0.2")
+    git(repo, "fetch", "--quiet", "origin")
+
+    result = run(repo, "require_no_release_branch", "0.0.2")
+
+    assert result.returncode != 0
+    assert "chore/release-v0.0.2" in result.stderr
+
+
+# ── 發布 release ──────────────────────────────────────────────────────────────
+# 發布會直接觸發部署, 要發的內容 (tag 指向的 commit、release 的內文) 都從合併後的 main 取。
+
+
+def test_changelog_section_prints_entries_of_that_version(repo: Path) -> None:
+    result = run(repo, "changelog_section", "0.0.1")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "- 第一版"
+
+
+def test_changelog_section_of_missing_version_is_rejected(repo: Path) -> None:
+    result = run(repo, "changelog_section", "0.0.2")
+    assert result.returncode != 0
+    assert "[0.0.2]" in result.stderr
+
+
+def test_changelog_section_without_entries_is_rejected(repo: Path) -> None:
+    (repo / "CHANGELOG.md").write_text(CHANGELOG.replace("- 第一版\n", ""))
+    result = run(repo, "changelog_section", "0.0.1")
+    assert result.returncode != 0
+    assert "[0.0.1]" in result.stderr
+
+
+def test_version_at_ref_reads_app_version_of_that_commit(repo: Path) -> None:
+    config = repo / "apps" / "api" / "app" / "config.py"
+    config.parent.mkdir(parents=True)
+    config.write_text('APP_VERSION = "0.0.2"\n')
+    git(repo, "add", ".")
+    git(repo, "commit", "--quiet", "-m", "release")
+    config.write_text('APP_VERSION = "0.0.3"\n')
+
+    result = run(repo, "version_at_ref", "HEAD")
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "0.0.2"
+
+
+def test_version_at_ref_without_app_version_is_rejected(repo: Path) -> None:
+    result = run(repo, "version_at_ref", "HEAD")
+    assert result.returncode != 0
+
+
+@pytest.mark.parametrize(
+    ("state", "mode", "action"),
+    [
+        ("none", "release", "create"),
+        ("none", "prerelease", "create"),
+        # 先行測試沒問題, 改成正式版: 同一個 tag, 不另建。
+        ("prerelease", "release", "promote"),
+    ],
+)
+def test_release_action_for_state_and_mode(
+    tmp_path: Path, state: str, mode: str, action: str
+) -> None:
+    result = run(tmp_path, "release_action", state, mode)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == action
+
+
+@pytest.mark.parametrize(("state", "mode"), [("release", "release"), ("release", "prerelease")])
+def test_release_action_for_published_release_is_rejected(
+    tmp_path: Path, state: str, mode: str
+) -> None:
+    result = run(tmp_path, "release_action", state, mode)
+    assert result.returncode != 0
+    assert "已經發布" in result.stderr
+
+
+def test_release_action_for_prerelease_again_is_rejected(tmp_path: Path) -> None:
+    result = run(tmp_path, "release_action", "prerelease", "prerelease")
+    assert result.returncode != 0
+    assert "pre-release" in result.stderr
