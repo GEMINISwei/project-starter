@@ -34,3 +34,5 @@
 | [0009](0009-make-and-bash-commands.md) | 指令介面用 Makefile 加 bash 腳本 | 採用 |
 | [0010](0010-full-repo-checkout-on-hosts.md) | 部署主機上 git clone 整份 repo | 採用 |
 | [0011](0011-e2e-required-in-ci.md) | Playwright E2E 是 CI 與部署的必要檢查 | 採用 |
+| [0012](0012-e2e-dev-loop-locally.md) | 開發中的 E2E 用常駐的 dev 環境，正式環境 image 由 CI 驗證 | 採用 |
+| [0013](0013-e2e-failures-read-by-main-agent.md) | E2E 失敗由主 agent 自己讀，不交給子代理 | 採用 |

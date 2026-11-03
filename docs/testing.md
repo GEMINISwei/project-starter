@@ -4,6 +4,7 @@
 make check test                             # 前後端全部（帶覆蓋率）
 make check integration                      # 起拋棄式 PostgreSQL 跑 integration + alembic check
 make check e2e                              # 起拋棄式的正式環境，用 Playwright 從瀏覽器跑過整條路
+make e2e test [檔案...]                     # 開發中：在常駐的 dev 環境只跑指定的 spec（先 make e2e up）
 cd apps/api && uv run pytest tests/ -k xxx  # 只跑後端某些測試
 cd apps/web && npm run test:watch           # 前端 watch 模式
 ```
@@ -51,6 +52,23 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 開發中的那套不受影響。第一次跑會下載 Chromium（幾百 MB），之後沿用。CI 是獨立的 `e2e` job，
 與其他 job 平行跑；失敗時到該次執行的 Artifacts 下載 `playwright-report`，trace 用
 `npx playwright show-trace <zip>` 打開。
+
+**開發中用 `make e2e`，不必每次跑 `make check e2e`**（[理由](decisions/0012-e2e-dev-loop-locally.md)）：
+
+| 指令 | 做什麼 |
+|---|---|
+| `make e2e up` | 起一套這個 checkout 專用的環境：**dev mode**，原始碼直接掛進容器，改了不必重建；已經起著就沿用 |
+| `make e2e test [檔案...]` | 重設資料、重建超管、重啟 api（清掉記憶體裡的登入限流計數），再跑 Playwright；給了檔案就只跑那幾個 spec |
+| `make e2e grep "名稱"` | 同上，只跑名稱符合的測試 |
+| `make e2e down` | 拆掉這套環境，連資料一起刪；PR 合併後執行 |
+
+- 每個 checkout 一套：專案名稱取自 checkout 的路徑，port（3901 起找空的）與隨機帳密記在 git 目錄的
+  `e2e-stack.env`，不會被 commit；worktree 各有一套，互不影響，也不碰開發中的那套。
+- 本機的 Playwright 只輸出失敗摘要（`dot`），全部通過時只有一行。
+- dev 與正式環境 build 的差異要到 CI 才看得到；改到 nginx、compose 或只有正式環境才有的行為時，
+  本機也跑一次 `make check e2e`。
+- 失敗時先讀 `e2e/test-results/` 裡那個測試的 `error-context.md`，看不出原因才開 trace
+  （[理由](decisions/0013-e2e-failures-read-by-main-agent.md)）。
 
 **只放跨層的 smoke 測試**：proxy 導向、cookie 屬性、Server Action、權限導向、撤銷這類只有整套跑起來才看得到的行為。
 畫面分支仍然抽進 `capabilities.ts` 用 vitest 測，不要寫成 E2E（慢，而且畫面一改就要跟著改）。
