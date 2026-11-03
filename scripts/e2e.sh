@@ -3,8 +3,9 @@
 # 開發中反覆跑 E2E: make e2e <子指令> (development only)
 #
 #   make e2e up              起一套這個 checkout 專用的 E2E 環境 (dev mode, 改了原始碼不必重建); 已經起著就沿用
-#   make e2e test [檔案...]   重設資料、重啟 api, 再跑 Playwright; 給了檔案就只跑那幾個 spec
+#   make e2e test <檔案...>   重設資料、重啟 api, 再只跑那幾個 spec
 #   make e2e grep "名稱"      同上, 只跑名稱符合的測試
+#   make e2e all             同上, 跑整套 (換打包工具、升級 Next 這類影響全部頁面的改動)
 #   make e2e down            拆掉這套環境, 連資料一起刪
 #
 # 跟 `make check e2e` 分工: 那邊每次用正式環境的 image 起一套新的、跑整套, 是 CI 的必要檢查;
@@ -113,8 +114,8 @@ reset_stack() {
         && app_compose up -d --wait
 }
 
+# 呼叫端先 require_stack: test 要先確認環境在, 才輪到檢查有沒有給檔案。
 cmd_test() {
-    require_stack
     [ -d e2e/node_modules ] || { echo "缺少 e2e 的套件：cd e2e && npm ci" >&2; exit 1; }
     (cd e2e && npm run --silent typecheck)
     # 這幾步成功時的輸出 (compose 的進度、建立超管的提示) 每次十幾行, 只在失敗時整段印出來。
@@ -147,9 +148,20 @@ cmd_down() {
 cd "${REPO_ROOT}"
 case "${1:-}" in
     up)   [ "$#" -eq 1 ] || usage; cmd_up ;;
-    test) shift; cmd_test "$@" ;;
+    test)
+        shift
+        require_stack
+        # 整套要明說: 漏帶檔案就默默跑完全部, 一輪從十幾秒變成好幾分鐘。
+        if [ "$#" -eq 0 ]; then
+            echo "make e2e test 要指定 spec 檔案；要跑整套請用 make e2e all" >&2
+            exit 1
+        fi
+        cmd_test "$@"
+        ;;
+    all)  [ "$#" -eq 1 ] || usage; require_stack; cmd_test ;;
     grep)
         if [ "$#" -ne 2 ] || [ -z "$2" ]; then usage; fi
+        require_stack
         cmd_test --grep "$2"
         ;;
     down) [ "$#" -eq 1 ] || usage; cmd_down ;;

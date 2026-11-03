@@ -4,7 +4,7 @@
 make check test                             # 前後端全部（帶覆蓋率）
 make check integration                      # 起拋棄式 PostgreSQL 跑 integration + alembic check
 make check e2e                              # 起拋棄式的正式環境，用 Playwright 從瀏覽器跑過整條路
-make e2e test [檔案...]                     # 開發中：在常駐的 dev 環境只跑指定的 spec（先 make e2e up）
+make e2e test <檔案...>                     # 開發中：在常駐的 dev 環境只跑指定的 spec（先 make e2e up）
 cd apps/api && uv run pytest tests/ -k xxx  # 只跑後端某些測試
 cd apps/web && npm run test:watch           # 前端 watch 模式
 ```
@@ -58,8 +58,9 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 | 指令 | 做什麼 |
 |---|---|
 | `make e2e up` | 起一套這個 checkout 專用的環境：**dev mode**，原始碼直接掛進容器，改了不必重建；已經起著就沿用 |
-| `make e2e test [檔案...]` | 重設資料、重建超管、重啟 api（清掉記憶體裡的登入限流計數），再跑 Playwright；給了檔案就只跑那幾個 spec |
+| `make e2e test <檔案...>` | 重設資料、重建超管、重啟 api（清掉記憶體裡的登入限流計數），再只跑那幾個 spec；沒給檔案時拒絕 |
 | `make e2e grep "名稱"` | 同上，只跑名稱符合的測試 |
+| `make e2e all` | 同上，跑整套；只在換打包工具、升級 Next 這類影響全部頁面的改動時用 |
 | `make e2e down` | 拆掉這套環境，連資料一起刪；PR 合併後執行 |
 
 - 每個 checkout 一套：專案名稱取自 checkout 的路徑，port（3901 起找空的）與隨機帳密記在 git 目錄的
