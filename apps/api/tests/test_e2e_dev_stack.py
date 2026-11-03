@@ -77,6 +77,7 @@ def test_e2e_up_again_reuses_same_stack(box: Sandbox) -> None:
 
 
 def test_e2e_stacks_differ_per_checkout(box: Sandbox, tmp_path: Path) -> None:
+    (tmp_path / "other").mkdir()
     other = Sandbox(tmp_path / "other")
     other.write_env("development")
     shutil.copytree(REPO_ROOT / "infra", other.repo / "infra")
