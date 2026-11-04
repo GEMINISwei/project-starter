@@ -28,5 +28,7 @@
   在一個 75 個 E2E 測試的下游專案實測（2 workers）：webpack 的 dev 整套 5.2–5.3 分鐘、約 1000 CPU 秒，
   第一輪有 4 個測試等頁面第一次編譯而逾時；Turbopack 2.6–2.9 分鐘、約 500 CPU 秒，冷、暖啟動都全過，
   單一 spec 從 31 秒降到約 12 秒。build 跟著換，是為了不讓 dev 與正式環境再多差一層打包工具。
+  同一個下游專案已用 Turbopack 建的 image 部署到正式環境：web 沒有重啟、log 沒有 Edge Runtime 警告，
+  路由保護、登入與 Server Action 的寫入都正常。
 - 常駐環境會一直佔著資源，PR 合併後要 `make e2e down`（`watch-pr` 的收尾有這一步）。
 - 本機綠、CI 紅經常是 dev 與正式環境的差異造成時，重新檢討：把差異收斂進 overlay，或改回本機也跑正式環境的版本。
