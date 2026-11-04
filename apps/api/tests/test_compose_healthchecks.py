@@ -138,7 +138,8 @@ def test_http_probe_with_closed_port_fails(service: str, http_server: HTTPServer
 
 def _service(path: Path, name: str) -> str:
     """回傳服務的區塊。只認 compose 檔的固定縮排 (服務 2 格、內容至少 4 格)。"""
-    block = re.search(rf"^  {name}:\n((?:(?:    .*)?\n)+)", path.read_text(encoding="utf-8"), flags=re.MULTILINE)
+    text = path.read_text(encoding="utf-8")
+    block = re.search(rf"^  {name}:\n((?:(?:    .*)?\n)+)", text, flags=re.MULTILINE)
     assert block, f"{path.name} 沒有 {name} 服務"
     return block.group(1)
 
@@ -151,5 +152,5 @@ def test_start_web_without_key_keeps_nginx_down() -> None:
     assert "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: ${NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:?}" in web
     assert "    restart: always\n" in web
     assert "    healthcheck:\n" in web
-    assert re.search(r"^    depends_on:\n(?:      .*\n|        .*\n)*?      web:\n        condition: service_healthy$",
-                     nginx, flags=re.MULTILINE)
+    depends_on = r"^    depends_on:\n(?:      .*\n)*?"
+    assert re.search(depends_on + r"      web:\n        condition: service_healthy$", nginx, re.M)
