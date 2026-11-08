@@ -90,6 +90,9 @@ BLOCKED = [
     "cd apps && git push origin main",
     "(git push origin main)",
     'bash -c "git push origin main"',
+    # eval 跟 `bash -c` 一樣會執行參數裡的指令。
+    'eval "gh pr merge 42"',
+    "eval git push origin main",
     "gh pr merge 5 --squash",
     "npm install --force",
     "cd apps/web && npm i foo --legacy-peer-deps",
@@ -164,6 +167,9 @@ ALLOWED = [
     "git push \\\n  origin feat/x",
     # push 的 -n 是 --dry-run, 不是 --no-verify。
     "git push -n origin feat/x",
+    # dry-run 不會真的 push, 推到 main 也不擋。
+    "git push -n origin main",
+    "git push --dry-run origin main",
     "git config core.hooksPath .githooks",
     "git config set core.hooksPath .githooks",
     # 只給設定名不給值是讀取。

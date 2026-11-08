@@ -201,6 +201,10 @@ def test_approve_rejects_non_test_paths(implementing: Path) -> None:
         f"./.agents/hooks/approve_test_edit.py {TEST}",
         f"python .agents/hooks/approve_test_edit.py {TEST}",
         f"cd apps && python3 ../.agents/hooks/approve_test_edit.py {TEST}",
+        # 直譯器的內嵌程式: 換個方式執行申請指令或寫放行檔。
+        "python3 -c \"import runpy; runpy.run_path('.agents/hooks/approve_test_edit.py')\"",
+        "python3 -c \"open('.git/agent-approved-test-edits', 'w').write('{}')\"",
+        "node -e \"require('fs').writeFileSync('.git/agent-approved-test-edits', '{}')\"",
     ],
 )
 @pytest.mark.parametrize("agent", AGENTS)
@@ -227,6 +231,10 @@ def test_guard_allows_the_prompted_approval_command(agent: str, repo: Path) -> N
         "cat .agents/hooks/approve_test_edit.py",
         "cat .git/agent-approved-test-edits",
         "ls .git/agent-approved-test-edits",
+        # 導向的目標不是放行檔, 只是讀取。
+        "cat .git/agent-approved-test-edits 2>/dev/null",
+        "jq . .git/agent-approved-test-edits",
+        "python3 -m json.tool .git/agent-approved-test-edits",
     ],
 )
 @pytest.mark.parametrize("agent", AGENTS)
@@ -285,6 +293,10 @@ SHELL_WRITES = [
     f"git checkout main -- {TEST}",
     f"git restore {TEST}",
     "cd apps/api && sed -i '' 's/x/y/' tests/modules/users/test_service.py",
+    # 直譯器的內嵌程式: 看不出是讀還是寫, 提到測試檔就當成寫入。
+    f"python3 -c \"open('{TEST}', 'w').write('')\"",
+    f"node -e \"require('fs').writeFileSync('{TEST}', '')\"",
+    f"perl -e \"unlink '{TEST}'\"",
 ]
 
 SHELL_READS = [
@@ -339,3 +351,29 @@ def test_approved_test_edit_via_shell_is_allowed(agent: str, implementing: Path)
     assert approve(implementing, TEST).returncode == 0
     assert shell_decision(agent, implementing, f"sed -i '' 's/x/y/' {TEST}") is None
     assert shell_decision(agent, implementing, f"rm {OTHER_TEST}") == BLOCKED[agent]
+
+
+# 套用 patch 會改到 patch 標頭列出的檔案; 只看指令看不到路徑, 要讀 patch 本身。
+PATCH = (
+    f"diff --git a/{TEST} b/{TEST}\n"
+    f"--- a/{TEST}\n"
+    f"+++ b/{TEST}\n"
+    "@@ -1 +1 @@\n"
+    "-x\n"
+    "+y\n"
+)
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["git apply change.patch", "git am change.patch", "patch -p1 < change.patch"],
+)
+@pytest.mark.parametrize("agent", AGENTS)
+def test_applying_patch_to_tests_needs_approval_after_implementation_starts(
+    agent: str, command: str, implementing: Path
+) -> None:
+    write(implementing, "change.patch", PATCH)
+    assert shell_decision(agent, implementing, command) == BLOCKED[agent], f"沒有攔下: {command}"
+    write(implementing, "source.patch", PATCH.replace(TEST, SOURCE))
+    other = command.replace("change.patch", "source.patch")
+    assert shell_decision(agent, implementing, other) is None, f"誤擋: {other}"

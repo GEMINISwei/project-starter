@@ -7,7 +7,7 @@
 為 deny 的 JSON, 放行就什麼都不印。參數給兩家行為不同的地方: 發布 release 與用 shell 改測試檔時
 Claude 回 ask, Codex 不支援 ask, 改由 .codex/rules/ 或申請指令要求確認。
 
-只拆解指令的結構 (`&&`、`;`、`|`、子 shell、`bash -c`), 不做完整的 shell 解析: 這是讓 agent
+只拆解指令的結構 (`&&`、`;`、`|`、子 shell、`bash -c`、`eval`), 不做完整的 shell 解析: 這是讓 agent
 提早停下來的提醒, 不是安全機制, 真正擋得住的是 git 與 CI。只用標準函式庫, 不必先裝相依。
 """
 
@@ -44,7 +44,37 @@ CONFIG_READS = {"get", "list"}
 CONFIG_WRITES = {"set", "unset", "rename-section", "remove-section", "edit"}
 CONFIG_WRITE_FLAGS = {"--add", "--replace-all", "--unset", "--unset-all", "--edit", "-e"}
 PYTHONS = {"python", "python3", "uv", "uvx"}
-READ_ONLY = {"cat", "ls", "head", "tail", "less", "stat", "file", "wc", "grep", "rg", "test", "["}
+READ_ONLY = {
+    "cat",
+    "ls",
+    "head",
+    "tail",
+    "less",
+    "stat",
+    "file",
+    "wc",
+    "grep",
+    "rg",
+    "test",
+    "[",
+    "jq",
+}
+# 直譯器執行內嵌程式的旗標。程式碼看不出讀寫, 提到的路徑一律當成會寫入。
+INLINE_CODE_FLAGS = {
+    "python": {"-c"},
+    "python3": {"-c"},
+    "node": {"-e", "--eval", "-p", "--print"},
+    "perl": {"-e", "-E"},
+    "ruby": {"-e"},
+}
+# 內嵌程式裡像路徑的字串: 至少有一個 `/`。
+INLINE_PATH = re.compile(r"[\w.@-]+(?:/[\w.@-]+)+")
+# chmod 只加上執行權限不會讓 hook 失效; 其他寫法 (`-x`、`644`、`a-x`) 都算寫入。
+CHMOD_ADD_EXEC = re.compile(r"[ugoa]*\+x")
+CHMOD_OPTION = re.compile(r"-[RfvchHLP]+|--.+")
+# 套用 patch 的指令; patch 的標頭裡才看得到會改到哪些檔案。
+PATCH_HEADER = re.compile(r"^(?:\+\+\+|---) (?:[ab]/)?(\S+)|^diff --git a/(\S+) b/(\S+)", re.M)
+PATCH_DRY_RUN = {"--check", "--stat", "--numstat", "--summary", "--dry-run"}
 # 發布 release 會直接部署: agent 只能經過這個固定寫法, 兩家的設定讓它一定跳確認。
 PUBLISH_COMMAND = ".agents/skills/release/scripts/publish.sh"
 # 會觸發部署或改掉已發布版本的 gh 指令。
@@ -133,6 +163,8 @@ def simple_commands(command: str) -> Iterator[list[str]]:
             continue
         if argv[0] in SHELLS and "-c" in argv[1:-1]:
             yield from simple_commands(argv[argv.index("-c") + 1])
+        elif argv[0] == "eval" and argv[1:]:
+            yield from simple_commands(" ".join(argv[1:]))
         else:
             yield argv
 
@@ -164,6 +196,10 @@ def git_subcommand(argv: list[str]) -> tuple[str, list[str]]:
 
 
 def pushes_to_main(args: list[str], cwd: str) -> bool:
+    if "--dry-run" in args or any(
+        arg.startswith("-") and not arg.startswith("--") and "n" in arg for arg in args
+    ):
+        return False  # 只模擬, 不會真的 push
     positional: list[str] = []
     skip = False
     for arg in args:
@@ -192,21 +228,46 @@ def self_approval(argv: list[str]) -> str | None:
 
     只擋「換寫法執行申請指令」與「寫入放行檔」; `chmod`、`cat` 這類只是提到檔名的不擋。
     """
+    program = argv[0].rsplit("/", 1)[-1]
+    code = inline_code(argv) or ""
+    targets = redirect_targets(argv)
+    arguments = [arg for arg in argv[1:] if arg not in targets and arg not in REDIRECTS]
+    reads_only = program in READ_ONLY or reads_json(argv)
     for approval_name, approve_command, target in APPROVALS:
         if argv[: len(approve_command)] == approve_command:
             continue
-        program = argv[0].rsplit("/", 1)[-1]
         script = approve_command[1].rsplit("/", 1)[-1]
-        arguments = [arg for arg in argv[1:] if not arg.startswith("-")]
-        runs_script = program == script or (
-            program in PYTHONS and bool(arguments) and arguments[0].endswith(script)
+        positional = [arg for arg in argv[1:] if not arg.startswith("-")]
+        runs_script = (
+            program == script
+            or (program in PYTHONS and bool(positional) and positional[0].endswith(script))
+            or script in code
         )
-        touches_approval = any(approval_name in arg for arg in argv)
-        writes_approval = touches_approval and (
-            program not in READ_ONLY or bool({">", ">>"} & set(argv))
+        writes_approval = any(approval_name in path for path in targets) or (
+            not reads_only and any(approval_name in arg for arg in arguments)
         )
         if runs_script or writes_approval:
             return f"{' '.join(approve_command)} {target}"
+    return None
+
+
+def redirect_targets(argv: list[str]) -> list[str]:
+    return [argv[index + 1] for index, arg in enumerate(argv[:-1]) if arg in REDIRECTS]
+
+
+def reads_json(argv: list[str]) -> bool:
+    """`python -m json.tool <檔案>` 只讀; 給第二個檔案時會寫到那裡。"""
+    if argv[0].rsplit("/", 1)[-1] not in PYTHONS or argv[1:3] != ["-m", "json.tool"]:
+        return False
+    return len([arg for arg in argv[3:] if not arg.startswith("-")]) <= 1
+
+
+def inline_code(argv: list[str]) -> str | None:
+    """`python -c`、`node -e` 這類直譯器的內嵌程式碼。"""
+    flags = INLINE_CODE_FLAGS.get(argv[0].rsplit("/", 1)[-1], set())
+    for index, arg in enumerate(argv[1:-1], start=1):
+        if arg in flags:
+            return argv[index + 1]
     return None
 
 
@@ -332,9 +393,10 @@ def rerun_violation(argv: list[str], cwd: str) -> str | None:
     return None
 
 
-def written_paths(argv: list[str]) -> list[str]:
+def written_paths(argv: list[str], cwd: str = ".") -> list[str]:
     """這個指令會寫入、刪除或還原的檔案路徑。只認明確指名檔案的常見寫法。"""
-    paths = [argv[index + 1] for index, arg in enumerate(argv[:-1]) if arg in REDIRECTS]
+    paths = redirect_targets(argv) + INLINE_PATH.findall(inline_code(argv) or "")
+    paths += chmod_paths(argv) + patched_paths(argv, Path(cwd))
     program = argv[0].rsplit("/", 1)[-1]
     args = [arg for arg in argv[1:] if arg not in REDIRECTS]
     positional = [arg for arg in args if not arg.startswith("-")]
@@ -358,6 +420,48 @@ def written_paths(argv: list[str]) -> list[str]:
     return paths
 
 
+def chmod_paths(argv: list[str]) -> list[str]:
+    """拿掉執行權限, git 就會略過那個 hook; 只加上執行權限的不算。"""
+    if argv[0].rsplit("/", 1)[-1] != "chmod":
+        return []
+    args = [arg for arg in argv[1:] if not CHMOD_OPTION.fullmatch(arg)]
+    if not args or CHMOD_ADD_EXEC.fullmatch(args[0]):
+        return []
+    return [arg for arg in args[1:] if arg not in REDIRECTS]
+
+
+def patch_files(argv: list[str]) -> list[str]:
+    """`git apply`、`git am`、`patch` 要套用的 patch 檔; 不是套用的指令回傳空的。"""
+    program = argv[0].rsplit("/", 1)[-1]
+    if PATCH_DRY_RUN & set(argv):
+        return []
+    if program == "patch":
+        return [
+            argv[index + 1]
+            for index, arg in enumerate(argv[:-1])
+            if arg in {"<", "-i", "--input"}
+        ]
+    if program != "git":
+        return []
+    subcommand, rest = git_subcommand(argv)
+    if subcommand not in {"apply", "am"}:
+        return []
+    return [arg for arg in rest if not arg.startswith("-")]
+
+
+def patched_paths(argv: list[str], cwd: Path) -> list[str]:
+    """patch 標頭列出的檔案。讀不到 patch (例如從 stdin 餵) 就看不出來, 不擋。"""
+    paths: list[str] = []
+    for name in patch_files(argv):
+        try:
+            text = (cwd / name).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for match in PATCH_HEADER.finditer(text):
+            paths += [path for path in match.groups() if path and path != "/dev/null"]
+    return paths
+
+
 def shell_writes(commands: list[tuple[list[str], str]], cwd: str) -> tuple[list[str], list[str]]:
     """這串指令寫到、還需要使用者同意的 (測試檔, 防線檔案), 路徑相對 repo 根目錄。"""
     root = repo_root(Path(cwd))
@@ -367,7 +471,7 @@ def shell_writes(commands: list[tuple[list[str], str]], cwd: str) -> tuple[list[
         {
             relative(root, Path(where), path)
             for argv, where in commands
-            for path in written_paths(argv)
+            for path in written_paths(argv, where)
         }
     )
     tests = pending_test_edits(root, [path for path in files if is_test_file(path)])

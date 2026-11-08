@@ -112,6 +112,11 @@ def test_editing_protected_files_needs_approval(agent: str, path: str, repo: Pat
         "echo '{\"disableAllHooks\": true}' > .claude/settings.local.json",
         "cat >> apps/web/vitest.config.ts <<'TS'\nexport {}\nTS",
         "rm .githooks/commit-msg",
+        # 拿掉執行權限, git 就會略過這個 hook。
+        "chmod -x .githooks/commit-msg",
+        "chmod 644 .githooks/commit-msg",
+        "chmod a-x .githooks/commit-msg",
+        "python3 -c \"import os; os.chmod('.githooks/commit-msg', 0o644)\"",
         "cd apps/api && sed -i '' 's/fail_under = 80/fail_under = 0/' pyproject.toml",
     ],
 )
