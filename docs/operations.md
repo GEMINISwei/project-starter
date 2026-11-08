@@ -14,16 +14,14 @@ git checkout v<版號>               # 正式環境只從發版的 tag 啟動
 make start                         # 建置 image 並啟動
 ```
 
-部署主機只需要 Docker、`make`、`openssl`：`make init prod` 不裝 uv 與 Node（那是給
-`make check` 用的）。
+部署主機只需要 Docker、`make`、`openssl`（`make init prod` 不裝 uv 與 Node）。
 
 **升版＝`git fetch --tags && git checkout v<版號>` 後再 `make start`**（compose 檔與 nginx 模板是
 從原始碼 bind mount 的）。`MODE=production` 時 `make start` 只認停在 `v<APP_VERSION>` tag 上的
 checkout：在主機上 `git pull` 了 main 再啟動，等於上線一份沒發版、沒經過 CI 的程式碼。
 
-nginx 的模板（`infra/nginx/`）有變時，`make start` 會重建 nginx，沒變就不動。bind mount 的內容變了，
-compose 本身看不出來，所以由 `scripts/lib/compose.sh` 把內容的雜湊放進 nginx 的 label。
-重建之前會先用一次性的容器跑 `nginx -t`；**模板寫錯時 `make start` 在啟動任何服務之前就失敗**，
+nginx 模板（`infra/nginx/`）有變時 `make start` 才重建 nginx（compose 看不出 bind mount 的內容變化，由
+`scripts/lib/compose.sh` 把內容雜湊放進 label）。重建前先用一次性容器跑 `nginx -t`，**模板寫錯時在啟動任何服務前就失敗**，
 線上的 nginx 維持原樣。
 
 **`.env` 的 `MODE` 決定這個目錄是哪種環境**（`make init prod` 寫入 `production`），一個目錄只會有
@@ -37,30 +35,25 @@ compose 本身看不出來，所以由 `scripts/lib/compose.sh` 把內容的雜�
 
 `make services down` 在正式環境要先確認（資料留在 volume，但服務會停）。
 
-`make services restart` 原地重啟現有的容器（migrate 除外），在正式環境也要先確認。它不重建容器、不拉也不建 image，
-所以主機上不必知道 image 名稱、不必登入 GHCR，跑的是本機建置的還是 registry 拉的都照原樣。
-**它不套用任何變更**：`.env`、compose、image 變了要用 `make start`；容器已經 `down` 掉時也只能 `make start`。
-nginx 模板改了也用 `make start`：它會先跑 `nginx -t` 再重建 nginx。restart 雖然也會重新展開模板，
-但**不會先檢查**，模板寫錯時 nginx 起不來，整個站就停了。
+`make services restart` 原地重啟現有容器（migrate 除外），正式環境也要先確認。它不重建容器、不拉也不建 image
+（不必知道 image 名稱或登入 GHCR）。**它不套用任何變更**：`.env`、compose、image 變了，或容器已經 `down`，都用
+`make start`。nginx 模板改了也用 `make start`：restart 雖然會重新展開模板，但**不先跑 `nginx -t`**，寫錯時整個站就停了。
 
-`make services` 會列出這個專案的 volume（以 compose 的專案標籤篩選），名稱不是 `<專案>_<MODE>_`
-開頭的標 `← Not Matched`：另一種模式留下的，或改過命名之前的舊 volume，目前的 `MODE` 用不到，
-也不會自己消失。只標註不刪除，確定不要了再自己 `docker volume rm`。各 volume 的容量看
-`make services volumes`（要掃過整台主機的 volume，所以不放在 `make services` 裡）。
+`make services` 列出這個專案的 volume（依 compose 專案標籤），名稱不是 `<專案>_<MODE>_` 開頭的標 `← Not Matched`
+（另一種模式或舊命名留下的，目前用不到也不會自己消失）。只標註不刪，確定不要再 `docker volume rm`。容量看
+`make services volumes`（要掃整台主機，所以不放在 `make services`）。
 
 同一台主機要跑多套，就各用一個目錄，`.env` 的 `COMPOSE_PROJECT_NAME` 與 `SYSTEM_PORT` 不重複
 （見〈[新增一套系統](#新增一套系統)〉）。
 
-`make start` 先用要上線的 image **單獨跑一次 migrate**，成功才切換服務：失敗就停在這裡，線上的服務
-維持原狀。migrate 做兩件事：`alembic upgrade head`，接著補齊初始資料（seed，見
-[`extending/seed.md`](extending/seed.md)）。migration 失敗時整個撤回（PostgreSQL 的 DDL 在交易裡）；
-seed 失敗時結構已經升上去了，服務一樣不切換，修好之後重跑即可（seed 可以重複執行）。之後的啟動順序是
-`postgres → migrate → api → web → nginx`，這時 `migrate` 再跑一次，沒有待執行的 migration、seed 也已經是最新的。
+`make start` 先用要上線的 image **單獨跑一次 migrate**，成功才切換服務，失敗時線上維持原狀。migrate 做
+`alembic upgrade head` 再補齊初始資料（[seed](extending/seed.md)）。migration 失敗會整個撤回（DDL 在交易裡）；seed 失敗時
+結構已升級但服務不切換，修好重跑即可（seed 可重複執行）。之後依 `postgres → migrate → api → web → nginx` 啟動，
+這時的 migrate 沒有待執行的東西。
 
-**每次部署都會短暫中斷服務**：部署前的備份期間 nginx 是停的（資料越多越久，見
-〈[備份與還原](#備份與還原)〉），`make start` 重建容器後也要等 healthcheck 通過，nginx 才會接回流量。
-所以要挑離峰時段部署。零停機（新版起來才切流量）的前提是 api 能同時跑兩份，目前做不到，見
-〈[單一行程，不能直接加副本](#單一行程不能直接加副本)〉與 [ADR 0004](decisions/0004-single-api-process.md)。
+**每次部署都會短暫中斷服務**：備份期間 nginx 停止（資料越多越久，見〈[備份與還原](#備份與還原)〉），重建後也要等
+healthcheck 通過才接回流量，所以挑離峰時段。零停機要 api 能同時跑兩份，目前做不到（〈[單一行程，不能直接加副本](#單一行程不能直接加副本)〉、
+[ADR 0004](decisions/0004-single-api-process.md)）。
 
 prod overlay 比 dev 多了 **log 上限**與**記憶體上限**（api、web 各 512M，postgres 1G）。
 api 週期性重啟時，先懷疑記憶體上限。
@@ -89,9 +82,8 @@ api 週期性重啟時，先懷疑記憶體上限。
 | `production`、`production-system-a`、`production-system-b` | production |
 | `staging`、`staging-system-a` | staging |
 
-**一組裡的系統一起更新、一起回滾**，永遠跑同一版。新增一套系統只要建一個符合命名的
-environment（見下方〈新增一套系統〉），workflow 不用改。`productionx` 這種只是開頭相同、
-沒有 `-` 分隔的名稱**不算** production 組。
+**一組裡的系統一起更新、一起回滾**，永遠同一版。新增一套只要建符合命名的 environment（〈新增一套系統〉），workflow 不用改。
+`productionx` 這種沒有 `-` 分隔的名稱**不算** production 組。
 
 要部署哪幾組**由 repo 的 Variables 決定**（Settings → Secrets and variables → Actions → Variables），
 多組用空格分開，例如 `production staging`：
@@ -141,9 +133,8 @@ environment（見下方〈新增一套系統〉），workflow 不用改。`produ
    清理失敗只留警告（下次部署會一起清）；確認失敗這個 job 會變紅，線上照常在跑，
    但下次部署或 Re-run 會拉不到 image，重跑一次部署（重新 build）就會恢復。
 
-**不要在 GHCR 網頁上把 untagged 全選刪掉**：image 帶 attestation 時，標籤指向的是一份目錄（index），
-真正的 image 和 attestation 在列表上也顯示成 untagged，刪掉之後那個標籤就拉不到了。
-要手動清就對最近一個 tag 按 Run workflow，清理與確認會照上面的規則跑。
+**不要在 GHCR 網頁把 untagged 全選刪掉**：帶 attestation 時標籤指向 index，真正的 image 也顯示成 untagged，刪了標籤就拉不到。
+要手動清就對最近的 tag 按 Run workflow。
 
 一次部署可能包含好幾組，所以**整個 repo 的部署共用一個排隊群組**，依序跑。
 GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進第三個時，**原本在等的那個會被取消**。
@@ -160,9 +151,8 @@ GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進�
 服務起來之後才清舊備份，只留最近 `BACKUP_KEEP` 組（見〈[備份與還原](#備份與還原)〉）。
 **清理失敗不會讓部署變紅**，執行頁面只留一個警告，上主機手動 `make backup prune <組數>` 即可。
 
-清舊 image 只清這個 repo 的（以 `org.opencontainers.image.source` 標籤辨認）、已經沒有容器在用的，
-不碰主機上其他專案的 image，**也從不碰 volume**。同一台主機上其他套系統還在用的舊 image 不算沒人用，
-輪到它們更新之後才會被清掉。
+清舊 image 只清這個 repo 的（`org.opencontainers.image.source` 標籤）、沒有容器在用的，**從不碰 volume**。
+同主機其他套還在用的舊 image 要等它們更新後才清。
 
 主機上 shell 有 `API_IMAGE` 與 `WEB_IMAGE` 時，`make start` 改成拉 image、不在主機上建置；
 兩個都沒有就在本機建置，所以手動 `make start` 照常可用（一樣要停在發版的 tag 上）。
@@ -230,9 +220,8 @@ docker builder prune
 從只標 `latest` 的版本升上來時，主機上舊的 `ghcr.io/<帳號>/<repo>-api:latest` 與 `-web:latest`
 還帶著標籤，不會被自動清掉；第一次部署成功後手動 `docker image rm` 掉即可。
 
-主機拉 image 用的是那次 job 的 `GITHUB_TOKEN`，job 結束就失效，主機不存長期的 registry 憑證。
-登入資訊寫在每次部署自己的暫存目錄（`DOCKER_CONFIG`），結束就刪掉，**不碰部署帳號的 `~/.docker`**：
-同一個帳號跑多套系統時不會互相登出，主機上手動登入的 GHCR 也不受影響。
+主機拉 image 用那次 job 的 `GITHUB_TOKEN`（job 結束就失效，主機不存長期憑證），登入資訊寫在每次部署的暫存
+`DOCKER_CONFIG`，結束就刪，**不碰部署帳號的 `~/.docker`**：同帳號多套系統不會互相登出。
 
 #### 新增一套系統
 
@@ -263,10 +252,9 @@ Run workflow 就會拉回來。
 （標題 `chore(release): v<版號>`）→ 合併後在 GitHub 建 release，tag 填 `v<版號>`、target 選 `main`，按 Publish
 （要先行測試就勾 pre-release，見上方〈自動部署〉）。版號的修改跟其他改動一樣走 PR，`main` 不直接 push。
 
-交給 agent 時用 `release` 這個 skill（只能手動呼叫）。它把上面的步驟做到合併為止，發布前用
-`.agents/skills/release/scripts/preview.sh <版號> [--prerelease]` 列出要建的 tag、commit、會部署的組與內文
-（取自 CHANGELOG 的版本段落），**使用者同意後**才執行同目錄的 `publish.sh`。agent 直接下 `gh release` 或手動觸發
-Deploy 會被 hook 擋下，`publish.sh` 一定跳確認（[說明](extending/agent-hooks.md#目前有的-hook)）。
+交給 agent 時用 `release` skill（只能手動呼叫）：做到合併為止，發布前用 `preview.sh <版號> [--prerelease]` 列出 tag、commit、
+會部署的組與內文（取自 CHANGELOG），**使用者同意後**才執行 `publish.sh`（一定跳確認；直接下 `gh release` 或觸發 Deploy
+會被 hook 擋下，[說明](extending/agent-hooks.md#目前有的-hook)）。
 
 `make release` 改檔之前會先檢查，任何一項不過就停、什麼都不改（`scripts/lib/release.sh`）：
 版號是 `X.Y.Z` 且不帶前導零、比目前的 `APP_VERSION` 大（逐段比數字）、CHANGELOG 還沒有這個版號、
@@ -321,21 +309,17 @@ gh workflow run deploy.yml --ref main -f tag=v0.1.0 -f target="production stagin
 
 - **有**：後端寫到 stdout 的請求紀錄（方法、路徑、狀態碼、耗時，**不含 query string**），以及
   web、api、postgres 的 Docker healthcheck。
-- **healthcheck 只管啟動**：它決定啟動順序，也是 `make start` 接回流量前的閘門。執行期間變成 unhealthy
-  **不會重啟容器**（單機 compose 沒有這個機制），只會顯示在 `docker ps`。所以它在啟動期間每秒檢查、
-  之後每 30 秒一次；探測用 bash 而不是 python／node，因為 Docker 每次探測都要在容器裡起一個行程，
-  起直譯器的成本會變成週期性的 CPU 尖峰（`tests/test_compose_healthchecks.py` 擋）。
-  執行期的可用性要從外部確認，例如從另一台機器定期打 `https://<網域>/healthz`。
+- **healthcheck 只管啟動**：決定啟動順序、是接回流量前的閘門；執行期 unhealthy **不會重啟容器**（單機 compose 沒有
+  這機制），只顯示在 `docker ps`。啟動期每秒、之後每 30 秒探測一次，用 bash 不用 python／node（每次探測都起一個行程，
+  直譯器會造成週期性 CPU 尖峰，`tests/test_compose_healthchecks.py` 擋）。執行期可用性要從外部定期打 `https://<網域>/healthz`。
 - **有** request id：每行紀錄開頭的 `[xxxxxxxx]` 由 nginx 產生，經 Next 傳到後端並回寫到回應標頭，
   同一次操作在三個服務的 log 裡是同一個 id。
 - **看 log** 用 `make services logs [服務]`。正式環境每個容器只留 10MB × 5 份（prod overlay），
   **重建容器時舊的 log 會一起消失**，要長期保存就自己轉送到別處。
-- **沒有**：結構化 log、錯誤追蹤（Sentry 之類）、指標與告警。模板刻意不內建：做法依部署平台而定，
-  而且錯誤內容可能帶著使用者資料，送不送到第三方要由專案決定。所以出錯時不會有人收到通知，
-  要等使用者回報再上主機查（[ADR 0007](decisions/0007-no-built-in-error-tracking.md)）。
-- **最大的盲點是瀏覽器端的錯誤**：前端 JavaScript 在使用者的瀏覽器裡出錯時（按了沒反應、畫面白掉），
-  主機上的 log 一行都沒有。需要時先補錯誤追蹤（Sentry，或自架、與它相容的 GlitchTip），
-  DSN 走執行期設定（後端 `app/config.py`、前端 `shared/runtime/`）。
+- **沒有**：結構化 log、錯誤追蹤、指標與告警（[ADR 0007](decisions/0007-no-built-in-error-tracking.md)）。出錯沒人收到通知，
+  要等使用者回報再上主機查。
+- **最大的盲點是瀏覽器端的錯誤**（按了沒反應、畫面白掉），主機 log 一行都沒有。需要時先補錯誤追蹤（Sentry 或相容的
+  GlitchTip），DSN 走執行期設定（後端 `app/config.py`、前端 `shared/runtime/`）。
 
 ## 帳號
 
@@ -403,25 +387,22 @@ compose 裡的 nginx **一定在主機的 reverse proxy 後面**：HTTPS、網�
 - 沒送 `X-Forwarded-Proto` → cookie 不帶 `Secure`（`shared/session/cookie-options.ts`）。
 - `client_max_body_size` 沒設 → nginx 預設 1m，超過的上傳在主機就被擋下。
 
-**容器 nginx 信任上一層的前提是外部連不到它**。compose 把 port 綁在 `127.0.0.1`，只有主機上的程式連得到；
-改回 `0.0.0.0` 的話，任何人都能直接連進來、自己帶 `X-Real-IP` 冒充別人的 IP。Docker 直接改 iptables，
-**主機的 ufw 擋不住它開的 port**，所以不能靠防火牆補。`apps/api/tests/test_nginx_trusted_proxy.py` 守住這幾件事。
-開發機的 `make start lan` 會改綁 `0.0.0.0`（寫在 dev overlay），prod overlay 不碰 port，`MODE=production` 時也會拒絕。
+**容器 nginx 信任上一層的前提是外部連不到它**：port 綁 `127.0.0.1`。改成 `0.0.0.0` 的話任何人都能直連、自帶 `X-Real-IP`
+冒充別人；Docker 直接改 iptables，**ufw 擋不住**（`apps/api/tests/test_nginx_trusted_proxy.py` 守）。開發機的
+`make start lan` 改綁 `0.0.0.0` 只在 dev overlay，`MODE=production` 時拒絕。
 
 LB 在**另一台機器**時，它連不到 `127.0.0.1`：要改 compose 的綁定位址，並且用防火牆或安全群組確保只有
 LB 連得到，再把 `infra/nginx/snippets/trusted-proxy.conf` 的 `set_real_ip_from` 縮到 LB 的網段。
 
 ### 還沒有網域時：用 SSH tunnel 檢查
 
-部署後想確認系統正常，但子網域還沒決定時，**不要為了測試開放 port 或在主機 nginx 開一個用 IP 連的站**。
-用 SSH tunnel 把主機上的 port 接到自己的電腦，主機什麼都不用改：
+子網域還沒決定時，**不要為了測試開 port 或在主機 nginx 開用 IP 連的站**，用 SSH tunnel 接到自己的電腦，主機不用改：
 
 ```bash
 ssh -N -L 8080:127.0.0.1:<SYSTEM_PORT> <使用者>@<主機 IP>
 ```
 
-連線保持開著，瀏覽器開 `http://localhost:8080`，關掉 SSH（`Ctrl+C`）就結束。本機的 `8080` 換成任何沒在用的 port 都可以，
-避開本機開發的 `SYSTEM_PORT` 就好。
+保持連線，開 `http://localhost:8080`，`Ctrl+C` 結束。`8080` 可換成任何沒在用的 port（避開本機開發的 `SYSTEM_PORT`）。
 
 - 流量經過 SSH 加密，對外什麼都沒有開放。
 - 沒有經過主機的 nginx，所以沒有 `X-Forwarded-Proto`：cookie 不帶 `Secure`，用 HTTP 也能正常登入。
@@ -492,12 +473,10 @@ make uploads restore backups/x.tar   # 直接指定檔案
 
 沒有只備份一邊的指令：單邊的備份配不成一組，還原時容易選錯。
 
-**備份期間對外服務會暫停**：先停 nginx（唯一的對外入口，用 `stop` 不是 `down`），備份完、或備份
-失敗時都會重新啟動。沒有新的寫入，資料庫與上傳檔案才是同一個時間點；api 與 web 不停，因為上傳
-檔案是從 api 容器裡打包的。
+**備份期間對外服務暫停**：先 `stop`（不是 `down`）nginx 這個唯一入口，完成或失敗都會重啟，資料庫與上傳檔案才是同一時間點；
+api、web 不停（上傳檔案從 api 容器打包）。
 
-**還原前會先完整備份一次**（等於自動跑一次 `make backup`），選錯檔案時還退得回來；這次備份失敗
-就不還原。整段在 nginx 停著的時候做，還原到一半時不會有請求讀寫到新舊混雜的資料。
+**還原前先完整備份一次**（選錯檔案還退得回來，這次備份失敗就不還原），整段在 nginx 停著時做，不會讀寫到新舊混雜的資料。
 
 **資料庫**用 `pg_dump`，清單只列出與這個目錄版本一致的備份，新到舊，例如 `1) v0.0.2 2026-10-17 08:35:53`。
 **還原只接受目前版本的備份**：別版的資料表結構可能跟目前的程式對不上，要還原別版的備份就先部署回那一版。
