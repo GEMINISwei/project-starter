@@ -16,21 +16,11 @@ import re
 import sys
 from pathlib import Path
 
-from test_lock import (
-    APPROVAL_NAME,
-    APPROVE_COMMAND,
-    approved_paths,
-    implementation_started,
-    is_test_file,
-    relative,
-    repo_root,
-)
+from test_lock import APPROVAL_NAME, is_test_file, pending_test_edits, relative, repo_root, verdict
 
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 # Codex 的 apply_patch 把整段 patch 放在 command 裡, 檔名在這幾種標頭行。
 PATCH_FILE = re.compile(r"^\*\*\* (?:Add File|Update File|Delete File|Move to): (.+)$", re.M)
-RULE = "實作已經開始，改測試檔要先經過使用者同意（docs/testing.md〈改程式不改測試〉）。"
-EXPLAIN = "先向使用者說明：這個測試驗證的條件、沒過的原因，以及為什麼是測試而不是實作要改。"
 
 
 def edited_paths(payload: dict[str, object]) -> list[str]:
@@ -69,21 +59,9 @@ def main() -> int:
     if any(APPROVAL_NAME in path for path in files):
         respond("deny", "放行檔只能由使用者確認過的申請指令寫入，不要直接修改。")
         return 0
-    tests = [path for path in files if is_test_file(path)]
-    if not tests or not implementation_started(root):
-        return 0
-    pending = sorted(set(tests) - approved_paths(root))
-    if not pending:
-        return 0
-    if agent == "codex":
-        command = " ".join([*APPROVE_COMMAND, *pending])
-        respond(
-            "deny",
-            f"{RULE}{EXPLAIN}說明完執行 `{command}` 申請，它會請使用者確認；"
-            "確認後再改一次。不要換其他寫法繞過。",
-        )
-    else:
-        respond("ask", f"{RULE}{EXPLAIN}")
+    pending = pending_test_edits(root, [path for path in files if is_test_file(path)])
+    if pending:
+        respond(*verdict(agent, pending))
     return 0
 
 

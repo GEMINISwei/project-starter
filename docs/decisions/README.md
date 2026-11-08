@@ -36,3 +36,4 @@
 | [0011](0011-e2e-required-in-ci.md) | Playwright E2E 是 CI 與部署的必要檢查 | 採用 |
 | [0012](0012-e2e-dev-loop-locally.md) | 開發中的 E2E 用常駐的 dev 環境，正式環境 image 由 CI 驗證 | 採用 |
 | [0013](0013-e2e-failures-read-by-main-agent.md) | E2E 失敗由主 agent 自己讀，不交給子代理 | 採用 |
+| [0014](0014-no-environment-reviewer-for-deploys.md) | 部署不設 environment reviewer，由發布前的確認把關 | 採用 |

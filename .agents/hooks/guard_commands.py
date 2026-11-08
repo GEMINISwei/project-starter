@@ -4,8 +4,8 @@
 用法 (由 .claude/settings.json 與 .codex/hooks.json 呼叫): guard_commands.py <claude|codex>
 
 兩家的協定相同: stdin 收一個 JSON, 要擋就在 stdout 印 `hookSpecificOutput.permissionDecision`
-為 deny 的 JSON, 放行就什麼都不印。參數給兩家行為不同的地方: 發布 release 時 Claude 回 ask,
-Codex 不支援 ask, 改由 .codex/rules/ 要求確認。
+為 deny 的 JSON, 放行就什麼都不印。參數給兩家行為不同的地方: 發布 release 與用 shell 改測試檔時
+Claude 回 ask, Codex 不支援 ask, 改由 .codex/rules/ 或申請指令要求確認。
 
 只拆解指令的結構 (`&&`、`;`、`|`、子 shell、`bash -c`), 不做完整的 shell 解析: 這是讓 agent
 提早停下來的提醒, 不是安全機制, 真正擋得住的是 git 與 CI。只用標準函式庫, 不必先裝相依。
@@ -19,8 +19,17 @@ import shlex
 import subprocess
 import sys
 from collections.abc import Iterator
+from pathlib import Path
 
-from test_lock import APPROVAL_NAME, APPROVE_COMMAND
+from test_lock import (
+    APPROVAL_NAME,
+    APPROVE_COMMAND,
+    is_test_file,
+    pending_test_edits,
+    relative,
+    repo_root,
+    verdict,
+)
 
 SEPARATORS = {"&&", "||", ";", "|", "&", "(", ")", ";;", "|&"}
 WRAPPERS = {"sudo", "env", "command", "exec", "time", "nohup", "xargs"}
@@ -39,6 +48,44 @@ READ_ONLY = {"cat", "ls", "head", "tail", "less", "stat", "file", "wc", "grep", 
 PUBLISH_COMMAND = ".agents/skills/release/scripts/publish.sh"
 # 會觸發部署或改掉已發布版本的 gh 指令。
 DEPLOYING_RELEASE = {"create", "edit", "delete"}
+# 合併、轉 Ready 與發 release 的 GraphQL mutation: 換成 API 呼叫一樣不能由 agent 做。
+FORBIDDEN_MUTATIONS = (
+    "mergePullRequest",
+    "markPullRequestReadyForReview",
+    "enablePullRequestAutoMerge",
+    "createRelease",
+    "updateRelease",
+    "deleteRelease",
+)
+# `gh api` 後面接一個值的選項; 帶了欄位而沒指定方法時, gh 會改用 POST。
+GH_API_OPTIONS_WITH_VALUE = {
+    "-X",
+    "--method",
+    "-f",
+    "--raw-field",
+    "-F",
+    "--field",
+    "-H",
+    "--header",
+    "--input",
+    "-q",
+    "--jq",
+    "-t",
+    "--template",
+    "--hostname",
+    "--cache",
+    "-p",
+    "--preview",
+}
+GH_API_FIELDS = {"-f", "--raw-field", "-F", "--field", "--input"}
+# 會合併 PR、動到 release、觸發或重跑 workflow 的 REST 端點。
+DEPLOYING_ENDPOINT = re.compile(
+    r"/pulls/\d+/merge$|/releases(/|$)|/dispatches$|/actions/runs/\d+/rerun"
+)
+# deploy.yml 的 `name:`; 重跑它的 run 等於重新部署。
+DEPLOY_WORKFLOW = "Deploy"
+# 輸出重新導向; 目標是下一個 token。
+REDIRECTS = {">", ">>", ">|", "&>", "&>>"}
 # `<<EOF`、`<<-'EOF'`、`<< "EOF"`; `<<<` 是 here-string, 不算。
 HEREDOC = re.compile(r"(?<!<)<<-?(?!<)\s*(['\"]?)(\w+)\1")
 
@@ -199,6 +246,132 @@ def changes_hooks_path(argv: list[str], subcommand: str, args: list[str]) -> boo
     return writes and values != [".githooks"]
 
 
+def gh_api_request(argv: list[str]) -> tuple[str, str, list[str]]:
+    """(方法, 端點, 其餘參數)。沒指定方法時照 gh 的規則: 有欄位就是 POST。"""
+    method = ""
+    endpoint = ""
+    has_fields = False
+    index = 2
+    while index < len(argv):
+        arg = argv[index]
+        name = arg.split("=", 1)[0]
+        if name in GH_API_OPTIONS_WITH_VALUE:
+            value = arg.split("=", 1)[1] if "=" in arg else (argv[index + 1 : index + 2] or [""])[0]
+            if name in {"-X", "--method"}:
+                method = value.upper()
+            has_fields = has_fields or name in GH_API_FIELDS
+            index += 1 if "=" in arg else 2
+            continue
+        if not arg.startswith("-") and not endpoint:
+            endpoint = arg
+        index += 1
+    return method or ("POST" if has_fields else "GET"), endpoint, argv
+
+
+def gh_violation(argv: list[str], cwd: str) -> str | None:
+    if argv[1:3] == ["pr", "merge"]:
+        return "PR 由使用者合併，agent 不自己合併。請回報 CI 結果，等使用者處理。"
+    if argv[1:3] == ["pr", "ready"] and "--undo" not in argv:
+        return "Ready for review 由使用者決定，agent 不自己轉。請回報 PR 的狀態，等使用者處理。"
+    if argv[1:2] == ["api"]:
+        method, endpoint, args = gh_api_request(argv)
+        if endpoint == "graphql":
+            if any(name in arg for arg in args for name in FORBIDDEN_MUTATIONS):
+                return (
+                    "合併、轉 Ready 與發 release 由使用者做，換成 GraphQL 也一樣。"
+                    "請回報狀態，等使用者處理。"
+                )
+        elif method != "GET" and DEPLOYING_ENDPOINT.search(endpoint.split("?")[0]):
+            return (
+                "這個 API 會合併 PR、動到 release 或觸發／重跑 workflow，可能直接部署，"
+                "agent 不能用 API 繞過。合併由使用者做；發版走 release skill 的 publish.sh；"
+                "要重跑 CI 用 `gh run rerun <id>`。"
+            )
+    if argv[1:3] == ["run", "rerun"]:
+        return rerun_violation(argv, cwd)
+    return None
+
+
+def rerun_violation(argv: list[str], cwd: str) -> str | None:
+    """重跑 Deploy 的 run 等於重新部署; 指令本身看不出 workflow, 要問 gh。"""
+    run_ids = [arg for arg in argv[3:] if not arg.startswith("-")]
+    workflow = None
+    if run_ids:
+        try:
+            result = subprocess.run(  # noqa: S603
+                ["gh", "run", "view", run_ids[0], "--json", "workflowName"],  # noqa: S607
+                cwd=cwd,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=15,
+            )
+            if result.returncode == 0:
+                workflow = json.loads(result.stdout).get("workflowName")
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            workflow = None
+    if workflow is None:
+        return (
+            "無法確認這個 run 屬於哪個 workflow（要指定 run id，而且 gh 要查得到）。"
+            "重跑 Deploy 等於重新部署，所以先擋下；請使用者確認後由使用者自己重跑。"
+        )
+    if workflow == DEPLOY_WORKFLOW:
+        return "重跑 Deploy 等於重新部署，由使用者自己觸發（docs/operations.md〈自動部署〉）。"
+    return None
+
+
+def written_paths(argv: list[str]) -> list[str]:
+    """這個指令會寫入、刪除或還原的檔案路徑。只認明確指名檔案的常見寫法。"""
+    paths = [argv[index + 1] for index, arg in enumerate(argv[:-1]) if arg in REDIRECTS]
+    program = argv[0].rsplit("/", 1)[-1]
+    args = [arg for arg in argv[1:] if arg not in REDIRECTS]
+    positional = [arg for arg in args if not arg.startswith("-")]
+    if program == "sed" and any(arg.startswith(("-i", "--in-place")) for arg in args):
+        paths += positional
+    elif program == "perl" and any(
+        arg.startswith("-") and not arg.startswith("--") and "i" in arg[1:] for arg in args
+    ):
+        paths += positional
+    elif program in {"tee", "rm", "unlink", "truncate", "mv"}:
+        paths += positional
+    elif program == "cp" and positional:
+        paths.append(positional[-1])
+    elif program == "git":
+        subcommand, rest = git_subcommand(argv)
+        rest_positional = [arg for arg in rest if not arg.startswith("-")]
+        if subcommand in {"rm", "mv", "restore"}:
+            paths += rest_positional
+        elif subcommand == "checkout" and "--" in rest:
+            paths += rest[rest.index("--") + 1 :]
+    return paths
+
+
+def test_writes(commands: list[tuple[list[str], str]], cwd: str) -> list[str]:
+    """這串指令裡寫到的測試檔 (相對 repo 根目錄)。"""
+    root = repo_root(Path(cwd))
+    if root is None:
+        return []
+    files = {
+        relative(root, Path(where), path)
+        for argv, where in commands
+        for path in written_paths(argv)
+    }
+    tests = sorted(path for path in files if is_test_file(path))
+    return pending_test_edits(root, tests)
+
+
+def with_cwd(commands: list[list[str]], cwd: str) -> list[tuple[list[str], str]]:
+    """跟著 `cd` 推算每個指令的工作目錄, 相對路徑才對得到 repo 裡的檔案。"""
+    result = []
+    where = Path(cwd)
+    for argv in commands:
+        # 目錄不存在時維持原處: 之後在不存在的目錄跑 git 會讓整個 hook 出錯, 等於放行。
+        if argv[0] == "cd" and len(argv) > 1 and (where / argv[1]).is_dir():
+            where = where / argv[1]
+        result.append((argv, str(where)))
+    return result
+
+
 def git_violation(argv: list[str], cwd: str) -> str | None:
     subcommand, args = git_subcommand(argv)
     if subcommand == "push" and pushes_to_main(args, cwd):
@@ -231,8 +404,8 @@ def violation(argv: list[str], cwd: str) -> str | None:
     program = argv[0].rsplit("/", 1)[-1]
     if program == "git":
         return git_violation(argv, cwd)
-    if program == "gh" and argv[1:3] == ["pr", "merge"]:
-        return "PR 由使用者合併，agent 不自己合併。請回報 CI 結果，等使用者處理。"
+    if program == "gh":
+        return gh_violation(argv, cwd)
     if program == "npm" and {"--force", "--legacy-peer-deps"} & set(argv):
         return (
             "不用 --force／--legacy-peer-deps：遇到 peer 阻擋就停在最新的相容版，"
@@ -272,11 +445,16 @@ def main() -> int:
     command = payload.get("tool_input", {}).get("command", "")
     cwd = payload.get("cwd") or "."
     commands = list(simple_commands(command if isinstance(command, str) else shlex.join(command)))
-    for argv in commands:
-        reason = violation(argv, cwd)
+    located = with_cwd(commands, cwd)
+    for argv, where in located:
+        reason = violation(argv, where)
         if reason:
             decide("deny", reason)
             return 0
+    pending = test_writes(located, cwd)
+    if pending:
+        decide(*verdict(agent, pending))
+        return 0
     # 發布 release 一定要使用者確認。Claude 的 permissions.ask 也會問, 這裡再回 ask 是因為
     # 權限模式 (例如自動放行) 可能略過設定檔; Codex 不支援 ask, 由 .codex/rules/ 的 prompt 負責。
     if agent == "claude" and any(argv[0] == PUBLISH_COMMAND for argv in commands):

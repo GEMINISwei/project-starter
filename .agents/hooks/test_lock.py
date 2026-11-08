@@ -13,6 +13,8 @@ from pathlib import Path
 # 放在 .git/ 裡: 不會被 commit, 換一台機器或重新 clone 就沒了, 本來就只對這一次有效。
 APPROVAL_NAME = "agent-approved-test-edits"
 APPROVE_COMMAND = ["python3", ".agents/hooks/approve_test_edit.py"]
+RULE = "實作已經開始，改測試檔要先經過使用者同意（docs/testing.md〈改程式不改測試〉）。"
+EXPLAIN = "先向使用者說明：這個測試驗證的條件、沒過的原因，以及為什麼是測試而不是實作要改。"
 
 
 def git(cwd: Path, *args: str) -> str | None:
@@ -74,3 +76,22 @@ def approved_paths(root: Path) -> set[str]:
     if approval.get("head") != git(root, "rev-parse", "HEAD"):
         return set()
     return set(approval.get("paths", []))
+
+
+def pending_test_edits(root: Path, tests: list[str]) -> list[str]:
+    """這次要改的測試檔中, 還需要使用者同意的那些 (實作還沒開始就一個都沒有)。"""
+    if not tests or not implementation_started(root):
+        return []
+    return sorted(set(tests) - approved_paths(root))
+
+
+def verdict(agent: str, pending: list[str]) -> tuple[str, str]:
+    """(decision, reason)。Claude 跳確認; Codex 不支援 ask, 擋下並請 agent 用申請指令。"""
+    if agent == "codex":
+        command = " ".join([*APPROVE_COMMAND, *pending])
+        return (
+            "deny",
+            f"{RULE}{EXPLAIN}說明完執行 `{command}` 申請，它會請使用者確認；"
+            "確認後再改一次。不要換其他寫法繞過。",
+        )
+    return "ask", f"{RULE}{EXPLAIN}"
