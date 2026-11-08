@@ -5,18 +5,17 @@
 
 ## 開發環境
 
-需要 Docker Desktop、`make`、`openssl`、`uv` 與 Node.js（版本見 [`apps/web/.nvmrc`](../apps/web/.nvmrc)；
-升 Node 時 `apps/web/Dockerfile` 的 `ARG NODE_VERSION` 要手動跟上），以及 PATH 上的 `python3` 3.9 以上：
-AI agent 的 hook 直接用它執行，不經過 api 的虛擬環境（見 [`agent-hooks.md`](extending/agent-hooks.md#啟用與停用)）。
+需要 Docker Desktop、`make`、`openssl`、`uv`、Node.js（版本見 [`apps/web/.nvmrc`](../apps/web/.nvmrc)；升 Node 時
+`apps/web/Dockerfile` 的 `ARG NODE_VERSION` 要手動跟上），以及 PATH 上的 `python3` 3.9 以上（agent 的 hook 直接用它，
+見 [`agent-hooks.md`](extending/agent-hooks.md#啟用與停用)）。
 
 ```bash
 make init dev   # 產生 .env（MODE=development，金鑰自動產生）、安裝相依、git init、啟用 .githooks/
 make start      # 啟動 postgres → migrate → api → web → nginx（首次建置約 2–5 分鐘）
 ```
 
-環境起來之後用 `make db superuser` 建立第一個帳號（網頁上沒有註冊入口），再打開
-`http://localhost:{SYSTEM_PORT}`（預設 3000）登入。`migrate` 停在 `Exited (0)`、`nginx` 沒有 `(healthy)`
-都是正常的。
+起來後用 `make db superuser` 建第一個帳號（網頁沒有註冊入口），再開 `http://localhost:{SYSTEM_PORT}`（預設 3000）登入。
+`migrate` 停在 `Exited (0)`、`nginx` 沒有 `(healthy)` 都是正常的。
 
 ### 用手機測試
 
@@ -24,12 +23,11 @@ make start      # 啟動 postgres → migrate → api → web → nginx（首次
 make start lan  # 同 make start，但對區網開放，結束時印出手機要開的網址
 ```
 
-平常 nginx 只綁 `127.0.0.1`，手機連不進來。`make start lan` 只在這次啟動改綁 `0.0.0.0`，
-下次一般的 `make start` 就關回去，所以**用完跑一次 `make start`**；`.env` 裡沒有對應的設定，刻意不讓它常駐。
-開著的時候同一個網路上的人都連得到，在公共 Wi-Fi 上不要用。`MODE=production` 時會被拒絕。
+nginx 平常只綁 `127.0.0.1`。`make start lan` 只在這次改綁 `0.0.0.0`，下次 `make start` 就關回去，**用完跑一次
+`make start`**（`.env` 沒有對應設定，刻意不常駐）。開著時同網路的人都連得到，公共 Wi-Fi 不要用；`MODE=production` 時拒絕。
 
-只能用 `http`：瀏覽器只對 `localhost` 放寬安全來源的限制，相機、定位、Service Worker 這類需要 HTTPS 的功能
-在 `http://<區網 IP>` 上不能用，要測的話改用會給 https 網址的 tunnel（cloudflared、Tailscale Funnel）。
+只能用 `http`：相機、定位、Service Worker 這類要 HTTPS 的功能在 `http://<區網 IP>` 不能用，改用給 https 網址的
+tunnel（cloudflared、Tailscale Funnel）。
 
 ### 環境變數的同步點
 
@@ -70,16 +68,14 @@ make e2e up|test <檔案...>|grep "名稱"|down   # 開發中反覆跑 E2E 的�
 make gen-types                               # 改過後端 schema／權限／語系後必跑
 ```
 
-**`MODE` 決定這台主機是哪種環境。** `make init dev|prod` 寫進 `.env`，只在第一次產生時決定；
-要換就刪掉 `.env` 重跑，或手動改那一行。`make start` 依它疊 dev 或 prod 的 overlay，缺少或不是
-`production`／`development` 時，碰容器的指令一律停下來。開發機要驗證 production build，就暫時改成
-`MODE=production`（volume 名稱帶著 `MODE`，開發資料不會被動到），驗完改回來。
-`MODE=production` 時擋下的指令見 [`operations.md`](operations.md#生產部署)。
+**`MODE` 決定這台主機是哪種環境**：`make init dev|prod` 第一次產生 `.env` 時寫入，要換就刪 `.env` 重跑或手改。
+`make start` 依它疊 dev 或 prod 的 overlay；缺少或值不對時，碰容器的指令一律停下。開發機要驗 production build 就暫時改成
+`MODE=production`（volume 名稱帶 `MODE`，開發資料不受影響），驗完改回。production 擋下的指令見
+[`operations.md`](operations.md#生產部署)。
 
-實作在 `scripts/<指令>.sh`，可以直接執行（`./scripts/db.sh psql`）。新增子指令＝改那支腳本的
-`case`，並在檔頭補一行 `#   make …`（`make help` 讀的就是它）；新增指令＝加一支腳本並把名稱
-加進 Makefile 的 `TARGETS`。部署與腳本自己用的指令寫成 `#   [內部] make …`，不列在 help，
-只寫在 [`operations.md`](operations.md#內部指令)。
+實作在 `scripts/<指令>.sh`，可直接執行（`./scripts/db.sh psql`）。新增子指令：改那支腳本的 `case`，檔頭補一行
+`#   make …`（`make help` 讀它）；新增指令：加一支腳本並把名稱加進 Makefile 的 `TARGETS`。部署與腳本自用的寫成
+`#   [內部] make …`，不列在 help，只寫在 [`operations.md`](operations.md#內部指令)。
 
 ## 程式碼風格
 
@@ -101,17 +97,15 @@ make gen-types                               # 改過後端 schema／權限／�
 
 ### 註解與文件
 
-註解寫**為什麼**，不寫做了什麼 —— 尤其是「為什麼不用另一種看起來更自然的做法」。一個取捨一段，
-講完就停；演進過程寫進 commit message。註解與文件用繁體中文，技術名詞保持原文。
-程式碼裡的註解與 docstring 用**半形標點**（`, : ; ( ) ? /`，逗號、冒號後面空一格）：全形的
-`，：（）` 會被編輯器標成「可能與 ASCII 字元混淆」。Markdown 文件與使用者看得到的字串（i18n、
-終端訊息、測試名稱）維持全形。
+註解寫**為什麼**，不寫做了什麼，尤其是「為什麼不用看起來更自然的做法」。一個取捨一段；演進過程寫進 commit message。
+註解與文件用繁體中文，技術名詞保持原文。程式碼的註解與 docstring 用**半形標點**（`, : ; ( ) ? /`，逗號冒號後空一格），
+全形的會被編輯器標成易混淆字元；Markdown 與使用者看得到的字串（i18n、終端訊息、測試名稱）維持全形。
 文件**一個主題一個 owner**，其他地方只放連結；範例指向 repo 內的真實檔案。
 
 ### 抑制註解
 
-關掉某一行的檢查時，**同一行寫上理由**：檢查本身是對的，這一行為什麼例外，下一個人（或 agent）才判斷得了能不能拿掉。
-它也是讓檢查變綠最快的捷徑，所以 PR 新增的抑制註解由 CI 檢查（`.github/scripts/check-pr-changes.py`）：
+關掉某一行的檢查時，**同一行寫理由**，下一個人（或 agent）才判斷得了能不能拿掉。它也是讓檢查變綠最快的捷徑，
+所以 PR 新增的抑制註解由 CI 檢查（`.github/scripts/check-pr-changes.py`）：
 
 | 種類 | 理由寫在 | 例 |
 |---|---|---|
