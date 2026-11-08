@@ -27,7 +27,7 @@ diff 裡有改動但對不上任何一條驗收條件的，列出來：要嘛是
 
 ## 3. 繞過檢查的寫法
 
-這些不違反任何規則，`make check` 會放行，所以要自己找出來：
+`make check` 會放行這些，CI 的 `pr` 會擋（[說明](../../../docs/workflow.md#開發流程)），送出前先自己對過：
 
 - 新增的抑制註解：`noqa`、`type: ignore`、`eslint-disable`、`ts-expect-error`、測試的 skip。
   每一個都要在同一行寫理由，沒有理由的改掉
