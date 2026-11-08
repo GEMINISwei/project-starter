@@ -1,11 +1,11 @@
 # 背景工作（尚未內建）
 
 寄信、匯出報表、處理上傳的圖片、呼叫外部服務、每天固定時間跑的工作，都不該卡在請求裡。模板還沒有
-提供 worker，但方向已經定了（[ADR 0006](../decisions/0006-postgres-job-queue.md)）。這份是**設計規格**：
+提供 worker，但方向已經定了（[ADR 0005](../decisions/0005-postgres-job-queue.md)）。這份是**設計規格**：
 繼承的專案照這份實作，各專案的 worker 才會有一致的行為，每一條「規則」都要有對應的測試。
 
 這裡的 worker 是**另一個執行背景工作的容器**，跟 uvicorn 的 workers（多個 api 行程）無關。
-後者仍然不能加，理由見 [ADR 0004](../decisions/0004-downtime-deploys.md) 與 [ADR 0005](../decisions/0005-in-process-rate-limit.md)。
+後者仍然不能加，理由見 [ADR 0004](../decisions/0004-single-api-process.md)。
 
 ## 什麼時候該交給 worker
 
@@ -32,7 +32,7 @@
 
 - **另開一個 worker 容器**，跟 `migrate` 一樣用 api 的 image、換一個 command，程式與 model 共用。
 - **佇列是 PostgreSQL 裡的一張表，自己寫**，不導入 Redis，也不用 Celery、Procrastinate 這類套件。
-  理由見 ADR 0006：任務要能跟業務資料寫在同一個交易裡，而那些套件用的連線與 migration 方式跟
+  理由見 ADR 0005：任務要能跟業務資料寫在同一個交易裡，而那些套件用的連線與 migration 方式跟
   專案（SQLAlchemy + asyncpg、Alembic）接不起來。
 - **任務由模組在 `manifest.py` 宣告**，worker 從 `ENABLED_MODULES` 收集（比照 router），
   模組整包刪掉時任務才會跟著消失。

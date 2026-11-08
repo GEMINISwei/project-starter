@@ -8,7 +8,7 @@
 #   make e2e down            拆掉這套環境, 連資料一起刪
 #
 # 跟 `make check e2e` 分工: 那邊每次用正式環境的 image 起一套新的、跑整套, 是 CI 的必要檢查;
-# 這邊常駐、用 dev mode, 給「改一點、跑相關的那幾個」的迴圈用 (理由見 docs/decisions/0012)。
+# 這邊常駐、用 dev mode, 給「改一點、跑相關的那幾個」的迴圈用 (理由見 docs/decisions/0009)。
 #
 # 每個 checkout 一套: compose 專案名稱取自 checkout 的路徑, port 與帳密記在 git 目錄裡
 # (不會被 commit; worktree 各有自己的 git 目錄, 所以各有一套)。原始碼是 bind mount 的,
@@ -102,7 +102,7 @@ cmd_up() {
 }
 
 # 每次從同一個起點開始: 清空資料重建、超管重建, 再重啟 api —— 登入限流的計數放在行程記憶體
-# (docs/decisions/0005), 不重啟的話, 連跑幾次就會撞到同一個 IP 的上限。
+# (docs/decisions/0004), 不重啟的話, 連跑幾次就會撞到同一個 IP 的上限。
 # 用 && 串起來: 呼叫端在 `if ! output="$(…)"` 裡, 那裡的 set -e 不生效, 中途失敗不會停下。
 reset_stack() {
     db_cli reset \

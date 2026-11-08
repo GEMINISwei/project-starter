@@ -146,7 +146,7 @@ agent 要結束這一輪時，`require_check.py` 檢查分支上改過的程式�
 - `gh run rerun`：先用 `gh run view` 查是哪個 workflow，Deploy 或查不到時擋下（重跑 Deploy 等於重新部署）
 
 GitHub 那一側刻意不設 environment reviewer，所以這裡是部署前唯一的確認
-（[ADR 0014](../decisions/0014-no-environment-reviewer-for-deploys.md)）。用 `curl` 帶 token 直接打 API 擋不住。
+（[ADR 0010](../decisions/0010-no-environment-reviewer-for-deploys.md)）。用 `curl` 帶 token 直接打 API 擋不住。
 
 ## 新增一個 hook
 
