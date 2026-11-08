@@ -16,7 +16,17 @@ import re
 import sys
 from pathlib import Path
 
-from test_lock import APPROVAL_NAME, is_test_file, pending_test_edits, relative, repo_root, verdict
+import branch_lock
+import protected_files
+import test_lock
+from test_lock import is_test_file, pending_test_edits, relative, repo_root, verdict
+
+# agent 不能直接寫的放行檔: 只能由使用者確認過的申請指令寫入。
+APPROVAL_NAMES = (
+    test_lock.APPROVAL_NAME,
+    branch_lock.APPROVAL_NAME,
+    protected_files.APPROVAL_NAME,
+)
 
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 # Codex 的 apply_patch 把整段 patch 放在 command 裡, 檔名在這幾種標頭行。
@@ -56,8 +66,12 @@ def main() -> int:
     if root is None or not paths:
         return 0
     files = [relative(root, cwd, path) for path in paths]
-    if any(APPROVAL_NAME in path for path in files):
+    if any(name in path for path in files for name in APPROVAL_NAMES):
         respond("deny", "放行檔只能由使用者確認過的申請指令寫入，不要直接修改。")
+        return 0
+    protected = protected_files.pending_protected_edits(root, files)
+    if protected:
+        respond(*protected_files.verdict(agent, protected))
         return 0
     pending = pending_test_edits(root, [path for path in files if is_test_file(path)])
     if pending:

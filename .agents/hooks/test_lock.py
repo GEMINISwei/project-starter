@@ -63,14 +63,14 @@ def implementation_started(root: Path) -> bool:
     )
 
 
-def approval_file(root: Path) -> Path:
-    return (root / (git(root, "rev-parse", "--git-path", APPROVAL_NAME) or "")).resolve()
+def approval_file(root: Path, name: str = APPROVAL_NAME) -> Path:
+    return (root / (git(root, "rev-parse", "--git-path", name) or "")).resolve()
 
 
-def approved_paths(root: Path) -> set[str]:
+def approved_paths(root: Path, name: str = APPROVAL_NAME) -> set[str]:
     """只在寫下放行時的 HEAD 上有效: 一有新的 commit, 這次的同意就用完了。"""
     try:
-        approval = json.loads(approval_file(root).read_text(encoding="utf-8"))
+        approval = json.loads(approval_file(root, name).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return set()
     if approval.get("head") != git(root, "rev-parse", "HEAD"):
