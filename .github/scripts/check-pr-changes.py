@@ -137,10 +137,30 @@ def missing_reason(line: str) -> str | None:
     return None
 
 
+def current_body() -> str:
+    """PR 目前的描述。事件帶的 PR_BODY 是觸發當下的內容: push 與改描述幾乎同時發生時,
+    pr.yml 的 cancel-in-progress 可能留下帶著舊描述的那一次, 所以先用 gh 讀現在的。"""
+    number = os.environ.get("PR_NUMBER", "")
+    if number:
+        try:
+            result = subprocess.run(  # noqa: S603
+                ["gh", "pr", "view", number, "--json", "body", "--jq", ".body"],  # noqa: S607
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=30,
+            )
+            if result.returncode == 0:
+                return result.stdout
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return os.environ.get("PR_BODY", "")
+
+
 def main() -> int:
     base = os.environ["BASE_SHA"]
     head = os.environ["HEAD_SHA"]
-    body = os.environ.get("PR_BODY", "")
+    body = current_body()
     checks = sections(body).get("檢查", "")
     errors = []
 
