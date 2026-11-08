@@ -68,8 +68,8 @@ disable-model-invocation: true
 
 只記使用者同意的反對項目，草稿先給使用者確認才寫入：
 
-- **碰到現有的 ADR**：在那份最後的 `## 後續討論` 追加一筆（格式見 [`decisions/README.md`](../../../docs/decisions/README.md)），
-  前面的段落不動。
+- **碰到現有的 ADR**：照 [`decisions/README.md`](../../../docs/decisions/README.md)〈寫法〉記進那一份：
+  還沒有 `v*` tag 就直接併進「背景」或「後果」，有 tag 之後追加 `## 後續討論`。
 - **沒碰到 ADR、但屬於「刻意不做」的取捨**（之後很可能又被提出）：另寫一份新的 ADR。
 - **只是效益太小**：不記錄，下次可以用排除項擋掉。
 
