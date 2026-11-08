@@ -201,3 +201,58 @@ def test_pr_workflow_checks_changes_with_full_history() -> None:
     assert change_steps, "pr.yml 要執行 .github/scripts/check-pr-changes.py"
     for name in ("BASE_SHA", "HEAD_SHA", "PR_BODY"):
         assert f"{name}:" in change_steps[0], f"執行 check-pr-changes.py 的步驟要帶 {name}"
+
+
+# push 與改描述幾乎同時觸發時, pr.yml 的 cancel-in-progress 可能留下帶著舊描述的那一次。
+# 所以腳本執行當下用 gh 讀 PR 目前的描述, 事件帶的 PR_BODY 只在讀不到時才用。
+def fake_gh(tmp_path: Path, current_body: str | None) -> str:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir(parents=True)
+    (bin_dir / "body.md").write_text(current_body or "", encoding="utf-8")
+    command = f"cat '{bin_dir / 'body.md'}'" if current_body is not None else "exit 1"
+    script = bin_dir / "gh"
+    script.write_text(f"#!/bin/sh\n{command}\n", encoding="utf-8")
+    script.chmod(0o755)
+    return f"{bin_dir}:/usr/bin:/bin"
+
+
+def check_with_gh(repo: Path, event_body: str, path: str) -> subprocess.CompletedProcess[str]:
+    env = {
+        "BASE_SHA": git(repo, "merge-base", "main", "HEAD"),
+        "HEAD_SHA": git(repo, "rev-parse", "HEAD"),
+        "PR_BODY": event_body,
+        "PR_NUMBER": "34",
+        "PATH": path,
+    }
+    return subprocess.run(  # noqa: S603 # 執行受測的腳本
+        ["python3", SCRIPT],  # noqa: S607
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def test_current_pr_body_is_used_over_event_body(repo: Path, tmp_path: Path) -> None:
+    commit(repo, {".github/workflows/ci.yml": "name: CI\n"})
+    stale = body()
+    current = body(checks="- [ ] 動到 `.github/workflows/ci.yml`")
+    assert check_with_gh(repo, stale, fake_gh(tmp_path, current)).returncode == 0
+
+
+def test_event_body_is_used_when_current_body_cannot_be_read(repo: Path, tmp_path: Path) -> None:
+    commit(repo, {".github/workflows/ci.yml": "name: CI\n"})
+    event_body = body(checks="- [ ] 動到 `.github/workflows/ci.yml`")
+    assert check_with_gh(repo, event_body, fake_gh(tmp_path, None)).returncode == 0
+    assert check_with_gh(repo, body(), fake_gh(tmp_path / "x", None)).returncode != 0
+
+
+def test_pr_workflow_passes_pr_number_and_token() -> None:
+    workflow = WORKFLOW.read_text(encoding="utf-8")
+    steps = re.split(r"\n\s*- (?=name:|uses:)", workflow)
+    change_steps = [step for step in steps if "check-pr-changes.py" in step]
+    assert change_steps, "pr.yml 要執行 .github/scripts/check-pr-changes.py"
+    for name in ("PR_NUMBER", "GH_TOKEN"):
+        assert f"{name}:" in change_steps[0], f"執行 check-pr-changes.py 的步驟要帶 {name}"
+    assert re.search(r"pull-requests:\s*read", workflow), "讀 PR 描述要 pull-requests: read 權限"
