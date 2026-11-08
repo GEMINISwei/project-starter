@@ -9,7 +9,7 @@
 兩家在這裡行為不同, 所以才需要參數:
 - Claude 回 ask, 畫面直接跳出確認, 使用者同意就繼續。
 - Codex 的 PreToolUse 不支援 ask, 只能 deny; 理由裡請 agent 說明後執行對應的申請指令
-  (approve_test_edit.py、approve_protected_edit.py), `.codex/rules/` 讓它一定要使用者確認,
+  (approve.py), `.codex/rules/` 讓它一定要使用者確認,
   確認後再改就會放行。
 """
 
@@ -20,17 +20,9 @@ import re
 import sys
 from pathlib import Path
 
-import branch_lock
+import approvals
 import protected_files
-import test_lock
 from test_lock import is_test_file, pending_test_edits, relative, repo_root, verdict
-
-# agent 不能直接寫的放行檔: 只能由使用者確認過的申請指令寫入。
-APPROVAL_NAMES = (
-    test_lock.APPROVAL_NAME,
-    branch_lock.APPROVAL_NAME,
-    protected_files.APPROVAL_NAME,
-)
 
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 # Codex 的 apply_patch 把整段 patch 放在 command 裡, 檔名在這幾種標頭行。
@@ -70,7 +62,7 @@ def main() -> int:
     if root is None or not paths:
         return 0
     files = [relative(root, cwd, path) for path in paths]
-    if any(name in path for path in files for name in APPROVAL_NAMES):
+    if any(approvals.NAME in path for path in files):
         respond("deny", "放行檔只能由使用者確認過的申請指令寫入，不要直接修改。")
         return 0
     protected = protected_files.pending_protected_edits(root, files)

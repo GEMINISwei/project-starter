@@ -1,23 +1,16 @@
-"""防線檔案: hook、agent 設定、CI 與檢查的設定, 改動前要使用者同意。
+"""防線檔案: hook、agent 設定、CI 與檢查的設定, 用改檔工具改之前要使用者同意 (不分實作前後)。
 
-改檔 hook (guard_tests.py) 與指令守衛 (guard_commands.py) 都用它。這些檔案決定了其他規則擋不擋得住:
-刪掉一個 CI 步驟, required check 的名字還在, 照樣顯示綠燈; 在 `.claude/settings.local.json` 設
-`disableAllHooks`, 所有 hook 就安靜地不生效。說明見 docs/extending/agent-hooks.md〈防線檔案〉。
-
-跟測試鎖不同, 不分實作前後。放行的格式與期限沿用測試鎖 (只對列出的檔案、只在目前的 HEAD 有效)。
+刪掉一個 CI 步驟或在 `.claude/settings.local.json` 設 `disableAllHooks`, 都不會有檢查變紅。
+說明見 docs/extending/agent-hooks.md〈防線檔案〉。
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from test_lock import approved_paths
+import approvals
 
-APPROVAL_NAME = "agent-approved-protected-edits"
-APPROVE_COMMAND = ["python3", ".agents/hooks/approve_protected_edit.py"]
-
-# 底下的任何檔案都算。`.claude/` 包含不進版控的 settings.local.json;
-# `.claude/skills` 是指向 `.agents/skills` 的 symlink, 路徑解析後不在這裡。
+# `.claude/` 包含不進版控的 settings.local.json; `.claude/skills` 是 symlink, 解析後不在這裡。
 PROTECTED_DIRS = (
     ".agents/hooks/",
     ".claude/",
@@ -45,19 +38,17 @@ def is_protected(path: str) -> bool:
 
 
 def pending_protected_edits(root: Path, files: list[str]) -> list[str]:
-    """這次要改的防線檔案中, 還需要使用者同意的那些。"""
     protected = {path for path in files if is_protected(path)}
-    return sorted(protected - approved_paths(root, APPROVAL_NAME))
+    return sorted(protected - approvals.approved(root, "protected"))
 
 
 def verdict(agent: str, pending: list[str]) -> tuple[str, str]:
-    """(decision, reason)。Claude 跳確認; Codex 不支援 ask, 擋下並請 agent 用申請指令。"""
     rule = (
-        f"{', '.join(pending)} 是防線本身的檔案（hook、agent 設定、CI 或檢查的設定），"
-        "改動要先經過使用者同意（docs/extending/agent-hooks.md〈防線檔案〉）。"
-        "先向使用者說明要改什麼、為什麼，以及會不會讓哪一項檢查變寬鬆。"
+        f"{', '.join(pending)} 是防線檔案（hook、agent 設定、CI 或檢查的設定），"
+        "改動要先經過使用者同意。"
+        "先說明要改什麼、為什麼，會不會讓哪一項檢查變寬鬆。"
     )
     if agent == "codex":
-        command = " ".join([*APPROVE_COMMAND, *pending])
-        return "deny", f"{rule}說明完執行 `{command}` 申請，它會請使用者確認；確認後再改一次。"
+        command = " ".join([*approvals.COMMAND, "protected", *pending])
+        return "deny", f"{rule}使用者同意後執行 `{command}`，它會跳確認；確認後再改。"
     return "ask", rule

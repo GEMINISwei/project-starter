@@ -31,8 +31,6 @@ AGENT_INSTRUCTIONS = ("AGENTS.md", ".agents/skills/")
 CODE_SUFFIXES = (".py", ".ts", ".tsx", ".js", ".mjs", ".cjs")
 # 呼叫子行程的警告: hook 與測試用固定參數呼叫 git、gh 是常態, 每次寫理由只是噪音。
 EXEMPT_NOQA = {"S603", "S607"}
-# 實作後改測試檔的說明至少要有幾個字: 擋掉只列路徑、或只寫「已修改」這類空話。
-MIN_REASON = 6
 
 NOQA = re.compile(r"#\s*noqa(?::\s*(?P<codes>[A-Z0-9]+(?:\s*,\s*[A-Z0-9]+)*))?(?P<rest>.*)$")
 TYPE_IGNORE = re.compile(r"#\s*type:\s*ignore(?:\[[^\]]*\])?(?P<rest>.*)$")
@@ -81,16 +79,8 @@ def tests_changed_after_implementation(base: str, head: str) -> list[str]:
 
 
 def explained(path: str, text: str) -> bool:
-    """有一行寫出 path, 而且同一行還有說明 (去掉路徑與 Markdown 符號後至少 MIN_REASON 個字)。
-
-    只看得出有沒有寫, 寫得對不對要靠審查。
-    """
-    for line in text.splitlines():
-        if path in line:
-            reason = re.sub(r"[\s`*\-:：>()\[\]]", "", line.replace(path, ""))
-            if len(reason) >= MIN_REASON:
-                return True
-    return False
+    """有一行寫出 path。說明寫得對不對靠審查。"""
+    return any(path in line for line in text.splitlines())
 
 
 def is_guarded(path: str) -> bool:

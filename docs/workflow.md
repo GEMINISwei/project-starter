@@ -21,7 +21,7 @@ Feature Branch → Draft PR → Incremental Commits → Code Review → Squash M
      diff 看不出來、要有人去確認的事（例：在部署主機實際跑一次、對已部署的下游有沒有影響）。
 
    CI 的 `pr` 另外檢查這個 PR 的改動，沒寫到就紅（`.github/scripts/check-pr-changes.py`；改描述會重跑，不必再推 commit）：
-   - 實作開始之後還改到測試檔：描述要寫出那個檔案的路徑與原因（[說明](testing.md#改程式不改測試)）
+   - 實作開始之後還改到測試檔：「驗證」段要寫出那個檔案的路徑與原因（[說明](testing.md#改程式不改測試)）
    - 動到防線檔案或 agent 的說明（`AGENTS.md`、`.agents/skills/`）：「檢查」段要列出那個檔案或它的目錄
      （[清單](extending/agent-hooks.md#防線檔案)）
    - 新增的抑制註解：同一行要寫理由（[說明](development.md#抑制註解)）
