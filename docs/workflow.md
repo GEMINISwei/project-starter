@@ -34,7 +34,10 @@ Feature Branch → Draft PR → Incremental Commits → Code Review → Squash M
 前一個審查時一改，後一個就要跟著重做；兩個 PR 也會改到同一批檔案而互相衝突。每次只審一件事，diff 才小得好讀。
 
 等合併的期間可以討論下一件事要做什麼，但不開分支、不動檔案。正式環境出問題等不及前一個合併時，
-由使用者決定要不要插隊。
+由使用者決定要不要插隊（AI agent 照 `hotfix` 這個 skill 做）。
+
+AI agent 這一側由 hook 強制：還有開著的 PR 時，開新分支、開 worktree、開 PR 都要使用者同意
+（[說明](extending/agent-hooks.md#一次一個-pr)）。只算你自己開的 PR，Dependabot 的不算。
 
 ### GitHub 設定
 

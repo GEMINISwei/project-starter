@@ -27,7 +27,7 @@ Claude 與 Codex 的 hook 協定相同（事件名稱、stdin 收的 JSON、回�
 
 | 腳本 | 事件 | 擋什麼 |
 |---|---|---|
-| `guard_commands.py` | `PreToolUse`（shell 指令） | push 到 `main`、用 `--no-verify` 略過 git hook（`commit -n` 也算）、改 `core.hooksPath`、合併 PR 或轉 Ready（`gh pr merge`、`gh pr ready`，以及同樣效果的 `gh api` 與 GraphQL mutation）、`npm` 的 `--force`／`--legacy-peer-deps`、直接下 `docker compose`、繞過確認自己放行測試檔、用 shell 改測試檔（見下一節）、繞過 `publish.sh` 發布或部署（見下方） |
+| `guard_commands.py` | `PreToolUse`（shell 指令） | push 到 `main`、用 `--no-verify` 略過 git hook（`commit -n` 也算）、改 `core.hooksPath`、合併 PR 或轉 Ready（`gh pr merge`、`gh pr ready`，以及同樣效果的 `gh api` 與 GraphQL mutation）、`npm` 的 `--force`／`--legacy-peer-deps`、直接下 `docker compose`、繞過確認自己放行測試檔或分支、用 shell 改測試檔（見下一節）、有開著的 PR 時開新分支（見〈一次一個 PR〉）、繞過 `publish.sh` 發布或部署（見下方） |
 | `guard_tests.py` | `PreToolUse`（改檔） | 實作開始後改測試檔，見下一節 |
 
 ## 測試鎖定
@@ -54,6 +54,22 @@ shell 指令改測試檔由 `guard_commands.py` 用同一套判斷攔下（兩�
 
 - 格式化工具（`ruff format`、`eslint --fix`、`prettier --write`）：只動排版、不動斷言，擋下來誤判太多。
 - 整批切換（`git checkout main`、`git stash`、`git reset`）與在腳本裡寫檔（`python -c`）。
+
+## 一次一個 PR
+
+把 [`workflow.md`](../workflow.md#一次一個-pr)〈一次一個 PR〉變成 agent 動手當下的檢查（`branch_lock.py`）：
+
+- **檢查的指令**：開新分支（`git switch -c`、`git checkout -b`、`git branch <名稱>`）、`git worktree add`、
+  `gh pr create`。切換、刪除、改名分支不檢查。
+- **有沒有開著的 PR**：用 `gh pr list --author @me --state open` 查，只算使用者自己開的。
+  查不到時（沒網路、`gh` 沒登入）**放行**：這是流程規則，不是部署那種安全邊界，沒網路時擋開分支只會礙事，
+  而且本來也開不了 PR。
+- **插隊要使用者同意**，方式跟測試鎖一樣：Claude 跳確認；Codex 擋下，agent 執行
+  `python3 .agents/hooks/approve_parallel_branch.py <分支>` 申請，`.codex/rules/approve-parallel-branch.rules`
+  讓它一定跳確認。
+
+放行寫在 `.git/agent-approved-parallel-branches`（不進版控），**針對分支名稱**：插隊的那個分支之後開 PR 不會再問。
+直接寫放行檔、換寫法執行申請指令都會被擋下。
 
 ## 發布 release
 
