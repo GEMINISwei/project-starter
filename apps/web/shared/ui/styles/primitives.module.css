@@ -213,6 +213,16 @@
   font-size: var(--fs-base);
 }
 
+/* 觸控裝置上輸入框至少 16px: iOS Safari 會在字級小於 16px 的輸入框取得焦點時放大畫面,
+   WebApp 要像原生 App 一樣不跳動。不用 viewport 的 maximum-scale 擋: 那也會擋掉使用者自己的縮放。 */
+@media (pointer: coarse) {
+  .input,
+  .inputLg,
+  .select {
+    font-size: var(--fs-input-touch);
+  }
+}
+
 .inputWithIcon {
   padding-left: var(--space-12);
 }

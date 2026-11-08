@@ -12,9 +12,10 @@
 
 import { render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { describe, expect, it, vi } from "vitest"
+import { useState } from "react"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import {
-  Button, Container, Flex, Form, Modal, SelectInput, TextInput,
+  Button, Container, Flex, Form, FormDialog, Modal, SelectInput, TextInput,
 } from "@/shared/ui"
 
 describe("Button", () => {
@@ -135,6 +136,88 @@ describe("Modal", () => {
 
     const dialog = screen.getByRole("dialog")
     expect(dialog.contains(document.activeElement)).toBe(true)
+  })
+
+  it("關閉後焦點回到開啟前的元素", async () => {
+    // 只用鍵盤的人從列表的「編輯」打開對話框, 存檔後要回到原本那一列, 而不是頁首。
+    function Harness() {
+      const [open, setOpen] = useState(false)
+      return (
+        <>
+          <Button onClick={() => setOpen(true)}>開啟</Button>
+          <Modal title="測試" open={open} onOpenChange={setOpen}>內容</Modal>
+        </>
+      )
+    }
+    render(<Harness />)
+
+    await userEvent.click(screen.getByRole("button", { name: "開啟" }))
+    await userEvent.keyboard("{Escape}")
+
+    expect(screen.getByRole("button", { name: "開啟" })).toHaveFocus()
+  })
+
+  it("在最後一個可聚焦元素按 Tab 會回到第一個，不會跑到背景", async () => {
+    render(
+      <>
+        <Button>背景</Button>
+        <Modal title="測試" open onOpenChange={() => {}}>
+          <Button>確定</Button>
+        </Modal>
+      </>,
+    )
+
+    screen.getByRole("button", { name: "確定" }).focus()
+    await userEvent.tab()
+
+    expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true)
+    expect(screen.getByRole("button", { name: "背景" })).not.toHaveFocus()
+  })
+})
+
+describe("FormDialog", () => {
+  it("送出時不跑瀏覽器的原生驗證", () => {
+    // 原生驗證的提示跟著瀏覽器語系, 不跟應用語系; 錯誤一律由各對話框標在欄位上。
+    render(
+      <FormDialog title="新增" open isPending={false} submitText="送出" onClose={() => {}} onSubmit={() => {}}>
+        <TextInput label="名稱" required />
+      </FormDialog>,
+    )
+
+    expect(screen.getByRole("dialog").querySelector("form")).toHaveAttribute("novalidate")
+  })
+})
+
+describe("觸控裝置上的自動聚焦", () => {
+  // WebApp 在手機上要像原生 App: 開表單時不自己跳出鍵盤, 使用者點了欄位才輸入。
+  function stubPointer(coarse: boolean) {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: coarse && query.includes("coarse"),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }))
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("觸控裝置上 autoFocus 不會把焦點移進輸入框，非觸控裝置照常聚焦", () => {
+    stubPointer(true)
+    const { unmount } = render(
+      <>
+        <TextInput label="名稱" autoFocus />
+        <SelectInput label="狀態" options={[{ value: "a", label: "A" }]} autoFocus />
+      </>,
+    )
+    expect(screen.getByLabelText("名稱")).not.toHaveFocus()
+    expect(screen.getByLabelText("狀態")).not.toHaveFocus()
+    unmount()
+
+    stubPointer(false)
+    render(<TextInput label="名稱" autoFocus />)
+    expect(screen.getByLabelText("名稱")).toHaveFocus()
   })
 })
 

@@ -67,13 +67,21 @@ def users(monkeypatch: pytest.MonkeyPatch):
         writes.append({"id": id, **(data or {})})
         return {"id": id}
 
+    revoked: list[str] = []
+
+    async def fake_revoke(id, session=None):
+        revoked.append(id)
+        return {"id": id, "auth_version": 2}
+
     monkeypatch.setattr(UserTable, "find_detail_by_id", fake_find)
     monkeypatch.setattr(UserTable, "update_by_id", fake_update)
+    monkeypatch.setattr(UserTable, "revoke_sessions", fake_revoke)
 
     def add(user: UserDetail) -> None:
         stored[user["id"]] = user
 
     add.writes = writes  # type: ignore[attr-defined]
+    add.revoked = revoked  # type: ignore[attr-defined]  # 紀錄掛在函式物件上給測試讀, 型別系統看不到這個屬性
     return add
 
 
@@ -164,6 +172,46 @@ async def test_patch_cannot_disable_super_admin(users):
     assert users.writes == []
 
 
+# 停用要撤銷既有的 session: 否則「停用、查完、再啟用」之後, 停用前簽發的 token 會復活。
+
+
+@pytest.mark.asyncio
+async def test_disable_user_revokes_sessions(users):
+    users(_target("victim"))
+
+    await user_service.disable_user(current_user=SUPER, target_id="victim")
+
+    assert users.revoked == ["victim"]
+
+
+@pytest.mark.asyncio
+async def test_patch_disable_revokes_sessions(users):
+    users(_target("victim"))
+
+    await user_service.update_user(
+        current_user=SUPER,
+        id="victim",
+        form_data=UserUpdate(nickname="n", is_disabled=True),
+    )
+
+    assert users.writes[0]["is_disabled"] is True
+    assert users.revoked == ["victim"]
+
+
+@pytest.mark.asyncio
+async def test_patch_keeping_disabled_does_not_revoke_again(users):
+    """只改暱稱、狀態維持停用時不必再撤銷: 停用當下已經撤銷過了。"""
+    users({**_target("victim"), "is_disabled": True})
+
+    await user_service.update_user(
+        current_user=SUPER,
+        id="victim",
+        form_data=UserUpdate(nickname="n", is_disabled=True),
+    )
+
+    assert users.revoked == []
+
+
 # ── 修改資料 ────────────────────────────────────────────────────────────────
 
 
@@ -234,6 +282,44 @@ async def test_super_admin_nickname_can_still_be_edited(users):
     )
 
     assert users.writes == [{"id": "root-2", "nickname": "n", "is_disabled": False}]
+
+
+@pytest.fixture
+def disabled_role(monkeypatch: pytest.MonkeyPatch):
+    async def fake_find(ids):
+        return [_role(role_id, [], is_disabled=True) for role_id in ids]
+
+    monkeypatch.setattr(RoleTable, "find_details_by_ids", fake_find)
+
+
+@pytest.mark.asyncio
+async def test_update_user_keeps_existing_disabled_role(users, disabled_role):
+    """停用的角色會留在使用者身上 (見 `UserTable`); 沒改角色時不能因此擋下其他欄位的修改。"""
+    users({**_target("user-2"), "role_ids": [ROLE_ID]})
+
+    await user_service.update_user(
+        current_user=SUPER,
+        id="user-2",
+        form_data=UserUpdate(nickname="n", is_disabled=True, role_ids=[ROLE_ID]),
+    )
+
+    assert users.writes[0]["is_disabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_update_user_rejects_newly_added_disabled_role(users, disabled_role):
+    users(_target("user-2"))
+
+    await _expect_error(
+        user_service.update_user(
+            current_user=SUPER,
+            id="user-2",
+            form_data=UserUpdate(nickname="n", is_disabled=False, role_ids=[ROLE_ID]),
+        ),
+        400,
+        UserError.ROLE_DISABLED,
+    )
+    assert users.writes == []
 
 
 # ── 建立使用者 ────────────────────────────────────────────────────────────────

@@ -124,17 +124,25 @@ async def update_user(
         # 同 `_ensure_can_disable`: `*` 只可能直接掛在角色上, 不必先展開相依。
         if Permission.ALL in target["permissions"]:
             raise LangException(403, UserError.CANNOT_CHANGE_SUPER_ROLES)
-        await validate_role_ids(form_data.role_ids)
+        # 只驗這次新加上的: 停用的角色會留在使用者身上 (見 `UserTable`), 原樣送回來時
+        # 若一起驗, 就會因為「角色已停用」而改不了暱稱、也停用不了這個人。
+        await validate_role_ids(
+            [role_id for role_id in form_data.role_ids if role_id not in target["role_ids"]]
+        )
         update_data["role_ids"] = form_data.role_ids
 
+    newly_disabled = form_data.is_disabled is True and target["is_disabled"] is not True
     if form_data.is_disabled is True:
         _ensure_can_disable(current_user, target)
     update_data["is_disabled"] = form_data.is_disabled
 
     # 再包一次 ensure_found: 查到之後、更新之前文件仍可能被刪掉。
-    return UserOperate.model_validate(
+    result = UserOperate.model_validate(
         ensure_found(await UserTable.update_by_id(id=id, data=update_data), UserError.NOT_FOUND)
     )
+    if newly_disabled:
+        await UserTable.revoke_sessions(id)
+    return result
 
 
 async def reset_user_password(id: str, form_data: UserResetPassword) -> UserOperate:
@@ -160,12 +168,16 @@ async def reset_user_password(id: str, form_data: UserResetPassword) -> UserOper
 async def disable_user(current_user: CurrentUser, target_id: str) -> UserOperate:
     target = ensure_found(await UserTable.find_detail_by_id(id=target_id), UserError.NOT_FOUND)
     _ensure_can_disable(current_user, target)
-    return UserOperate.model_validate(
+    result = UserOperate.model_validate(
         ensure_found(
             await UserTable.update_by_id(id=target_id, data={"is_disabled": True}),
             UserError.NOT_FOUND,
         )
     )
+    # 停用期間每個請求都會被擋, 但重新啟用之後只剩世代號在比對: 不 +1 的話,
+    # 停用前簽發的 token 會在啟用的那一刻復活 (例如帳號疑似被盜、停用查完再交還本人)。
+    await UserTable.revoke_sessions(target_id)
+    return result
 
 
 async def validate_role_ids(role_ids: list[str]) -> None:

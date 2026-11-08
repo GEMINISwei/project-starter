@@ -74,6 +74,9 @@
   --fs-base: 0.9375rem;
   --fs-sm: 0.8125rem;
   --fs-xs: 0.75rem;
+  /* 觸控裝置上輸入框的字級。iOS Safari 對小於 16 個 CSS px 的輸入框會在聚焦時放大畫面,
+     門檻是絕對的 px, 所以這裡刻意不用 rem: `html` 的字級是 `--fs-base` (15px), 1rem 只有 15px。 */
+  --fs-input-touch: 16px;
   --fw-regular: 400;
   --fw-medium: 500;
   --fw-semibold: 600;

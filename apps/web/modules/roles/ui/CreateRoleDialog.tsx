@@ -2,8 +2,9 @@
 
 import { type FormEvent, useState } from "react"
 import { FormDialog, TextInput, useActionSubmit } from "@/shared/ui"
-import { useT } from "@/shared/i18n/context"
+import { useLocale, useT } from "@/shared/i18n/context"
 import { rolesMessages } from "../i18n"
+import { validateRoleName } from "../validation"
 import { createRole } from "../actions"
 
 type CreateRoleDialogProps = {
@@ -20,11 +21,14 @@ export default function CreateRoleDialog({
   onError,
 }: CreateRoleDialogProps) {
   const t = useT(rolesMessages)
+  const locale = useLocale()
+  const [nameError, setNameError] = useState<string>()
   const [name, setName] = useState("")
   const { isPending, submit, fieldError, clearFieldErrors } = useActionSubmit()
 
   function resetState() {
     setName("")
+    setNameError(undefined)
     clearFieldErrors()
   }
 
@@ -35,10 +39,9 @@ export default function CreateRoleDialog({
 
   function submitCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!name.trim()) {
-      onError(t("nameRequired"))
-      return
-    }
+    const nextError = validateRoleName(name, locale)
+    setNameError(nextError)
+    if (nextError) return
 
     submit(
       () => createRole({ name: name.trim() }),
@@ -55,7 +58,7 @@ export default function CreateRoleDialog({
 
   return (
     <FormDialog title={t("create")} open={open} isPending={isPending} submitText={t("createSubmit")} pendingText={t("createPending")} onClose={handleClose} onSubmit={submitCreate}>
-      <TextInput label={t("colName")} value={name} error={fieldError("name")} required disabled={isPending} autoFocus onChange={setName} />
+      <TextInput label={t("colName")} value={name} error={nameError ?? fieldError("name")} required disabled={isPending} autoFocus onChange={setName} />
     </FormDialog>
   )
 }

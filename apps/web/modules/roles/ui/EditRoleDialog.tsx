@@ -2,8 +2,9 @@
 
 import { type FormEvent, useState } from "react"
 import { FormDialog, SelectInput, TextInput, useActionSubmit, useActiveStatusOptions } from "@/shared/ui"
-import { useT } from "@/shared/i18n/context"
+import { useLocale, useT } from "@/shared/i18n/context"
 import { rolesMessages } from "../i18n"
+import { validateRoleName } from "../validation"
 import { updateRole } from "../actions"
 import type { RoleInfo, RolePermissionValue } from "../types"
 
@@ -16,6 +17,8 @@ type EditRoleDialogProps = {
 
 export default function EditRoleDialog({ role, onClose, onSuccess, onError }: EditRoleDialogProps) {
   const t = useT(rolesMessages)
+  const locale = useLocale()
+  const [nameError, setNameError] = useState<string>()
   const statusOptions = useActiveStatusOptions()
   const [editName, setEditName] = useState(role?.name ?? "")
   const [editIsDisabled, setEditIsDisabled] = useState(role?.is_disabled ?? false)
@@ -23,10 +26,10 @@ export default function EditRoleDialog({ role, onClose, onSuccess, onError }: Ed
 
   function submitEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!role || !editName.trim()) {
-      onError(t("nameRequired"))
-      return
-    }
+    if (!role) return
+    const nextError = validateRoleName(editName, locale)
+    setNameError(nextError)
+    if (nextError) return
 
     submit(
       () => updateRole(role.id, {
@@ -44,7 +47,7 @@ export default function EditRoleDialog({ role, onClose, onSuccess, onError }: Ed
 
   return (
     <FormDialog title={t("editTitle")} open={role !== null} isPending={isPending} submitText={t("editSubmit")} pendingText={t("editPending")} onClose={onClose} onSubmit={submitEdit}>
-      <TextInput label={t("colName")} value={editName} error={fieldError("name")} required disabled={isPending} autoFocus onChange={setEditName} />
+      <TextInput label={t("colName")} value={editName} error={nameError ?? fieldError("name")} required disabled={isPending} autoFocus onChange={setEditName} />
       <SelectInput
         label={t("colStatus")}
         value={editIsDisabled ? "disabled" : "active"}
