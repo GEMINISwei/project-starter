@@ -21,7 +21,7 @@ gh pr checks <PR 號碼> --watch --fail-fast
 跑完回報每個 job 的結果。失敗時用 `gh run view <run id> --log-failed` 讀失敗的那一段，說明原因；
 要不要修、怎麼修先問使用者。
 
-`e2e` 失敗時自己讀，不交給子代理（[理由](../../../docs/decisions/0013-e2e-failures-read-by-main-agent.md)）：
+`e2e` 失敗時自己讀，不交給子代理（子代理要重讀程式碼，主 agent 也只能等它回來）：
 
 1. `gh run download <run id> -n playwright-report -D <暫存目錄>`，先讀失敗測試的 `error-context.md`
    （錯誤訊息、出錯的那一行、當下的頁面結構），多半就看得出原因。

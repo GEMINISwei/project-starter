@@ -53,7 +53,7 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 與其他 job 平行跑；失敗時到該次執行的 Artifacts 下載 `playwright-report`，trace 用
 `npx playwright show-trace <zip>` 打開。
 
-**開發中用 `make e2e`，不必每次跑 `make check e2e`**（[理由](decisions/0012-e2e-dev-loop-locally.md)）：
+**開發中用 `make e2e`，不必每次跑 `make check e2e`**（[理由](decisions/0009-e2e-strategy.md)）：
 
 | 指令 | 做什麼 |
 |---|---|
@@ -67,8 +67,8 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 - 本機的 Playwright 只輸出失敗摘要（`dot`），全部通過時只有一行。
 - dev 與正式環境 build 的差異要到 CI 才看得到；改到 nginx、compose 或只有正式環境才有的行為時，
   本機也跑一次 `make check e2e`。
-- 失敗時先讀 `e2e/test-results/` 裡那個測試的 `error-context.md`，看不出原因才開 trace
-  （[理由](decisions/0013-e2e-failures-read-by-main-agent.md)）。
+- 失敗時先讀 `e2e/test-results/` 裡那個測試的 `error-context.md`，看不出原因才開 trace。
+  由修的 agent 自己讀，不交給子代理：子代理要重讀程式碼，主 agent 也只能等它回來。
 
 **只放跨層的 smoke 測試**：proxy 導向、cookie 屬性、Server Action、權限導向、撤銷這類只有整套跑起來才看得到的行為。
 畫面分支仍然抽進 `capabilities.ts` 用 vitest 測，不要寫成 E2E（慢，而且畫面一改就要跟著改）。

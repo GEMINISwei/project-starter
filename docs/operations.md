@@ -60,7 +60,7 @@ seed 失敗時結構已經升上去了，服務一樣不切換，修好之後重
 **每次部署都會短暫中斷服務**：部署前的備份期間 nginx 是停的（資料越多越久，見
 〈[備份與還原](#備份與還原)〉），`make start` 重建容器後也要等 healthcheck 通過，nginx 才會接回流量。
 所以要挑離峰時段部署。零停機（新版起來才切流量）的前提是 api 能同時跑兩份，目前做不到，見
-〈[單一行程，不能直接加副本](#單一行程不能直接加副本)〉與 [ADR 0004](decisions/0004-downtime-deploys.md)。
+〈[單一行程，不能直接加副本](#單一行程不能直接加副本)〉與 [ADR 0004](decisions/0004-single-api-process.md)。
 
 prod overlay 比 dev 多了 **log 上限**與**記憶體上限**（api、web 各 512M，postgres 1G）。
 api 週期性重啟時，先懷疑記憶體上限。
@@ -117,7 +117,7 @@ environment（見下方〈新增一套系統〉），workflow 不用改。`produ
 2. 列出 repo 裡屬於這些組的 environment；有任何一組找不到就停，並列出現有的組。
 3. 確認這個 commit 通過 CI（`ci.yml`）：它在 `main` 上已經跑過而且成功（push 觸發，或手動補跑的）就不再跑，
    查不到（`main` 的 CI 還沒跑完、紀錄已過保存期限、或那次是紅的）就先跑一次，沒過不部署
-   （[理由](decisions/0011-e2e-required-in-ci.md)）。同時逐套讀主機資料庫的 migration revision
+   （[理由](decisions/0009-e2e-strategy.md)）。同時逐套讀主機資料庫的 migration revision
    （`migration check (<environment>)`）：任何一套的資料庫比要部署的版本新，**整組都不部署**，
    主機什麼都不動（見〈[回滾與 migration](#回滾與-migration)〉）。
 4. 建兩份 production image 推到 GHCR：`ghcr.io/<帳號>/<repo>-api:<組名>` 與 `-web:<組名>`（全小寫）。
@@ -199,7 +199,7 @@ GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進�
   回滾與部署到其他組會在 deploy job 被 GitHub 擋下（environment protection rules）。
   `main` 要有 ruleset（見 [`workflow.md`](workflow.md#github-設定)），它上面的 `deploy.yml` 才一定經過 PR。
 - [ ] **不勾 Required reviewers**：發布前已經在對話裡確認過，再到 GitHub 上按 Approve 太繁瑣；
-      代價與什麼情況要改回來見 [ADR 0014](decisions/0014-no-environment-reviewer-for-deploys.md)。
+      代價與什麼情況要改回來見 [ADR 0010](decisions/0010-no-environment-reviewer-for-deploys.md)。
 - [ ] 第一次推上去之後，到 GHCR 的 package 設定確認 Visibility：image 裡有完整的程式碼（但沒有機密），
       **私有 repo 要設 Private**；公開 repo 的 image 內容等於原始碼，設 Public 也可以，而且免費。
       **改成 Public 之後就改不回 Private**
@@ -332,7 +332,7 @@ gh workflow run deploy.yml --ref main -f tag=v0.1.0 -f target="production stagin
   **重建容器時舊的 log 會一起消失**，要長期保存就自己轉送到別處。
 - **沒有**：結構化 log、錯誤追蹤（Sentry 之類）、指標與告警。模板刻意不內建：做法依部署平台而定，
   而且錯誤內容可能帶著使用者資料，送不送到第三方要由專案決定。所以出錯時不會有人收到通知，
-  要等使用者回報再上主機查（[ADR 0008](decisions/0008-no-built-in-error-tracking.md)）。
+  要等使用者回報再上主機查（[ADR 0007](decisions/0007-no-built-in-error-tracking.md)）。
 - **最大的盲點是瀏覽器端的錯誤**：前端 JavaScript 在使用者的瀏覽器裡出錯時（按了沒反應、畫面白掉），
   主機上的 log 一行都沒有。需要時先補錯誤追蹤（Sentry，或自架、與它相容的 GlitchTip），
   DSN 走執行期設定（後端 `app/config.py`、前端 `shared/runtime/`）。
@@ -473,7 +473,7 @@ ssh -N -L 8080:127.0.0.1:<SYSTEM_PORT> <使用者>@<主機 IP>
 
 API 是**單一 Python 行程**（沒有 workers，compose 也沒有 replica）。限流的計數存在行程記憶體裡，
 加 workers 或副本會讓允許次數直接變成 N 倍，而且沒有任何症狀。要水平擴充時，**先**把
-`RateLimiter` 的計數換成 PostgreSQL，**再**加副本（不用 Redis 的理由見 [ADR 0005](decisions/0005-in-process-rate-limit.md)）。
+`RateLimiter` 的計數換成 PostgreSQL，**再**加副本（不用 Redis 的理由見 [ADR 0004](decisions/0004-single-api-process.md)）。
 
 初始資料（seed）由 migrate 服務寫入，api 開機時不寫任何東西，所以加副本不受它影響。
 

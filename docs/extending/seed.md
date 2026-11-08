@@ -2,7 +2,7 @@
 
 定義在 model class 上，由 **migrate 服務**在 `alembic upgrade head` 之後以 `BaseTable.ensure_seed()`
 寫入（`scripts/db.py migrate`）。`make start`、`make db migrate`、`make db reset` 都會經過它；
-api 開機時**不寫任何資料**（[ADR 0007](../decisions/0007-seed-in-migrate-service.md)）。所以 seed 失敗跟 migration 失敗一樣，會被 `make start`「migrate 失敗就不切換服務」
+api 開機時**不寫任何資料**（[ADR 0006](../decisions/0006-seed-in-migrate-service.md)）。所以 seed 失敗跟 migration 失敗一樣，會被 `make start`「migrate 失敗就不切換服務」
 擋下（見 [`operations.md`](../operations.md#生產部署)）：
 
 
