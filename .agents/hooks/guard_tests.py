@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""測試鎖定: Claude 與 Codex 的 PreToolUse hook, 開始實作之後改測試檔要使用者同意。
+"""改檔 hook: Claude 與 Codex 的 PreToolUse hook, 這兩種檔案改動前要使用者同意。
+
+- 測試檔: 開始實作之後 (test_lock.py)
+- 防線檔案 (hook、agent 設定、CI、檢查的設定): 任何時候 (protected_files.py)
 
 用法 (由 .claude/settings.json 與 .codex/hooks.json 呼叫): guard_tests.py <claude|codex>
 
 兩家在這裡行為不同, 所以才需要參數:
 - Claude 回 ask, 畫面直接跳出確認, 使用者同意就繼續。
-- Codex 的 PreToolUse 不支援 ask, 只能 deny; 理由裡請 agent 說明後執行 approve_test_edit.py 申請,
-  `.codex/rules/` 讓那個指令一定要使用者確認, 確認後再改就會放行。
+- Codex 的 PreToolUse 不支援 ask, 只能 deny; 理由裡請 agent 說明後執行對應的申請指令
+  (approve_test_edit.py、approve_protected_edit.py), `.codex/rules/` 讓它一定要使用者確認,
+  確認後再改就會放行。
 """
 
 from __future__ import annotations
