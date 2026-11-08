@@ -263,3 +263,79 @@ def test_claude_asks_before_approving_test_edits() -> None:
     settings = json.loads(CLAUDE_SETTINGS.read_text(encoding="utf-8"))
     ask = settings.get("permissions", {}).get("ask", [])
     assert f"Bash({APPROVE_COMMAND}:*)" in ask
+
+
+# 用 shell 改測試檔 (`sed -i`、重新導向、刪除、從 git 還原) 跟改檔工具一樣要經過同意,
+# 否則測試鎖只擋得住其中一種寫法。只看明確指到測試檔的指令: `git checkout main` 這類
+# 整批切換不算, 格式化工具的 `--fix` 只動排版也不算 (見 docs/extending/agent-hooks.md)。
+SHELL_WRITES = [
+    f"sed -i '' 's/x/y/' {TEST}",
+    f"sed -i.bak 's/x/y/' {TEST}",
+    f"perl -pi -e 's/x/y/' {TEST}",
+    f"echo y > {TEST}",
+    f"echo y >> {TEST}",
+    f"cat > {TEST} <<'PY'\nassert True\nPY",
+    f"echo y | tee {TEST}",
+    f"cp /tmp/other.py {TEST}",
+    f"mv {TEST} /tmp/gone.py",
+    f"rm {TEST}",
+    f"rm -f {E2E_SUPPORT}",
+    f"git rm -q {TEST}",
+    f"git checkout -- {TEST}",
+    f"git checkout main -- {TEST}",
+    f"git restore {TEST}",
+    "cd apps/api && sed -i '' 's/x/y/' tests/modules/users/test_service.py",
+]
+
+SHELL_READS = [
+    f"cat {TEST}",
+    f"grep -n x {TEST}",
+    f"sed -n 1,20p {TEST}",
+    f"head {TEST}",
+    f"git diff {TEST}",
+    f"cp {TEST} /tmp/copy.py",
+    "cd apps/api && uv run pytest tests/modules/users/test_service.py -q",
+    f"echo y > {SOURCE}",
+    "git checkout main",
+]
+
+
+def shell_decision(agent: str, repo: Path, command: str) -> str | None:
+    payload = {"cwd": str(repo), "tool_name": "Bash", "tool_input": {"command": command}}
+    stdout = run(GUARD_COMMANDS, [agent], repo, payload)
+    if not stdout.strip():
+        return None
+    output = json.loads(stdout)["hookSpecificOutput"]
+    assert output["permissionDecisionReason"], "擋下時要說明理由與下一步"
+    return str(output["permissionDecision"])
+
+
+@pytest.mark.parametrize("command", SHELL_WRITES)
+@pytest.mark.parametrize("agent", AGENTS)
+def test_shell_writes_to_tests_need_approval_after_implementation_starts(
+    agent: str, command: str, implementing: Path
+) -> None:
+    assert shell_decision(agent, implementing, command) == BLOCKED[agent], f"沒有攔下: {command}"
+
+
+@pytest.mark.parametrize("command", SHELL_WRITES)
+@pytest.mark.parametrize("agent", AGENTS)
+def test_shell_writes_to_tests_are_allowed_before_implementation_starts(
+    agent: str, command: str, repo: Path
+) -> None:
+    assert shell_decision(agent, repo, command) is None, f"實作前誤擋: {command}"
+
+
+@pytest.mark.parametrize("command", SHELL_READS)
+@pytest.mark.parametrize("agent", AGENTS)
+def test_shell_reads_of_tests_are_never_blocked(
+    agent: str, command: str, implementing: Path
+) -> None:
+    assert shell_decision(agent, implementing, command) is None, f"誤擋: {command}"
+
+
+@pytest.mark.parametrize("agent", AGENTS)
+def test_approved_test_edit_via_shell_is_allowed(agent: str, implementing: Path) -> None:
+    assert approve(implementing, TEST).returncode == 0
+    assert shell_decision(agent, implementing, f"sed -i '' 's/x/y/' {TEST}") is None
+    assert shell_decision(agent, implementing, f"rm {OTHER_TEST}") == BLOCKED[agent]
