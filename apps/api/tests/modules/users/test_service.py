@@ -81,7 +81,7 @@ def users(monkeypatch: pytest.MonkeyPatch):
         stored[user["id"]] = user
 
     add.writes = writes  # type: ignore[attr-defined]
-    add.revoked = revoked  # type: ignore[attr-defined]
+    add.revoked = revoked  # type: ignore[attr-defined]  # 紀錄掛在函式物件上給測試讀, 型別系統看不到這個屬性
     return add
 
 
