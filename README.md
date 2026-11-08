@@ -70,3 +70,6 @@ flowchart LR
    （Claude、Codex）。少了這一步，hook、skills 與 commit 檢查在那個 agent 上**不會生效，也不會報錯**。
 5. 在 `apps/web/app/theme.css` 覆寫設計變數決定視覺（名字與預設值在 `shared/ui/styles/tokens.css`）。
 6. 照 [`docs/extending/new-module.md`](docs/extending/new-module.md) 加入第一個模組。
+
+之後 starter 有新的修正（基礎建設、檢查、流程）時，在新專案裡叫 agent 用 `sync-from-starter` 這個 skill：
+它會列出還沒同步的 starter PR 讓你挑，再照新專案自己的流程逐個移植。
