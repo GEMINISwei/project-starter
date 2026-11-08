@@ -33,8 +33,9 @@ disable-model-invocation: true
 
 這次選定的全部放進一個分支、一個 PR，照這個 repo 的 `AGENTS.md` 與流程做（開分支、Draft PR、驗收條件、測試、`make check`）。
 
-- 一個來源 PR 一個 commit，訊息寫上來源 PR 的網址，審查時看得出每段改動從哪裡來
-- PR 描述的摘要逐條列出參考的來源 PR 與連結
+- 所有來源 PR 的驗收條件與測試先寫、先 commit，全部寫完才開始實作。照來源 PR 逐個「測試、實作」交錯 commit 的話，
+  第二個來源 PR 的測試會落在實作之後，被當成實作後改測試
+- commit 與 PR 用這個 repo 自己的話寫改了什麼、為什麼，不寫來源 repo 的名稱或網址；來源 PR 只在回報時列給使用者
 - 對照來源的 diff 移植，不要憑印象重寫
 - migration 是各自獨立的：來源的 migration 不能直接複製，要在這邊另外產生
 
