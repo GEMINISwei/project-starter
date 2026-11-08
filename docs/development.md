@@ -107,3 +107,19 @@ make gen-types                               # 改過後端 schema／權限／�
 `，：（）` 會被編輯器標成「可能與 ASCII 字元混淆」。Markdown 文件與使用者看得到的字串（i18n、
 終端訊息、測試名稱）維持全形。
 文件**一個主題一個 owner**，其他地方只放連結；範例指向 repo 內的真實檔案。
+
+### 抑制註解
+
+關掉某一行的檢查時，**同一行寫上理由**：檢查本身是對的，這一行為什麼例外，下一個人（或 agent）才判斷得了能不能拿掉。
+它也是讓檢查變綠最快的捷徑，所以 PR 新增的抑制註解由 CI 檢查（`.github/scripts/check-pr-changes.py`）：
+
+| 種類 | 理由寫在 | 例 |
+|---|---|---|
+| ruff 的 `noqa`、mypy 的 `type: ignore` | 後面再接一個 `#` | `return AppEnv()  # type: ignore[call-arg]  # 欄位由環境變數填入` |
+| `eslint-disable…` | `--` 之後（ESLint 的慣例） | `// eslint-disable-next-line react-hooks/exhaustive-deps -- 只在掛載時跑一次` |
+| `@ts-expect-error` | 指令後面 | `// @ts-expect-error 端點不存在` |
+| pytest 的 skip | `reason=` | `@pytest.mark.skip(reason="需要網路")` |
+| vitest 的 `.skip` | 同一行的 `//` | `it.skip("…", () => {}) // 等上游修正` |
+
+- 只檢查 PR **新增**的行，既有的不受影響。
+- `noqa` 只有 `S603`／`S607`（呼叫子行程）時不用寫理由：hook 與測試用固定參數呼叫 `git`、`gh` 是常態。

@@ -19,6 +19,12 @@ Feature Branch → Draft PR → Incremental Commits → Code Review → Squash M
    - **驗證**：做過哪些驗證與結果，**成功與失敗都寫**，沒驗到的寫原因。
    - **檢查**：請審查者確認的項目，用 checkbox 列。整份 diff 本來就要看，不用列；這裡只寫
      diff 看不出來、要有人去確認的事（例：在部署主機實際跑一次、對已部署的下游有沒有影響）。
+
+   CI 的 `pr` 另外檢查這個 PR 的改動，沒寫到就紅（`.github/scripts/check-pr-changes.py`；改描述會重跑，不必再推 commit）：
+   - 實作開始之後還改到測試檔：描述要寫出那個檔案的路徑與原因（[說明](testing.md#改程式不改測試)）
+   - 動到防線檔案或 agent 的說明（`AGENTS.md`、`.agents/skills/`）：「檢查」段要列出那個檔案或它的目錄
+     （[清單](extending/agent-hooks.md#防線檔案)）
+   - 新增的抑制註解：同一行要寫理由（[說明](development.md#抑制註解)）
 3. **Incremental Commits**：小步提交、常常 push，每個 commit 是一個說得清楚的步驟
    （例：先補測試、再實作、再整理）。這些 commit 的訊息會併進 squash 後的內文，所以寫成
    「做了什麼、為什麼」，不要一路 `wip`、`fix`。

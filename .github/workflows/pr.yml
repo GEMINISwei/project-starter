@@ -10,6 +10,8 @@ on:
 
 permissions:
   contents: read
+  # 改動檢查用 gh 讀 PR 目前的描述 (見下方 PR 的改動)。
+  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -20,10 +22,25 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      # 完整歷史: 改動檢查要逐一看 PR 裡每個 commit 改了什麼, 預設只抓一個 commit。
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       # 標題與描述走環境變數, 不直接嵌進 run: 它們是任何人都能填的文字, 嵌進去等於讓人注入指令。
       - name: PR 標題與描述
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: .github/scripts/check-pr.sh
+      # 實作後改測試、動防線檔案、新增抑制註解 (腳本開頭有說明)。改描述 (edited) 也會重跑,
+      # 所以補上理由之後不必再推 commit。描述以執行當下用 gh 讀到的為準: push 與改描述幾乎同時
+      # 發生時, cancel-in-progress 可能留下帶著舊描述的那一次; PR_BODY 只在讀不到時才用。
+      - name: PR 的改動
+        if: always()
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/check-pr-changes.py
