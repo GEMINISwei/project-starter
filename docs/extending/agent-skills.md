@@ -37,14 +37,3 @@ symlink 由 git 保存，clone 與「Use this template」都會帶著；Windows 
 
 兩邊都忘了設也算「一致」，所以會影響 repo 以外的 skill 另外明列在同一份測試的 `EXTERNAL_EFFECT_SKILLS`，
 要求兩家都一定是手動。新增這類 skill（例如會改別的 repo、會觸發部署）時把名字加進去。
-
-## 目前的 skills
-
-| skill | 什麼時候用 | 只能手動 |
-|---|---|---|
-| `feature-workflow` | 任何要進 `main` 的改動，從開分支到 Ready for review | |
-| `self-review` | 交給使用者審查之前，對照驗收條件與 diff | |
-| `watch-pr` | push 之後等 CI；交給使用者審查後等合併並同步本機 | |
-| `add-migration` | 改了 model 的欄位、索引或約束 | |
-| `release` | 發版，發布 release 會觸發部署 | ✓ |
-| `sync-downstream` | 把 starter 的修正同步到子專案 | ✓ |
