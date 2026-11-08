@@ -34,3 +34,6 @@ symlink 由 git 保存，clone 與「Use this template」都會帶著；Windows 
 | Codex | `agents/openai.yaml` 寫 `policy:` → `allow_implicit_invocation: false` |
 
 例見 `.agents/skills/release/`。只設一邊時 `make check` 會擋（`apps/api/tests/test_agent_skills.py`）。
+
+兩邊都忘了設也算「一致」，所以會影響 repo 以外的 skill 另外明列在同一份測試的 `EXTERNAL_EFFECT_SKILLS`，
+要求兩家都一定是手動。新增這類 skill（例如會改別的 repo、會觸發部署）時把名字加進去。

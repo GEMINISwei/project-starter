@@ -8,9 +8,13 @@ description: 開始任何要進 main 的改動時使用（新功能、修正、�
 規則的完整說明在 [`workflow.md`](../../../docs/workflow.md#開發流程) 與
 [`testing.md`](../../../docs/testing.md)，這裡只列步驟與容易漏的地方。
 
-1. **開分支**：從最新的 `main` 開 `<type>/<kebab-case>`。一個分支只做一件事，途中發現別的問題就記下來另開。
-2. **先寫驗收條件**：每條接一個測試名稱（前端與 E2E 用中文句子，後端用 `test_<動作>_<條件>_<結果>`）。
-   寫不出測試名稱的那條，先停下來問使用者，不要自己猜。
+1. **開分支**：先確認沒有進行中的 PR（`gh pr list --author @me --state open`）；有的話停下來告訴使用者，
+   等它合併或關閉，要插隊由使用者決定（[說明](../../../docs/workflow.md#一次一個-pr)）。
+   沒有才從最新的 `main` 開 `<type>/<kebab-case>`。一個分支只做一件事，途中發現別的問題就記下來另開。
+2. **先寫驗收條件，給使用者確認**：每條接一個測試名稱（前端與 E2E 用中文句子，後端用
+   `test_<動作>_<條件>_<結果>`）。寫不出測試名稱的那條，先問使用者，不要自己猜。
+   **列給使用者看、得到確認才進第 3 步**，方向已經在對話裡談定也一樣
+   （[說明](../../../docs/testing.md#驗收條件與測試名稱)）。
 3. **先寫測試**：單元測試放該 app 的 `tests/`，與原始碼同構；會改到畫面流程時 E2E 也先寫。
    跑單項確認是紅燈（`uv run pytest tests/ -k xxx`、`npm run test -- -t "名稱"`）。
    E2E 先 `make e2e up` 起這個 checkout 的常駐環境（dev mode，之後改原始碼不必重建），
@@ -23,8 +27,9 @@ description: 開始任何要進 main 的改動時使用（新功能、修正、�
 6. **收尾**：照 `AGENTS.md`〈改完之後〉的表補做（migration、`make gen-types`、`make check integration`、
    E2E），最後 `make check` 全綠。E2E 在本機用 `make e2e test <檔案>` 跑相關的 spec 就好，正式環境 image 的
    完整版本由 CI 的 `e2e` 跑；改到 nginx、compose 或只有正式環境才有的行為時，本機也跑一次 `make check e2e`。
-7. **更新 PR 描述**：「摘要」對上最新的 diff，「驗證」每條寫上結果（成功失敗都寫），
-   「檢查」只列 diff 看不出來、要有人去確認的事。push 之後改用 `watch-pr` 這個 skill 等 CI。
+7. **自我檢查、更新 PR 描述**：照 `self-review` 這個 skill 逐條對照驗收條件與 diff，「摘要」對上最新的 diff，
+   「驗證」每條寫上結果（成功失敗都寫），「檢查」只列 diff 看不出來、要有人去確認的事。
+   push 之後改用 `watch-pr` 這個 skill 等 CI。
    回報使用者之前的最後一個動作，是照 `watch-pr` 第 2 節在背景開始等合併：這時 agent 的部分做完了，
    之後合併時收尾不會撞上進行中的工作。
 8. **Ready for review 由使用者決定**，不要自己轉，也不要自己合併。

@@ -73,13 +73,35 @@ def test_skills_do_not_mention_agent_specific_tools(skill: Path) -> None:
     assert not found, f"{skill.name} 用了只有某一家才有的工具或語法: {sorted(found)}"
 
 
-@pytest.mark.parametrize("skill", SKILLS, ids=lambda path: path.name)
-def test_manual_only_skills_are_manual_only_in_both_agents(skill: Path) -> None:
+def manual_only(skill: Path) -> tuple[bool, bool]:
+    """(Claude, Codex) 各自是否關掉了自動觸發。"""
     claude_manual = frontmatter(skill).get("disable-model-invocation") == "true"
     openai_yaml = skill / "agents" / "openai.yaml"
     codex_manual = openai_yaml.exists() and bool(
         re.search(r"^\s*allow_implicit_invocation:\s*false\s*$", openai_yaml.read_text(), re.M)
     )
+    return claude_manual, codex_manual
+
+
+# 會影響這個 repo 以外的 skill: 發版會部署, 同步下游會改別的 repo。
+# 只檢查兩家一致的話, 兩邊都忘了設也會通過, 所以這幾個要明列並要求一定是手動。
+EXTERNAL_EFFECT_SKILLS = ("release", "sync-downstream")
+
+
+@pytest.mark.parametrize("name", EXTERNAL_EFFECT_SKILLS)
+def test_skills_with_external_effects_are_manual_only(name: str) -> None:
+    skill = SKILLS_DIR / name
+    assert (skill / "SKILL.md").exists(), f".agents/skills/{name}/SKILL.md 不存在"
+    assert manual_only(skill) == (True, True), (
+        f"{name} 會影響 repo 以外的東西, 只能由使用者手動呼叫: SKILL.md 加"
+        " disable-model-invocation: true,"
+        " agents/openai.yaml 加 policy.allow_implicit_invocation: false"
+    )
+
+
+@pytest.mark.parametrize("skill", SKILLS, ids=lambda path: path.name)
+def test_manual_only_skills_are_manual_only_in_both_agents(skill: Path) -> None:
+    claude_manual, codex_manual = manual_only(skill)
     assert claude_manual == codex_manual, (
         f"{skill.name}: 只能手動呼叫要兩邊一起設 —— SKILL.md 的 disable-model-invocation: true"
         " 與 agents/openai.yaml 的 policy.allow_implicit_invocation: false"
