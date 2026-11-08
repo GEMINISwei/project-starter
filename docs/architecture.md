@@ -43,10 +43,8 @@ app（組裝層） → modules（垂直功能） → shared（平台能力）
 └── docs/
 ```
 
-兩個 app 都**沒有 `src/`**：後端 import root 是 `apps/api/`（`from modules.users.public import …`），
-前端 `@/` 指向 `apps/web/`。**新增一層原始碼目錄時，要同步加進兩個檢查工具的掃描範圍**
-（`apps/web/package.json` 的 `check:architecture`、`apps/api/pyproject.toml` 的 `root_packages`），
-漏掉的話那一層不受邊界規則管；兩邊的架構測試會擋。
+兩個 app 都**沒有 `src/`**：後端 import root 是 `apps/api/`（`from modules.users.public import …`），前端 `@/` 指向
+`apps/web/`。**新增一層原始碼目錄要加進掃描範圍**（`check:architecture`、`root_packages`），否則那層不受邊界規則管（架構測試擋）。
 
 ## 前後端對照
 
@@ -122,8 +120,7 @@ modules/<name>/
 └── ui/                  # 畫面：元件、只服務畫面的 hook、CSS module
 ```
 
-- **約束的是分層，不是檔名。** 模組根放資料與規則，`ui/` 放畫面；不要再開 `components/`、
-  `hooks/`、`utils/`（檢查器會擋）。
+- **約束分層，不約束檔名**：模組根放資料與規則，`ui/` 放畫面；不開 `components/`、`hooks/`、`utils/`（檢查器擋）。
 - `page.server.tsx` 只做「取資料 + 權限檢查 + 交給 `ui/<Name>View`」。
 - public entry **一律具名轉出**，props 型別也要轉出（route adapter 靠它往下傳）：
 
@@ -135,7 +132,7 @@ modules/<name>/
 
 ### `app/` 的路由檔
 
-畫面分成兩區，各有自己的外殼與導覽。使用者區是 route group（不出現在網址裡），管理區是真正的路徑段（網址一律在 `/admin/...` 底下）：
+兩區各有外殼與導覽：使用者區是 route group（不出現在網址），管理區是真正的路徑段（`/admin/...`）：
 
 ```text
 app/
@@ -145,9 +142,8 @@ app/
     └── admin/             # 管理區：使用者、角色管理　layout：權限檢查 + 管理外殼
 ```
 
-路由放哪一區由 manifest 的 `group: "user" | "admin"` 決定，頁面檔要放在對應的 route group
-或目錄底下，管理區路由的 `path` 要以 `/admin/` 開頭（`tests/config/routes.test.ts` 檢查）。
-有管理權限的人在兩區之間有切換連結。
+manifest 的 `group: "user" | "admin"` 決定區域，頁面檔放在對應的目錄，管理區的 `path` 以 `/admin/` 開頭
+（`tests/config/routes.test.ts` 檢查）。有管理權限的人在兩區間有切換連結。
 
 | 檔案 | 允許的內容 |
 |---|---|
@@ -156,9 +152,8 @@ app/
 | `error`／`global-error`／`not-found`／`loading` | 用 `shared/ui` 的 `MessagePage`／`RouteLoading` 填文案。`global-error` 取代整個 root layout，要自己再載入 layout 的那組樣式表 |
 | `route.ts` | 不依賴模組、session 或後端的常數回應（目前只有 `healthz`） |
 
-**`<main>` 地標由外框的擁有者提供**：`(protected)` 兩區是外殼（`config/shell/AreaLayout.tsx`），
-頁面與模組不要再渲染 `<main>`（`tests/architecture.test.ts` 擋）；公開頁（登入）與整頁的
-`MessagePage` 沒有外殼，自己提供。
+**`<main>` 由外框提供**：`(protected)` 兩區由外殼（`config/shell/AreaLayout.tsx`）提供，頁面與模組不再渲染
+（`tests/architecture.test.ts` 擋）；公開頁與整頁的 `MessagePage` 沒有外殼，自己提供。
 
 **Next 只讀 route 檔自己的 export，模組裡的不會跟過來**，Next 本身漏掉不會報錯。要逐一接上的：
 `metadata`、`generateMetadata`、`viewport`、`generateViewport`、`generateStaticParams`、`dynamic`、
@@ -173,10 +168,9 @@ app/
 
 - 只從 `@/shared/ui` 匯出。需要 kit 的某個樣式時，在 kit 裡多包一個元件，不要讓 class 外流。
 - **不要放帶 `server-only` 的東西**：client component 也會引用這個入口。
-- **`"use client"` 只加在真的用到 state、effect、context 的檔案**；要加互動時另開檔案，不要在
-  既有的版面檔補指示詞（會把同檔所有元件拖進 client bundle）。
-- 間距用 `spacing()` 換成 `var(--space-n)`，不要在元件裡算 px；`Flex` 沒帶的 prop 不可輸出
-  預設值，否則會蓋掉呼叫端的 class（`tests/shared/ui/ui.test.tsx` 守）。
+- **`"use client"` 只加在用到 state、effect、context 的檔案**；加互動就另開檔案，不在版面檔補指示詞（會把同檔元件全拖進 client bundle）。
+- 間距用 `spacing()` 換成 `var(--space-n)`，不在元件裡算 px；`Flex` 沒帶的 prop 不輸出預設值，否則會蓋掉呼叫端的 class
+  （`tests/shared/ui/ui.test.tsx` 守）。
 
 ## Backend module 介面
 
@@ -191,9 +185,8 @@ modules/products/
 └── permissions.py       # 有引入權限時才有 (users、roles 沒有: 後台只開放給超級管理者)
 ```
 
-- **service 長大了就依授權模型拆檔**，不要開 `services/` 子目錄。例：`modules/users/` 的
-  `service.py`（管理者對任意使用者）、`account.py`（使用者對自己的帳號）、`superuser.py`
-  （建立超級管理者，只給 CLI 用），共用的錯誤在 `errors.py`。
+- **service 長大就依授權模型拆檔**，不開 `services/`。例：`modules/users/` 的 `service.py`（管理者對任意使用者）、
+  `account.py`（使用者對自己）、`superuser.py`（建超管，只給 CLI），共用錯誤在 `errors.py`。
 - 與業務無關的能力（密碼雜湊、token、權限展開）用 `shared/auth/`，不要在模組裡再寫一份。
 - `app/registry.py` 的 `ENABLED_MODULES` 是唯一啟用清單。重複的 module 名稱、router prefix、
   資料表名稱會在啟動時被拒絕（規則在 `shared/module.py`）。測試可用 `create_app(modules=...)`
@@ -204,9 +197,8 @@ modules/products/
   欄位（例如 `users` 用 `current_user_resolver` 提供身分來源），否則那個模組就不可替換了。
 - 權限目錄是**每個 app 一份**（`app.state.permission_catalog`），依實際啟用的模組建立，不要改成
   全域變數。
-- **docstring 會外流到 API 文件**：route function、端點用到的 pydantic model、進到 schema 的 enum，
-  它們的 docstring 會進 OpenAPI 與前端型別檔。這三處只寫給呼叫端看的內容，內部設計說明寫在
-  模組層 docstring 或一般註解（範例見 `modules/users/schema.py` 開頭）。
+- **docstring 會外流到 API 文件**：route function、端點用的 pydantic model、進 schema 的 enum 的 docstring 會進 OpenAPI
+  與前端型別檔，只寫給呼叫端看的；內部說明寫在模組層 docstring 或註解（`modules/users/schema.py` 開頭）。
 
 ### 兩份刻意中央化的清單
 
@@ -233,9 +225,8 @@ apps/web/shared/api/entities.ts                ← 平台 entity（Permission、
 apps/web/modules/*/types.ts                    ← 業務 entity，以 Schema<"RoleInfo"> 命名
 ```
 
-兩份產出都進版控，讓「後端改了對外介面」在 code review 的 diff 裡直接看得到。
-寫進 repo 的只有 `make gen-types`；`make check`（本機與 CI）與 `make release` 只把它重產到暫存目錄
-再比對，不一致就擋，不會改動工作目錄（`scripts/lib/contract.sh`）。
+兩份產出都進版控，對外介面的變更在 review 的 diff 裡看得到。只有 `make gen-types` 寫進 repo；`make check` 與
+`make release` 重產到暫存目錄再比對，不一致就擋，不改工作目錄（`scripts/lib/contract.sh`）。
 什麼時候要跑 `make gen-types` 見 [`development.md`](development.md#指令)。
 兩個檔案的路徑只定義在 `scripts/lib/common.sh` 的 `CONTRACT`、`WEB_SCHEMA`。
 
