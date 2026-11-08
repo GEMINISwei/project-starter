@@ -116,6 +116,20 @@ def test_stop_requires_check_again_after_new_changes(agent: str, repo: Path) -> 
     assert blocked(stop(agent, repo)), "未追蹤的檔案改過也要重跑"
 
 
+
+@pytest.mark.parametrize("agent", AGENTS)
+def test_stop_allows_commit_and_docs_changes_after_check(agent: str, repo: Path) -> None:
+    # agent 的習慣是跑完檢查再 commit: commit 與只改文件不該讓它重跑幾分鐘的 make check。
+    write(repo, SOURCE, "changed\n")
+    record_check(repo)
+    git(repo, "commit", "-q", "-am", "impl")
+    assert stop(agent, repo) is None, "commit 之後"
+    write(repo, "README.md", "changed\n")
+    write(repo, "docs/new.md", "x\n")
+    assert stop(agent, repo) is None, "只改 Markdown"
+    write(repo, SOURCE, "changed again\n")
+    assert blocked(stop(agent, repo)), "程式又改了"
+
 @pytest.mark.parametrize("agent", AGENTS)
 def test_stop_ignores_docs_only_changes(agent: str, repo: Path) -> None:
     assert stop(agent, repo) is None, "沒有改動"
