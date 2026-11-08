@@ -25,7 +25,7 @@ description: 開始任何要進 main 的改動時使用（新功能、修正、�
 5. **實作**：測試檔此時鎖定。測試變紅先改實作；真的認為測試要改，先向使用者說明那個測試驗證的條件、
    沒過的原因，得到同意才改，並在 PR 描述寫明原本的斷言為什麼錯。
 6. **收尾**：照 `AGENTS.md`〈改完之後〉的表補做（migration、`make gen-types`、`make check integration`、
-   E2E），最後 `make check` 全綠。E2E 在本機用 `make e2e test <檔案>` 跑相關的 spec 就好，正式環境 image 的
+   E2E），最後 `make check` 全綠（收尾時 hook 也會確認改過的程式跑過它）。E2E 在本機用 `make e2e test <檔案>` 跑相關的 spec 就好，正式環境 image 的
    完整版本由 CI 的 `e2e` 跑；改到 nginx、compose 或只有正式環境才有的行為時，本機也跑一次 `make check e2e`。
 7. **自我檢查、更新 PR 描述**：照 `self-review` 這個 skill 逐條對照驗收條件與 diff，「摘要」對上最新的 diff，
    「驗證」每條寫上結果（成功失敗都寫），「檢查」只列 diff 看不出來、要有人去確認的事。

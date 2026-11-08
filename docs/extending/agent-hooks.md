@@ -29,14 +29,17 @@ Claude 與 Codex 的 hook 協定相同（事件名稱、stdin 收的 JSON、回�
 |---|---|---|
 | `guard_commands.py` | `PreToolUse`（shell 指令） | push 到 `main`、用 `--no-verify` 略過 git hook（`commit -n` 也算）、改 `core.hooksPath`、合併 PR 或轉 Ready（`gh pr merge`、`gh pr ready`，以及同樣效果的 `gh api` 與 GraphQL mutation）、`npm` 的 `--force`／`--legacy-peer-deps`、直接下 `docker compose`、繞過確認自己放行測試檔、分支或防線檔案、用 shell 寫入防線檔案、用 shell 改測試檔（見下一節）、有開著的 PR 時開新分支（見〈一次一個 PR〉）、繞過 `publish.sh` 發布或部署（見下方） |
 | `guard_tests.py` | `PreToolUse`（改檔） | 實作開始後改測試檔（見〈測試鎖定〉）、任何時候改防線檔案（見〈防線檔案〉） |
+| `require_check.py` | `Stop` | 改過的程式還沒跑過 `make check` 就收尾（見〈收尾前的 make check〉） |
+| `session_context.py` | `SessionStart` | 不擋，開工時把分支、開著的 PR、測試鎖狀態加進 agent 的上下文（見〈開工時的現況〉） |
 
 ## 測試鎖定
 
 把 [`testing.md`](../testing.md#改程式不改測試)〈改程式不改測試〉變成 agent 動手當下的檢查：
 
 - **測試檔**：`apps/*/tests/**`、`e2e/tests/**`，輔助檔與資料也算（判斷在 `.agents/hooks/test_lock.py`）。
-- **實作開始了**：分支相對 `origin/main` 的差異（含還沒 commit 與沒追蹤的）有 `apps/`、`e2e/` 底下的非測試檔案。
-  只改文件或設定不算。不需要任何人標記，從 git 推導。
+- **實作開始了**：分支相對 `origin/main` 的差異（含還沒 commit 與沒追蹤的）有 `apps/`、`e2e/`、`.agents/hooks/`、
+  `.github/scripts/`、`scripts/` 底下的非測試、非 Markdown 檔案（後三者的測試也放在 `apps/api/tests/`）。
+  只改文件或設定不算。不需要任何人標記，從 git 推導；CI 的 `pr` 用同一個判斷（`test_lock.is_implementation`）。
 - **之後改測試檔要使用者同意**，兩家的方式不同：
 
 | | 攔下 | 使用者怎麼同意 |
@@ -93,6 +96,27 @@ shell 指令改測試檔由 `guard_commands.py` 用同一套判斷攔下（兩�
 
 放行寫在 `.git/agent-approved-parallel-branches`（不進版控），**針對分支名稱**：插隊的那個分支之後開 PR 不會再問。
 直接寫放行檔、換寫法執行申請指令都會被擋下。
+
+## 收尾前的 make check
+
+agent 要結束這一輪時，`require_check.py` 檢查分支上改過的程式有沒有跑過 `make check`：
+
+- `make check`（不帶參數）全部通過時，`scripts/check.sh` 呼叫 `.agents/hooks/check_stamp.py record`，
+  把當時工作目錄的實際內容（含還沒 commit 與沒追蹤的檔案，不含 Markdown）記成一個 git tree，
+  寫在 `.git/agent-last-check`。只跑其中一項（`make check test`）不算。
+- 分支上有非 Markdown 的改動、而且工作目錄跟紀錄不一樣時，回 `decision: block`，agent 會先跑 `make check` 再收尾。
+  紀錄不看 HEAD 也不含 Markdown：跑完檢查再 commit、或只改文件，都不必重跑；程式改了任何一個字就要。
+- **同一輪已經被要求過一次就放行**（`stop_hook_active`）：agent 停下來可能只是要問使用者問題，說明一句就能結束，
+  不會被逼著先跑幾分鐘的檢查，也不會無限迴圈。
+
+## 開工時的現況
+
+`session_context.py` 在開新 session、恢復或壓縮上下文之後（`matcher`：`startup|resume|clear|compact`），
+把目前分支、使用者開著的 PR、測試鎖的狀態與插隊放行的分支加進 agent 的上下文。agent 這時不記得進行到哪，
+最容易在等合併時順手開新分支，或忘了實作已經開始。查不到 PR（沒網路、`gh` 沒登入）時省略那一行。
+
+`.agents/hooks/` 的每個 hook 都由 `apps/api/tests/test_agent_session_hooks.py` 用 `PATH` 上的 `python3`
+實際跑一次：其他測試用的是 api 的虛擬環境，抓不到使用者機器上 `python3` 太舊、腳本一跑就壞的情況。
 
 ## 發布 release
 
