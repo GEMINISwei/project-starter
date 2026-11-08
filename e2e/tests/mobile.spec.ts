@@ -1,10 +1,28 @@
 import { expect } from "@playwright/test"
 import { test } from "./support"
 
-// WebApp 在手機上要像原生 App: 點輸入框不放大畫面。iOS Safari 會在輸入框字級小於 16px 時
-// 放大畫面, 所以觸控裝置上的輸入框字級要至少 16px。不用 `maximum-scale=1` 擋縮放:
-// 那也會擋掉使用者自己的雙指縮放。
+// WebApp 在手機上要像原生 App: 畫面不能縮放 (理由與代價見 docs/decisions/0012-lock-mobile-zoom.md)。
+// viewport 鎖住雙指縮放, `touch-action` 擋雙擊放大; iOS Safari 分頁會忽略 `user-scalable`,
+// 所以輸入框字級另外保持至少 16px, 點擊時才不會自動放大。
 test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true })
+
+test("viewport 鎖住縮放，雙指不能放大畫面", async ({ page }) => {
+  await page.goto("/settings")
+
+  const content = await page.locator("meta[name=viewport]").getAttribute("content")
+  const directives = (content ?? "").split(",").map((part) => part.trim().replace(/\s+/g, ""))
+
+  expect(directives).toContain("maximum-scale=1")
+  expect(directives).toContain("user-scalable=no")
+})
+
+test("雙擊不會放大畫面", async ({ page }) => {
+  await page.goto("/settings")
+
+  const touchAction = await page.evaluate(() => getComputedStyle(document.documentElement).touchAction)
+
+  expect(touchAction).toBe("manipulation")
+})
 
 test("輸入框字級至少 16px，點擊時不會放大畫面", async ({ page }) => {
   await page.goto("/settings")
