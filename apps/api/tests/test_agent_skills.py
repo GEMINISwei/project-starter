@@ -83,9 +83,9 @@ def manual_only(skill: Path) -> tuple[bool, bool]:
     return claude_manual, codex_manual
 
 
-# 會影響這個 repo 以外的 skill: 發版會部署, 同步下游會改別的 repo。
+# 會影響這個 repo 以外的 skill: 發版會部署。
 # 只檢查兩家一致的話, 兩邊都忘了設也會通過, 所以這幾個要明列並要求一定是手動。
-EXTERNAL_EFFECT_SKILLS = ("release", "sync-downstream")
+EXTERNAL_EFFECT_SKILLS = ("release",)
 
 
 @pytest.mark.parametrize("name", EXTERNAL_EFFECT_SKILLS)
