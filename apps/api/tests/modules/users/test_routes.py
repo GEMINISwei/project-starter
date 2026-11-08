@@ -63,6 +63,21 @@ async def test_get_users_me_with_valid_token_returns_current_user(client: AsyncC
     }
 
 
+@pytest.mark.asyncio
+async def test_get_me_with_removed_permission_returns_200(client: AsyncClient, set_current_users):
+    """角色上留著已移除的權限字串 (停用模組、改名) 時, 登入者仍要拿得到自己的資料,
+    否則前端會把他導回登入頁, 整批人進不了系統。"""
+    set_current_users(
+        {**USERS, "stale": {**USERS["viewer"], "id": "user-stale", "permissions": ["gone:read"]}}
+    )
+    authenticate(client, "stale")
+
+    response = await client.get("/api/users/me")
+
+    assert response.status_code == 200
+    assert response.json()["permissions"] == []
+
+
 # 後台 (使用者管理) 只開放給超級管理者: 角色上的權限是給一般帳號的業務功能用的,
 # 沒有任何一個權限能打開這些端點。
 ADMIN_ROUTES = [

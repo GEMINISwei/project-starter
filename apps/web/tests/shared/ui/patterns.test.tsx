@@ -51,6 +51,38 @@ describe("shared list patterns", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument()
   })
 
+  it("Menu 開啟時焦點移到第一個項目，方向鍵可以在項目間移動", async () => {
+    render(
+      <Menu
+        trigger="⋯"
+        triggerLabel="操作"
+        items={[{ label: "編輯", onClick: vi.fn() }, { label: "刪除", onClick: vi.fn() }]}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole("button", { name: "操作" }))
+    expect(screen.getByRole("menuitem", { name: "編輯" })).toHaveFocus()
+
+    await userEvent.keyboard("{ArrowDown}")
+    expect(screen.getByRole("menuitem", { name: "刪除" })).toHaveFocus()
+
+    // 到底之後繞回第一個, 往上也一樣。
+    await userEvent.keyboard("{ArrowDown}")
+    expect(screen.getByRole("menuitem", { name: "編輯" })).toHaveFocus()
+    await userEvent.keyboard("{ArrowUp}")
+    expect(screen.getByRole("menuitem", { name: "刪除" })).toHaveFocus()
+  })
+
+  it("Menu 按 Escape 會關閉選單，焦點還給觸發按鈕", async () => {
+    render(<Menu trigger="⋯" triggerLabel="操作" items={[{ label: "編輯", onClick: vi.fn() }]} />)
+
+    await userEvent.click(screen.getByRole("button", { name: "操作" }))
+    await userEvent.keyboard("{Escape}")
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "操作" })).toHaveFocus()
+  })
+
   it("Menu 往上展開時以觸發點的上緣定位，不會蓋住觸發點", async () => {
     render(
       <Menu trigger="⋯" triggerLabel="帳號選單" placement="above" items={[{ label: "登出", onClick: vi.fn() }]} />,

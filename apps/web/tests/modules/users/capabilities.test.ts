@@ -87,17 +87,23 @@ describe("getEditableUserFields", () => {
 
 describe("roleIdsForUpdate", () => {
   it("可指派角色且選了未指派時送出空陣列", () => {
-    expect(roleIdsForUpdate(true, "")).toEqual([])
+    expect(roleIdsForUpdate(true, "", ["r-staff"])).toEqual([])
   })
 
   it("可指派角色且選了角色時送出該角色", () => {
-    expect(roleIdsForUpdate(true, "r-staff")).toEqual(["r-staff"])
+    expect(roleIdsForUpdate(true, "r-staff", [])).toEqual(["r-staff"])
   })
 
   // 送了就會撞上後端的保護規則 (不能改自己、不能改超管的角色)。
   it("不能指派角色時不送 role_ids", () => {
-    expect(roleIdsForUpdate(false, "r-staff")).toBeUndefined()
-    expect(roleIdsForUpdate(false, "")).toBeUndefined()
+    expect(roleIdsForUpdate(false, "r-staff", [])).toBeUndefined()
+    expect(roleIdsForUpdate(false, "", [])).toBeUndefined()
+  })
+
+  // 使用者身上的角色可能已經被停用, 下拉選單裡沒有它; 原樣送回去會被後端當成「指派停用的角色」擋下。
+  it("角色沒有改動時不送 role_ids", () => {
+    expect(roleIdsForUpdate(true, "r-old", ["r-old"])).toBeUndefined()
+    expect(roleIdsForUpdate(true, "", [])).toBeUndefined()
   })
 })
 
