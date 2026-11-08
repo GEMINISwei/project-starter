@@ -2,14 +2,19 @@
 """make check 全部通過時的工作目錄指紋: python3 .agents/hooks/check_stamp.py record
 
 scripts/check.sh 在不帶參數的 make check 全部通過後呼叫 record; Stop hook (require_check.py)
-比對現在的指紋, 沒變就代表這個狀態已經檢查過。指紋涵蓋 HEAD、還沒 commit 的差異與沒追蹤的檔案內容,
-所以 commit 之後不必重跑, 但任何一個字改了都要重跑。
+比對現在的指紋, 沒變就代表這個狀態已經檢查過。
+
+指紋是工作目錄實際內容 (含還沒 commit 與沒追蹤的檔案) 的 git tree, 不含 Markdown, 也不看 HEAD:
+agent 的習慣是跑完檢查再 commit, commit 與只改文件不該讓它重跑幾分鐘的 make check;
+程式改了任何一個字就要重跑。
 """
 
 from __future__ import annotations
 
-import hashlib
+import os
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 from test_lock import git, repo_root
@@ -23,14 +28,29 @@ def stamp_file(root: Path) -> Path:
 
 
 def fingerprint(root: Path) -> str:
-    digest = hashlib.sha256()
-    digest.update((git(root, "rev-parse", "HEAD") or "").encode())
-    digest.update((git(root, "diff", "HEAD", "--binary") or "").encode())
-    untracked = sorted((git(root, "ls-files", "--others", "--exclude-standard") or "").splitlines())
-    for path in untracked:
-        digest.update(path.encode())
-        digest.update((git(root, "hash-object", "--", path) or "").encode())
-    return digest.hexdigest()
+    """用暫時的 index 把工作目錄寫成 tree, 不動到真正的 index (使用者 stage 的內容不受影響)。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        env = {**os.environ, "GIT_INDEX_FILE": str(Path(tmp) / "index")}
+        for args in (
+            ["add", "-A", "--", "."],
+            ["rm", "-r", "-q", "--cached", "--ignore-unmatch", "--", "*.md"],
+        ):
+            subprocess.run(  # noqa: S603
+                ["git", *args],  # noqa: S607
+                cwd=root,
+                env=env,
+                capture_output=True,
+                check=True,
+            )
+        result = subprocess.run(
+            ["git", "write-tree"],  # noqa: S607
+            cwd=root,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    return result.stdout.strip()
 
 
 def checked(root: Path) -> bool:
