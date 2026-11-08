@@ -53,8 +53,8 @@
 - **開發流程：Feature Branch → Draft PR → Incremental Commits → Code Review → Squash Merge**。
   不直接 push `main`；PR 標題用 Conventional Commits，因為 squash 後它就是 `main` 的 commit
   （[說明](docs/workflow.md#開發流程)）。
-- **一次只有一個進行中的 PR**：前一個合併（或關閉）之後才開下一個分支；要插隊先問使用者
-  （[說明](docs/workflow.md#一次一個-pr)）。
+- **一次只有一個進行中的 PR**：前一個合併（或關閉）之後才開下一個分支；要插隊照 `hotfix` skill 先問使用者，
+  hook 會攔下（[說明](docs/workflow.md#一次一個-pr)）。
 - **PR 描述固定三段：摘要、驗證（成功失敗都寫）、檢查（給審查者的 checkbox）**。
   `gh pr create --body` 會跳過 [`PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md)，
   自己帶內文時也照這三段；之後推新 commit 要回頭補摘要與驗證。PR 標題與三段由 CI 的 `pr` 擋。
