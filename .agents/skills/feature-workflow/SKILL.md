@@ -1,35 +1,28 @@
 ---
 name: feature-workflow
-description: 開始任何要進 main 的改動時使用（新功能、修正、文件、設定）：開分支、在 Draft PR 寫驗收條件、先寫測試、實作、make check，到 Ready for review 的步驟。
+description: 開始任何要進 main 的改動時使用（新功能、修正、文件、設定）：開分支、驗收條件、先寫測試、Draft PR、實作、make check，到交給使用者審查。
 ---
 
-# 從開分支到 Ready for review
+# 從開分支到交給使用者審查
 
-規則的完整說明在 [`workflow.md`](../../../docs/workflow.md#開發流程) 與
-[`testing.md`](../../../docs/testing.md)，這裡只列步驟與容易漏的地方。
+規則在 [`workflow.md`](../../../docs/workflow.md#開發流程) 與 [`testing.md`](../../../docs/testing.md)。
 
-1. **開分支**：先確認沒有進行中的 PR（`gh pr list --author @me --state open`）；有的話停下來告訴使用者，
-   等它合併或關閉。正式環境出問題要插隊時改照 `hotfix` 這個 skill 做（[說明](../../../docs/workflow.md#一次一個-pr)）。
-   沒有才從最新的 `main` 開 `<type>/<kebab-case>`。一個分支只做一件事，途中發現別的問題就記下來另開。
-2. **先寫驗收條件，給使用者確認**：每條接一個測試名稱（前端與 E2E 用中文句子，後端用
-   `test_<動作>_<條件>_<結果>`）。寫不出測試名稱的那條，先問使用者，不要自己猜。
-   **列給使用者看、得到確認才進第 3 步**，方向已經在對話裡談定也一樣
-   （[說明](../../../docs/testing.md#驗收條件與測試名稱)）。
-3. **先寫測試**：單元測試放該 app 的 `tests/`，與原始碼同構；會改到畫面流程時 E2E 也先寫。
-   跑單項確認是紅燈（`uv run pytest tests/ -k xxx`、`npm run test -- -t "名稱"`）。
-   E2E 先 `make e2e up` 起這個 checkout 的常駐環境（dev mode，之後改原始碼不必重建），
-   再用 `make e2e test <檔案>` 或 `make e2e grep "名稱"` 只跑相關的那幾個。
-4. **commit 測試、push、開 Draft PR**：PR 標題用 Conventional Commits；描述照
-   [PR 模板](../../../.github/PULL_REQUEST_TEMPLATE.md) 的三段，驗收條件寫進「驗證」並標「待實作」。
-   commit 最後加 `Co-authored-by`（寫到模型與版本）。
-5. **實作**：測試檔此時鎖定。測試變紅先改實作；真的認為測試要改，先向使用者說明那個測試驗證的條件、
-   沒過的原因，得到同意才改，並在 PR 描述寫明原本的斷言為什麼錯。
-6. **收尾**：照 `AGENTS.md`〈改完之後〉的表補做（migration、`make gen-types`、`make check integration`、
-   E2E），最後 `make check` 全綠（收尾時 hook 也會確認改過的程式跑過它）。E2E 在本機用 `make e2e test <檔案>` 跑相關的 spec 就好，正式環境 image 的
-   完整版本由 CI 的 `e2e` 跑；改到 nginx、compose 或只有正式環境才有的行為時，本機也跑一次 `make check e2e`。
-7. **自我檢查、更新 PR 描述**：照 `self-review` 這個 skill 逐條對照驗收條件與 diff，「摘要」對上最新的 diff，
-   「驗證」每條寫上結果（成功失敗都寫），「檢查」只列 diff 看不出來、要有人去確認的事。
-   push 之後改用 `watch-pr` 這個 skill 等 CI。
-   回報使用者之前的最後一個動作，是照 `watch-pr` 第 2 節在背景開始等合併：這時 agent 的部分做完了，
-   之後合併時收尾不會撞上進行中的工作。
-8. **Ready for review 由使用者決定**，不要自己轉，也不要自己合併。
+1. **開分支**：`gh pr list --author @me --state open` 有開著的 PR 就停下來回報；正式環境出問題才照 `hotfix`。
+   沒有就從最新的 `main` 開 `<type>/<kebab-case>`。一個分支只做一件事，途中發現的別的問題記下來另開。
+2. **驗收條件**：每條接一個測試名稱（前端與 E2E 用中文句子，後端 `test_<動作>_<條件>_<結果>`）。
+   寫不出測試名稱的先問。**列給使用者確認才往下**，對話裡談定的方向也一樣。
+3. **先寫測試**：放該 app 的 `tests/`，與原始碼同構；改到畫面流程時 E2E 也先寫。跑單項確認紅燈
+   （`uv run pytest tests/ -k xxx`、`npm run test -- -t "名稱"`、`make e2e up` 後 `make e2e test <檔案>`）。
+4. **commit 測試、push、開 Draft PR**：標題 Conventional Commits；描述照 [PR 模板](../../../.github/PULL_REQUEST_TEMPLATE.md)
+   三段，驗收條件寫進「驗證」標「待實作」。commit 結尾加 `Co-authored-by`（寫到模型與版本）。
+5. **實作**：測試變紅先改實作。要改測試先向使用者說明那個測試驗證的條件與沒過的原因，同意才改，
+   並在「驗證」段寫出測試檔路徑與原本的斷言為什麼錯。
+6. **收尾**：照 `AGENTS.md`〈改完之後〉補做（migration、`make gen-types`、`make check integration`、相關的 E2E），
+   最後 `make check` 全綠。改到 nginx、compose 或只有正式環境才有的行為時加跑 `make check e2e`。
+7. **交給使用者前自己審一次**（`git diff origin/main...HEAD`）：
+   - 每條驗收條件有對應的測試，真的斷言到那個條件；diff 裡對不上任何一條的，是漏寫的條件或範圍外的改動
+   - 沒有順手的格式、改名、無關修正，也沒有多出條件沒要求的抽象或設定
+   - 新增的抑制註解同一行有理由；動到防線檔案、`AGENTS.md`、skills 的列進「檢查」段，說明會不會讓檢查變寬鬆
+   - 行為或規則有變的，`AGENTS.md`、`docs/`、skills 一起改了
+8. **更新 PR 描述**：「摘要」對上最新 diff，「驗證」每條寫結果（成功失敗都寫），「檢查」只列 diff 看不出、要人確認的事。
+   push 後照 `watch-pr` 等 CI 並開始等合併，再回報使用者。Ready for review 與合併由使用者做。
