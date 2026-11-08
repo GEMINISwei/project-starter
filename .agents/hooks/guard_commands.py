@@ -4,8 +4,8 @@
 用法 (由 .claude/settings.json 與 .codex/hooks.json 呼叫): guard_commands.py <claude|codex>
 
 兩家的協定相同: stdin 收一個 JSON, 要擋就在 stdout 印 `hookSpecificOutput.permissionDecision`
-為 deny 的 JSON, 放行就什麼都不印。參數給兩家行為不同的地方: 發布 release 時 Claude 回 ask,
-Codex 不支援 ask, 改由 .codex/rules/ 要求確認。
+為 deny 的 JSON, 放行就什麼都不印。參數給兩家行為不同的地方: 發布 release 與用 shell 改測試檔時
+Claude 回 ask, Codex 不支援 ask, 改由 .codex/rules/ 或申請指令要求確認。
 
 只拆解指令的結構 (`&&`、`;`、`|`、子 shell、`bash -c`), 不做完整的 shell 解析: 這是讓 agent
 提早停下來的提醒, 不是安全機制, 真正擋得住的是 git 與 CI。只用標準函式庫, 不必先裝相依。

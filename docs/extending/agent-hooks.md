@@ -27,7 +27,7 @@ Claude 與 Codex 的 hook 協定相同（事件名稱、stdin 收的 JSON、回�
 
 | 腳本 | 事件 | 擋什麼 |
 |---|---|---|
-| `guard_commands.py` | `PreToolUse`（shell 指令） | push 到 `main`、用 `--no-verify` 略過 git hook（`commit -n` 也算）、改 `core.hooksPath`、`gh pr merge`、`npm` 的 `--force`／`--legacy-peer-deps`、直接下 `docker compose`、繞過確認自己放行測試檔、直接下 `gh release create/edit/delete` 或手動觸發 Deploy（發布只能經過 `publish.sh`，見下方） |
+| `guard_commands.py` | `PreToolUse`（shell 指令） | push 到 `main`、用 `--no-verify` 略過 git hook（`commit -n` 也算）、改 `core.hooksPath`、合併 PR 或轉 Ready（`gh pr merge`、`gh pr ready`，以及同樣效果的 `gh api` 與 GraphQL mutation）、`npm` 的 `--force`／`--legacy-peer-deps`、直接下 `docker compose`、繞過確認自己放行測試檔、用 shell 改測試檔（見下一節）、繞過 `publish.sh` 發布或部署（見下方） |
 | `guard_tests.py` | `PreToolUse`（改檔） | 實作開始後改測試檔，見下一節 |
 
 ## 測試鎖定
@@ -48,7 +48,12 @@ Claude 與 Codex 的 hook 協定相同（事件名稱、stdin 收的 JSON、回�
 就失效。申請指令的寫法固定：直接寫放行檔、換寫法執行申請指令都會被 `guard_commands.py` 擋下，否則就繞過了確認。
 Claude 也能用同一個申請指令（`.claude/settings.json` 的 `permissions.ask` 讓它一樣要確認），但直接按允許比較方便。
 
-agent 用 shell 指令（`sed -i`、重新導向）改測試檔時不會被攔：hook 只看改檔工具。
+shell 指令改測試檔由 `guard_commands.py` 用同一套判斷攔下（兩支 hook 共用 `test_lock.py`）。
+它跟著 `cd` 推算目錄，認得明確指名測試檔的常見寫法：`sed -i`、`perl -pi`、重新導向（含 heredoc）、`tee`、
+`cp`／`mv` 的目的地、`rm`、`git rm`／`git mv`／`git restore`、`git checkout -- <檔>`。認不出來的不擋：
+
+- 格式化工具（`ruff format`、`eslint --fix`、`prettier --write`）：只動排版、不動斷言，擋下來誤判太多。
+- 整批切換（`git checkout main`、`git stash`、`git reset`）與在腳本裡寫檔（`python -c`）。
 
 ## 發布 release
 
@@ -59,8 +64,14 @@ agent 用 shell 指令（`sed -i`、重新導向）改測試檔時不會被攔�
 | Claude | `guard_commands.py` 回 `ask`，`.claude/settings.json` 的 `permissions.ask` 也列了它 |
 | Codex | hook 不支援 `ask`，由 `.codex/rules/publish-release.rules` 的 `prompt` 跳確認 |
 
-`gh release create/edit/delete`、`gh workflow run deploy…` 與換寫法呼叫 `publish.sh`（`bash …`、`./…`）
-兩家都擋下，否則就繞過了確認。這跟測試檔放行的申請指令是同一種做法。
+這些會部署的寫法兩家都擋下，否則就繞過了確認。這跟測試檔放行的申請指令是同一種做法：
+
+- `gh release create/edit/delete`、`gh workflow run deploy…`、換寫法呼叫 `publish.sh`（`bash …`、`./…`）
+- `gh api` 建立、修改或刪除 release、觸發 workflow dispatch、重跑 run；GraphQL 的 `createRelease` 等 mutation
+- `gh run rerun`：先用 `gh run view` 查是哪個 workflow，Deploy 或查不到時擋下（重跑 Deploy 等於重新部署）
+
+GitHub 那一側刻意不設 environment reviewer，所以這裡是部署前唯一的確認
+（[ADR 0014](../decisions/0014-no-environment-reviewer-for-deploys.md)）。用 `curl` 帶 token 直接打 API 擋不住。
 
 ## 新增一個 hook
 

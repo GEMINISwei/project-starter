@@ -197,7 +197,9 @@ GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進�
   `deploy.yml` 就是會執行的那份，workflow 裡「只能從 main 執行」的檢查可以在那個 branch 上被刪掉；
   environment 的規則由 GitHub 判斷，其他 ref 拿不到這套系統的 secrets。少了 `main` 那條，
   回滾與部署到其他組會在 deploy job 被 GitHub 擋下（environment protection rules）。
-  `main` 要有 ruleset（見 [`workflow.md`](workflow.md#開發流程)），它上面的 `deploy.yml` 才一定經過 PR。
+  `main` 要有 ruleset（見 [`workflow.md`](workflow.md#github-設定)），它上面的 `deploy.yml` 才一定經過 PR。
+- [ ] **不勾 Required reviewers**：發布前已經在對話裡確認過，再到 GitHub 上按 Approve 太繁瑣；
+      代價與什麼情況要改回來見 [ADR 0014](decisions/0014-no-environment-reviewer-for-deploys.md)。
 - [ ] 第一次推上去之後，到 GHCR 的 package 設定確認 Visibility：image 裡有完整的程式碼（但沒有機密），
       **私有 repo 要設 Private**；公開 repo 的 image 內容等於原始碼，設 Public 也可以，而且免費。
       **改成 Public 之後就改不回 Private**
