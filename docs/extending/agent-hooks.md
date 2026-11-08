@@ -27,7 +27,7 @@ Claude 與 Codex 的 hook 協定相同（事件名稱、stdin 收的 JSON、回�
 
 | 腳本 | 事件 | 擋什麼 |
 |---|---|---|
-| `guard_commands.py` | `PreToolUse`（shell 指令） | push 到 `main`、用 `--no-verify` 略過 git hook（`commit -n` 也算）、改 `core.hooksPath`、合併 PR 或轉 Ready（`gh pr merge`、`gh pr ready`，以及同樣效果的 `gh api` 與 GraphQL mutation）、`npm` 的 `--force`／`--legacy-peer-deps`、直接下 `docker compose`、繞過確認自己放行測試檔、分支或防線檔案、用 shell 寫入防線檔案、用 shell 改測試檔（見下一節）、有開著的 PR 時開新分支（見〈一次一個 PR〉）、繞過 `publish.sh` 發布或部署（見下方） |
+| `guard_commands.py` | `PreToolUse`（shell 指令） | push 到 `main`（`--dry-run` 不算）、用 `--no-verify` 略過 git hook（`commit -n` 也算）、改 `core.hooksPath`、合併 PR 或轉 Ready（`gh pr merge`、`gh pr ready`，以及同樣效果的 `gh api` 與 GraphQL mutation）、`npm` 的 `--force`／`--legacy-peer-deps`、直接下 `docker compose`、繞過確認自己放行測試檔、分支或防線檔案、用 shell 寫入防線檔案、用 shell 改測試檔（見下一節）、有開著的 PR 時開新分支（見〈一次一個 PR〉）、繞過 `publish.sh` 發布或部署（見下方） |
 | `guard_tests.py` | `PreToolUse`（改檔） | 實作開始後改測試檔（見〈測試鎖定〉）、任何時候改防線檔案（見〈防線檔案〉） |
 | `require_check.py` | `Stop` | 改過的程式還沒跑過 `make check` 就收尾（見〈收尾前的 make check〉） |
 | `session_context.py` | `SessionStart` | 不擋，開工時把分支、開著的 PR、測試鎖狀態加進 agent 的上下文（見〈開工時的現況〉） |
@@ -48,15 +48,27 @@ Claude 與 Codex 的 hook 協定相同（事件名稱、stdin 收的 JSON、回�
 | Codex | hook 回 `deny`（不支援 `ask`），理由裡請 agent 先說明再申請 | agent 執行 `python3 .agents/hooks/approve_test_edit.py <測試檔>`，`.codex/rules/approve-test-edit.rules` 讓它一定跳確認，按允許後再改就放行 |
 
 放行寫在 `.git/agent-approved-test-edits`（不進版控），**只對列出的檔案、只在目前的 HEAD 上有效**，有新的 commit
-就失效。申請指令的寫法固定：直接寫放行檔、換寫法執行申請指令都會被 `guard_commands.py` 擋下，否則就繞過了確認。
+就失效。申請指令的寫法固定：直接寫放行檔、換寫法執行申請指令（含 `python -c` 裡的 `runpy`）都會被
+`guard_commands.py` 擋下，否則就繞過了確認。只讀放行檔（`cat`、`jq`、`python -m json.tool`）不擋。
 Claude 也能用同一個申請指令（`.claude/settings.json` 的 `permissions.ask` 讓它一樣要確認），但直接按允許比較方便。
 
 shell 指令改測試檔由 `guard_commands.py` 用同一套判斷攔下（兩支 hook 共用 `test_lock.py`）。
-它跟著 `cd` 推算目錄，認得明確指名測試檔的常見寫法：`sed -i`、`perl -pi`、重新導向（含 heredoc）、`tee`、
-`cp`／`mv` 的目的地、`rm`、`git rm`／`git mv`／`git restore`、`git checkout -- <檔>`。認不出來的不擋：
+它跟著 `cd` 推算目錄（`bash -c`、`eval` 的內容也展開來看），認得明確指名測試檔的常見寫法：`sed -i`、`perl -pi`、
+重新導向（含 heredoc）、`tee`、`cp`／`mv` 的目的地、`rm`、`chmod`（只加上執行權限的不算）、
+`git rm`／`git mv`／`git restore`、`git checkout -- <檔>`，以及：
+
+- **直譯器的內嵌程式**（`python -c`、`node -e`、`perl -e`、`ruby -e`）：程式碼看不出是讀還是寫，
+  裡面出現測試檔或防線檔案的路徑就當成寫入，所以實作開始後用 `python -c` 讀測試檔也會跳確認。
+- **套用 patch**（`git apply`、`git am`、`patch -i`／`patch < 檔`）：讀 patch 的標頭找出會改到的檔案；
+  `--check`、`--stat` 這類只檢查的不算。
+
+認不出來的不擋：
 
 - 格式化工具（`ruff format`、`eslint --fix`、`prettier --write`）：只動排版、不動斷言，擋下來誤判太多。
-- 整批切換（`git checkout main`、`git stash`、`git reset`）與在腳本裡寫檔（`python -c`）。
+- 整批還原（`git checkout main`、`git stash`、`git reset --hard`）：只會把檔案改回已經 commit 的版本，
+  測試在實作前就 commit 了，還原不會讓斷言變寬鬆。
+- 先把程式寫成檔案再執行、從 stdin 餵 patch、路徑用變數組出來的寫法。這些由 CI 的 `pr` 再檢查一次
+  （實作後改的測試檔要在 PR 描述說明，見 [`testing.md`](../testing.md#改程式不改測試)）。
 
 ## 防線檔案
 

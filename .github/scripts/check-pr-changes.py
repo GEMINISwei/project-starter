@@ -3,7 +3,7 @@
 
 pr.yml 呼叫, 本機也能跑。agent 這一側的 hook 換個寫法就可能繞過, 這裡在 CI 上再檢查一次:
 
-1. 實作開始之後還改到測試檔: PR 描述要寫出那個檔案的路徑, 說明為什麼改
+1. 實作開始之後還改到測試檔: 「驗證」段要有一行寫出那個檔案的路徑, 同一行說明為什麼改
    (docs/testing.md〈改程式不改測試〉)。合併 main 帶進來的 commit 不算。
 2. 動到防線檔案或 agent 的說明: 「檢查」段要列出那個檔案或它的目錄, 審查時才一定會被看到
    (docs/extending/agent-hooks.md〈防線檔案〉)。
@@ -31,6 +31,8 @@ AGENT_INSTRUCTIONS = ("AGENTS.md", ".agents/skills/")
 CODE_SUFFIXES = (".py", ".ts", ".tsx", ".js", ".mjs", ".cjs")
 # 呼叫子行程的警告: hook 與測試用固定參數呼叫 git、gh 是常態, 每次寫理由只是噪音。
 EXEMPT_NOQA = {"S603", "S607"}
+# 實作後改測試檔的說明至少要有幾個字: 擋掉只列路徑、或只寫「已修改」這類空話。
+MIN_REASON = 6
 
 NOQA = re.compile(r"#\s*noqa(?::\s*(?P<codes>[A-Z0-9]+(?:\s*,\s*[A-Z0-9]+)*))?(?P<rest>.*)$")
 TYPE_IGNORE = re.compile(r"#\s*type:\s*ignore(?:\[[^\]]*\])?(?P<rest>.*)$")
@@ -76,6 +78,19 @@ def tests_changed_after_implementation(base: str, head: str) -> list[str]:
         if started:
             changed.update(path for path in files if is_test_file(path))
     return sorted(changed)
+
+
+def explained(path: str, text: str) -> bool:
+    """有一行寫出 path, 而且同一行還有說明 (去掉路徑與 Markdown 符號後至少 MIN_REASON 個字)。
+
+    只看得出有沒有寫, 寫得對不對要靠審查。
+    """
+    for line in text.splitlines():
+        if path in line:
+            reason = re.sub(r"[\s`*\-:：>()\[\]]", "", line.replace(path, ""))
+            if len(reason) >= MIN_REASON:
+                return True
+    return False
 
 
 def is_guarded(path: str) -> bool:
@@ -165,11 +180,12 @@ def main() -> int:
     checks = sections(body).get("檢查", "")
     errors = []
 
+    verification = sections(body).get("驗證", "")
     for path in tests_changed_after_implementation(base, head):
-        if path not in body:
+        if not explained(path, verification):
             errors.append(
-                f"{path}: 實作開始之後改了這個測試檔，PR 描述要寫出它的路徑並說明為什麼改"
-                "（原本的斷言哪裡錯）"
+                f"{path}: 實作開始之後改了這個測試檔，「驗證」段要有一行寫出它的路徑，"
+                "並在同一行說明為什麼改（原本的斷言哪裡錯）"
             )
 
     changed = git("diff", "--name-only", f"{base}...{head}").splitlines()

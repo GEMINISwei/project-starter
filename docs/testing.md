@@ -142,7 +142,7 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 | agent 收尾前改過的程式要跑過 `make check`、開工時提示現況、每個 hook 用 `PATH` 上的 `python3` 跑得起來 | `apps/api/tests/test_agent_session_hooks.py` |
 | AI agent 的 commit 帶寫到模型與版本的 `Co-authored-by`、Codex 執行的指令帶 `AI_AGENT` | `.githooks/commit-msg`（`apps/api/tests/test_githooks.py`） |
 | PR 標題是 Conventional Commits、描述有摘要／驗證／檢查三段且不是模板原樣 | CI 的 `pr`（`.github/scripts/check-pr.sh`、`apps/api/tests/test_pr_checks.py`） |
-| 實作後改的測試檔寫進描述、防線檔案與 agent 說明列進「檢查」、新增的抑制註解有理由 | CI 的 `pr`（`.github/scripts/check-pr-changes.py`、`apps/api/tests/test_pr_change_checks.py`） |
+| 實作後改的測試檔在「驗證」段寫出路徑與理由、防線檔案與 agent 說明列進「檢查」、新增的抑制註解有理由 | CI 的 `pr`（`.github/scripts/check-pr-changes.py`、`apps/api/tests/test_pr_change_checks.py`） |
 | `make init dev` 擋下缺少 `python3` 3.9 以上、`.claude/skills` 不是 symlink，裝了 Codex 卻沒信任專案時提醒；`make init prod` 不做這些 | `apps/api/tests/test_init_agent_setup.py` |
 | lock 檔與 `make gen-types` 的產出列在 `.ignore`（AI agent 的搜尋不撞進去） | `apps/api/tests/test_search_ignore.py` |
 
@@ -157,7 +157,8 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 1. 測試變紅時預設它是對的，先改實作讓它變綠。
 2. 真的覺得測試要改（介面改名、斷言本來就寫錯、漏了情境要補）時，**先停下來說明**那個測試驗證的條件、
    沒過的原因，以及為什麼是測試而不是實作要改。
-3. 得到同意後才動測試檔，並在 PR 描述寫明**原本那個斷言為什麼是錯的**。
+3. 得到同意後才動測試檔，並在 PR 描述的「驗證」段寫一行：測試檔的路徑，同一行寫明**原本那個斷言為什麼是錯的**
+   （CI 的 `pr` 檢查這一行在不在，寫得對不對靠審查）。
 
 AI agent 由 hook 強制這一條：分支相對 `origin/main` 已經改了有測試的程式（`apps/`、`e2e/`、`.agents/hooks/`、
 `.github/scripts/`、`scripts/` 底下的非測試、非 Markdown 檔案，也就是實作開始了），
