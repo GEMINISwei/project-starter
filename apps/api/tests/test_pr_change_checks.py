@@ -96,6 +96,23 @@ def test_test_change_after_implementation_with_reason_passes(repo: Path) -> None
     assert check(repo, body(verification=reason)).returncode == 0
 
 
+def test_test_change_reason_outside_verification_fails(repo: Path) -> None:
+    commit(repo, {SOURCE: "x = 2\n"}, "impl")
+    commit(repo, {TEST: "def test_x():\n    assert 1\n"}, "loosen test")
+    summary = f"## 摘要\n\n- 改了 `{TEST}`：原本的斷言把 x 寫死成 1\n\n"
+    result = check(repo, summary + body().split("\n\n", 2)[2])
+    assert result.returncode != 0
+    assert TEST in result.stderr
+
+
+def test_test_change_listed_without_explanation_fails(repo: Path) -> None:
+    commit(repo, {SOURCE: "x = 2\n"}, "impl")
+    commit(repo, {TEST: "def test_x():\n    assert 1\n"}, "loosen test")
+    result = check(repo, body(verification=f"- `{TEST}`"))
+    assert result.returncode != 0
+    assert TEST in result.stderr
+
+
 def test_tests_written_before_implementation_pass(repo: Path) -> None:
     commit(repo, {TEST: "def test_x():\n    assert 2\n"}, "test first")
     commit(repo, {SOURCE: "x = 2\n"}, "impl")
