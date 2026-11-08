@@ -160,10 +160,8 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 3. 得到同意後才動測試檔，並在 PR 描述的「驗證」段寫一行：測試檔的路徑，同一行寫明**原本那個斷言為什麼是錯的**
    （CI 的 `pr` 檢查這一行在不在，寫得對不對靠審查）。
 
-AI agent 由 hook 強制這一條：分支相對 `origin/main` 已經改了有測試的程式（`apps/`、`e2e/`、`.agents/hooks/`、
-`.github/scripts/`、`scripts/` 底下的非測試、非 Markdown 檔案，也就是實作開始了），
-再改測試檔就會停下來等使用者同意（Claude 直接跳確認；Codex 由 agent 執行申請指令、跳確認）。
-做法見 [`agent-hooks.md`](extending/agent-hooks.md#測試鎖定)。
+AI agent 這一側：實作開始後用改檔工具改測試檔，hook 會停下來等使用者同意；用 shell 改不攔，靠 agent 自律與
+CI 的 `pr`（[做法](extending/agent-hooks.md#測試鎖定)）。
 
 紅燈階段用單項指令跑（`uv run pytest tests/ -k xxx`、`npm run test -- -t "名稱"`），
 `make check` 要等實作完成、全部轉綠才會過。

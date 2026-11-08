@@ -9,14 +9,13 @@
 """
 
 import json
-import re
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
-from tests.test_agent_hooks import CLAUDE_SETTINGS, HOOKS_DIR
+from tests.test_agent_hooks import HOOKS_DIR
 from tests.test_agent_test_guard import (
     AGENTS,
     BLOCKED,
@@ -28,10 +27,8 @@ from tests.test_agent_test_guard import (
 )
 from tests.test_docs import REPO_ROOT
 
-APPROVE = HOOKS_DIR / "approve_protected_edit.py"
-APPROVE_COMMAND = "python3 .agents/hooks/approve_protected_edit.py"
-APPROVAL_FILE = ".git/agent-approved-protected-edits"
-CODEX_RULES = REPO_ROOT / ".codex" / "rules"
+APPROVE = HOOKS_DIR / "approve.py"
+APPROVAL_FILE = ".git/agent-approvals"
 
 # 每一類各挑代表: 目錄底下的任何檔案都算, 單一檔案就是那一個。
 PROTECTED = [
@@ -94,7 +91,11 @@ def shell_decision(agent: str, repo: Path, command: str) -> str | None:
 
 def approve(repo: Path, *paths: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(  # noqa: S603
-        [sys.executable, APPROVE, *paths], capture_output=True, text=True, cwd=repo, check=False
+        [sys.executable, APPROVE, "protected", *paths],
+        capture_output=True,
+        text=True,
+        cwd=repo,
+        check=False,
     )
 
 
@@ -105,27 +106,20 @@ def test_editing_protected_files_needs_approval(agent: str, path: str, repo: Pat
     assert decision(agent, repo, path) == BLOCKED[agent], f"沒有攔下: {path}"
 
 
+# 用 shell 改防線檔案不攔 (ADR 0011): 寫法擋不完, 改動由 CI 的 pr 要求列進「檢查」段。
 @pytest.mark.parametrize(
     "command",
     [
         "sed -i '' 's/x/y/' .github/workflows/ci.yml",
-        "echo '{\"disableAllHooks\": true}' > .claude/settings.local.json",
-        "cat >> apps/web/vitest.config.ts <<'TS'\nexport {}\nTS",
-        "rm .githooks/commit-msg",
-        # 拿掉執行權限, git 就會略過這個 hook。
+        "echo '{}' > .claude/settings.local.json",
         "chmod -x .githooks/commit-msg",
-        "chmod 644 .githooks/commit-msg",
-        "chmod a-x .githooks/commit-msg",
-        "python3 -c \"import os; os.chmod('.githooks/commit-msg', 0o644)\"",
-        "cd apps/api && sed -i '' 's/fail_under = 80/fail_under = 0/' pyproject.toml",
     ],
 )
 @pytest.mark.parametrize("agent", AGENTS)
-def test_shell_writes_to_protected_files_need_approval(
+def test_shell_writes_to_protected_files_are_not_guarded(
     agent: str, command: str, repo: Path
 ) -> None:
-    (repo / "apps" / "api").mkdir(parents=True, exist_ok=True)
-    assert shell_decision(agent, repo, command) == BLOCKED[agent], f"沒有攔下: {command}"
+    assert shell_decision(agent, repo, command) is None, command
 
 
 @pytest.mark.parametrize("path", ORDINARY)
@@ -138,8 +132,6 @@ def test_ordinary_files_are_not_protected(agent: str, path: str, repo: Path) -> 
 def test_approved_protected_edit_is_allowed(agent: str, repo: Path) -> None:
     assert approve(repo, ".github/workflows/ci.yml").returncode == 0
     assert decision(agent, repo, ".github/workflows/ci.yml") is None
-    command = "sed -i '' 's/x/y/' .github/workflows/ci.yml"
-    assert shell_decision(agent, repo, command) is None
     assert decision(agent, repo, ".claude/settings.json") == BLOCKED[agent]
 
 
@@ -151,18 +143,13 @@ def test_protected_approval_expires_after_new_commit(agent: str, repo: Path) -> 
     assert decision(agent, repo, ".github/workflows/ci.yml") == BLOCKED[agent]
 
 
-def test_approve_rejects_unprotected_paths(repo: Path) -> None:
-    assert approve(repo, "README.md").returncode != 0
-    assert not (repo / APPROVAL_FILE).exists()
-
-
 @pytest.mark.parametrize(
     "command",
     [
         f"echo '{{}}' > {APPROVAL_FILE}",
         f"touch {APPROVAL_FILE}",
-        "./.agents/hooks/approve_protected_edit.py .github/workflows/ci.yml",
-        "python .agents/hooks/approve_protected_edit.py .github/workflows/ci.yml",
+        "./.agents/hooks/approve.py protected .github/workflows/ci.yml",
+        "python .agents/hooks/approve.py protected .github/workflows/ci.yml",
     ],
 )
 @pytest.mark.parametrize("agent", AGENTS)
@@ -175,21 +162,6 @@ def test_guard_blocks_self_approval_of_protected_edits(
 @pytest.mark.parametrize("agent", AGENTS)
 def test_editing_protected_approval_file_directly_is_denied(agent: str, repo: Path) -> None:
     assert decision(agent, repo, APPROVAL_FILE) == "deny"
-
-
-def test_codex_rule_prompts_before_approving_protected_edits() -> None:
-    rules = "\n".join(path.read_text(encoding="utf-8") for path in CODEX_RULES.glob("*.rules"))
-    pattern = re.compile(
-        r'prefix_rule\(\s*pattern\s*=\s*\[\s*"python3"\s*,\s*'
-        r'"\.agents/hooks/approve_protected_edit\.py"\s*\][^)]*decision\s*=\s*"prompt"',
-        flags=re.DOTALL,
-    )
-    assert pattern.search(rules), ".codex/rules/ 要讓 approve_protected_edit.py 一定經過使用者確認"
-
-
-def test_claude_asks_before_approving_protected_edits() -> None:
-    settings = json.loads(CLAUDE_SETTINGS.read_text(encoding="utf-8"))
-    assert f"Bash({APPROVE_COMMAND}:*)" in settings.get("permissions", {}).get("ask", [])
 
 
 @pytest.mark.parametrize("path", PROTECTED)

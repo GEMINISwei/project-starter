@@ -94,12 +94,6 @@ BLOCKED = [
     'eval "gh pr merge 42"',
     "eval git push origin main",
     "gh pr merge 5 --squash",
-    "npm install --force",
-    "cd apps/web && npm i foo --legacy-peer-deps",
-    "docker compose up -d",
-    "docker --context x compose ps",
-    "docker-compose logs api",
-    "FOO=1 docker compose down -v",
     # 換行是指令的分隔: 第二行不是第一行的參數。
     "echo hi\ngit push origin main",
     "cat > x <<EOF\nhi\nEOF\ngit push origin main",
@@ -127,25 +121,9 @@ BLOCKED = [
     "bash .agents/skills/release/scripts/publish.sh 0.1.0",
     "./.agents/skills/release/scripts/publish.sh 0.1.0",
     "cd .agents/skills/release && scripts/publish.sh 0.1.0",
-    # 合併與轉 Ready 由使用者做; 換成 gh api 或 GraphQL 也一樣。
+    # 合併與轉 Ready 由使用者做。
     "gh pr ready 5",
     "gh pr merge 5 --auto --squash",
-    "gh api -X PUT repos/o/r/pulls/5/merge",
-    "gh api repos/o/r/pulls/5/merge -f merge_method=squash",
-    "gh api --method PUT /repos/o/r/pulls/5/merge",
-    "gh api graphql -f query='mutation { mergePullRequest(input: {}) { clientMutationId } }'",
-    "gh api graphql -f query='mutation { markPullRequestReadyForReview(input: {}) { x } }'",
-    "gh api graphql -f query='mutation { enablePullRequestAutoMerge(input: {}) { x } }'",
-    # 用 API 發 release 或觸發 workflow, 一樣會部署。
-    "gh api -X POST repos/o/r/releases -f tag_name=v0.1.0",
-    "gh api repos/o/r/releases -f tag_name=v0.1.0",
-    "gh api -X PATCH repos/o/r/releases/1 -F prerelease=false",
-    "gh api -X DELETE repos/o/r/releases/1",
-    "gh api -X POST repos/o/r/actions/workflows/deploy.yml/dispatches -f ref=main",
-    "gh api graphql -f query='mutation { createRelease(input: {}) { release { id } } }'",
-    # 用 API 重跑 run 看不出是哪個 workflow, 一律擋下, 改用 gh run rerun (守衛會查)。
-    "gh api -X POST repos/o/r/actions/runs/1/rerun",
-    "gh api -X POST repos/o/r/actions/runs/1/rerun-failed-jobs",
 ]
 
 ALLOWED = [
@@ -191,6 +169,11 @@ ALLOWED = [
     "gh api repos/o/r/releases/latest --jq .tag_name",
     "gh api -X GET repos/o/r/releases -f per_page=5",
     "gh api graphql -f query='query { viewer { login } }'",
+    # 交給 AGENTS.md 的規則, hook 不擋 (ADR 0011)。
+    "npm install --force",
+    "cd apps/web && npm i foo --legacy-peer-deps",
+    "docker compose up -d",
+    "FOO=1 docker compose down -v",
     "gh api repos/o/r/actions/runs --jq '.workflow_runs[0].name'",
 ]
 
@@ -303,52 +286,36 @@ def test_hook_scripts_run_on_oldest_supported_python(script: Path) -> None:
     )
 
 
-# 重跑 Deploy 的 run 等於重新部署。指令本身看不出是哪個 workflow, 守衛要問 gh,
-# 這裡在 PATH 最前面放一個假的 gh, 回答 `gh run view <id> --json workflowName`。
-def fake_gh(tmp_path: Path, workflow: str | None) -> dict[str, str]:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    script = bin_dir / "gh"
-    body = f"echo '{json.dumps({'workflowName': workflow})}'" if workflow else "exit 1"
-    script.write_text(f"#!/bin/sh\n{body}\n", encoding="utf-8")
-    script.chmod(0o755)
-    return {"PATH": f"{bin_dir}:/usr/bin:/bin"}
+# 會改 GitHub 上狀態的 API 與重跑 run: 可能合併、發布或重新部署, 一律先確認。
+# 不再逐一判斷端點 (ADR 0011): Claude 跳確認; Codex 不支援 ask, 擋下請使用者自己執行。
+CONFIRMED = {"claude": "ask", "codex": "deny"}
+
+GH_API_WRITES = [
+    "gh api -X PUT repos/o/r/pulls/5/merge",
+    "gh api repos/o/r/pulls/5/merge -f merge_method=squash",
+    "gh api --method PATCH repos/o/r/issues/1 -f state=closed",
+    "gh api -X POST repos/o/r/releases -f tag_name=v0.1.0",
+    "gh api -X DELETE repos/o/r/releases/1",
+    "gh api -X POST repos/o/r/actions/runs/1/rerun",
+    "gh api graphql -f query='mutation { mergePullRequest(input: {}) { clientMutationId } }'",
+]
 
 
-def run_guard_with_env(agent: str, command: str, cwd: Path, env: dict[str, str]) -> Any:
-    payload = {"cwd": str(cwd), "tool_name": "Bash", "tool_input": {"command": command}}
-    result = subprocess.run(  # noqa: S603
-        [sys.executable, GUARD, agent],
-        input=json.dumps(payload),
-        capture_output=True,
-        text=True,
-        cwd=cwd,
-        env=env,
-        check=True,
-    )
-    return json.loads(result.stdout) if result.stdout.strip() else None
+def decision(output: dict[str, Any] | None) -> str | None:
+    if output is None:
+        return None
+    hook = output["hookSpecificOutput"]
+    assert hook["permissionDecisionReason"], "擋下時要說明理由與下一步"
+    return str(hook["permissionDecision"])
+
+
+@pytest.mark.parametrize("agent", AGENTS)
+@pytest.mark.parametrize("command", GH_API_WRITES)
+def test_guard_confirms_gh_api_writes(agent: str, command: str, on_feature: Path) -> None:
+    assert decision(run_guard(agent, command, on_feature)) == CONFIRMED[agent], command
 
 
 @pytest.mark.parametrize("agent", AGENTS)
 @pytest.mark.parametrize("command", ["gh run rerun 123", "gh run rerun 123 --failed"])
-def test_guard_blocks_rerunning_deploy_runs(
-    agent: str, command: str, on_feature: Path, tmp_path: Path
-) -> None:
-    env = fake_gh(tmp_path, "Deploy")
-    assert denied(run_guard_with_env(agent, command, on_feature, env))
-
-
-@pytest.mark.parametrize("agent", AGENTS)
-def test_guard_allows_rerunning_ci_runs(agent: str, on_feature: Path, tmp_path: Path) -> None:
-    env = fake_gh(tmp_path, "CI")
-    assert run_guard_with_env(agent, "gh run rerun 123 --failed", on_feature, env) is None
-
-
-@pytest.mark.parametrize("agent", AGENTS)
-def test_guard_blocks_rerun_when_workflow_is_unknown(
-    agent: str, on_feature: Path, tmp_path: Path
-) -> None:
-    env = fake_gh(tmp_path, None)
-    output = run_guard_with_env(agent, "gh run rerun 123", on_feature, env)
-    assert denied(output)
-    assert "確認" in output["hookSpecificOutput"]["permissionDecisionReason"]
+def test_guard_confirms_rerunning_runs(agent: str, command: str, on_feature: Path) -> None:
+    assert decision(run_guard(agent, command, on_feature)) == CONFIRMED[agent], command

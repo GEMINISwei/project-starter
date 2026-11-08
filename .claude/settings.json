@@ -1,9 +1,7 @@
 {
   "permissions": {
     "ask": [
-      "Bash(python3 .agents/hooks/approve_test_edit.py:*)",
-      "Bash(python3 .agents/hooks/approve_parallel_branch.py:*)",
-      "Bash(python3 .agents/hooks/approve_protected_edit.py:*)",
+      "Bash(python3 .agents/hooks/approve.py:*)",
       "Bash(.agents/skills/release/scripts/publish.sh:*)"
     ]
   },

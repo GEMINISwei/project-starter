@@ -15,8 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-import branch_lock
-from test_lock import approved_paths, git, implementation_started, repo_root
+import approvals
+from test_lock import git, implementation_started, repo_root
 
 
 def open_prs(cwd: Path) -> list[str] | None:
@@ -64,12 +64,12 @@ def context(root: Path) -> str:
         else:
             lines.append("- 沒有開著的 PR")
     if implementation_started(root):
-        approved = sorted(approved_paths(root))
+        approved = sorted(approvals.approved(root, "test"))
         note = f"，已放行：{'、'.join(approved)}" if approved else ""
         lines.append(f"- 實作已經開始：改測試檔要先經過使用者同意{note}")
     else:
         lines.append("- 實作還沒開始（測試檔還沒鎖定）")
-    branches = sorted(branch_lock.approved_branches(root))
+    branches = sorted(approvals.approved(root, "branch"))
     if branches:
         lines.append(f"- 使用者同意插隊的分支：{'、'.join(branches)}")
     return "\n".join(lines)
