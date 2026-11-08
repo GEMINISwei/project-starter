@@ -48,19 +48,33 @@ def is_test_file(path: str) -> bool:
     return in_app_tests or path.startswith("e2e/tests/")
 
 
+# 測試放在 apps/*/tests/ 的程式: hook 與 CI 腳本的測試也在 apps/api/tests/。
+IMPLEMENTATION_DIRS = ("apps/", "e2e/", ".agents/hooks/", ".github/scripts/", "scripts/")
+
+
+def is_implementation(path: str) -> bool:
+    """改了它就算開始實作: 有測試的程式, 不含測試本身與文件。CI (check-pr-changes.py) 也用它。"""
+    return (
+        path.startswith(IMPLEMENTATION_DIRS) and not is_test_file(path) and not path.endswith(".md")
+    )
+
+
+def changed_files(root: Path) -> list[str]:
+    """分支相對 origin/main 的差異, 含還沒 commit 與沒追蹤的檔案。"""
+    base = git(root, "merge-base", "HEAD", "origin/main") or git(root, "merge-base", "HEAD", "main")
+    if not base:
+        return []
+    changed = (git(root, "diff", "--name-only", base) or "").splitlines()
+    changed += (git(root, "ls-files", "--others", "--exclude-standard") or "").splitlines()
+    return [path for path in changed if path]
+
+
 def implementation_started(root: Path) -> bool:
-    """分支相對 origin/main 的差異 (含還沒 commit 與沒追蹤的) 有 apps/、e2e/ 底下的非測試檔案。
+    """分支上改了有測試的程式 (見 is_implementation)。
 
     只改文件、設定不算: 那些不是測試要鎖住的對象。
     """
-    base = git(root, "merge-base", "HEAD", "origin/main") or git(root, "merge-base", "HEAD", "main")
-    if not base:
-        return False
-    changed = (git(root, "diff", "--name-only", base) or "").splitlines()
-    changed += (git(root, "ls-files", "--others", "--exclude-standard") or "").splitlines()
-    return any(
-        path.startswith(("apps/", "e2e/")) and not is_test_file(path) for path in changed if path
-    )
+    return any(is_implementation(path) for path in changed_files(root))
 
 
 def approval_file(root: Path, name: str = APPROVAL_NAME) -> Path:

@@ -24,7 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / ".agents" / "hooks"))
 
 from protected_files import is_protected
-from test_lock import is_test_file
+from test_lock import is_implementation, is_test_file
 
 # agent 的說明: 不執行檢查, 所以 hook 不攔, 但改了會改變 agent 的行為, 審查時要看到。
 AGENT_INSTRUCTIONS = ("AGENTS.md", ".agents/skills/")
@@ -64,14 +64,15 @@ def sections(body: str) -> dict[str, str]:
 
 
 def tests_changed_after_implementation(base: str, head: str) -> list[str]:
-    """從第一個改到非測試程式的 commit 起 (含那一個), 之後改到的測試檔。"""
+    """從第一個開始實作的 commit 起 (含那一個), 之後改到的測試檔。
+
+    「開始實作」跟 hook 的測試鎖用同一個判斷 (test_lock.is_implementation)。
+    """
     started = False
     changed: set[str] = set()
     for commit in git("rev-list", "--reverse", "--no-merges", f"{base}..{head}").split():
         files = git("diff-tree", "--no-commit-id", "--name-only", "-r", commit).splitlines()
-        started = started or any(
-            path.startswith(("apps/", "e2e/")) and not is_test_file(path) for path in files
-        )
+        started = started or any(is_implementation(path) for path in files)
         if started:
             changed.update(path for path in files if is_test_file(path))
     return sorted(changed)
