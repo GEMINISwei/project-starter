@@ -1,5 +1,20 @@
 // UI kit 的內部工具; 版面元件直接使用 `as`、`className` 與 `style`。
 
+/** 鍵盤可以聚焦到的元素; 對話框的焦點循環用它找出第一個與最後一個。 */
+export const FOCUSABLE_SELECTOR = [
+  "a[href]", "button:not([disabled])", "input:not([disabled])", "select:not([disabled])",
+  "textarea:not([disabled])", "[tabindex]:not([tabindex='-1'])",
+].join(", ")
+
+/**
+ * 觸控為主的裝置 (手機、平板)。這類裝置上不自動聚焦輸入框: 焦點一進去就跳出鍵盤,
+ * WebApp 要像原生 App 一樣, 使用者點了欄位才輸入。沒有 `matchMedia` 的環境 (伺服器端) 當成不是。
+ */
+export function isCoarsePointer() {
+  return typeof window !== "undefined" && typeof window.matchMedia === "function"
+    && window.matchMedia("(pointer: coarse)").matches
+}
+
 export function cls(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ")
 }

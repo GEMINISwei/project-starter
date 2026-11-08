@@ -2,10 +2,11 @@
 
 import { type FormEvent, useState } from "react"
 import { FormDialog, SelectInput, TextInput, useActionSubmit, useActiveStatusOptions } from "@/shared/ui"
-import { useT } from "@/shared/i18n/context"
+import { useLocale, useT } from "@/shared/i18n/context"
 import { usersMessages } from "../i18n"
 import { updateUser } from "../actions"
 import { getEditableUserFields, roleIdsForUpdate } from "../capabilities"
+import { validateEditUserValues } from "../validation"
 import type { CurrentUser, RoleInfo, UserInfo } from "../types"
 
 type EditUserDialogProps = {
@@ -28,10 +29,12 @@ export default function EditUserDialog({
   roleOptions,
 }: EditUserDialogProps) {
   const t = useT(usersMessages)
+  const locale = useLocale()
   const statusOptions = useActiveStatusOptions()
   const [nickname, setNickname] = useState(user?.nickname ?? "")
   const [isDisabled, setIsDisabled] = useState(user?.is_disabled ?? false)
   const [selectedRoleId, setSelectedRoleId] = useState(user?.role_ids[0] ?? "")
+  const [nicknameError, setNicknameError] = useState<string>()
   const { isPending, submit, fieldError } = useActionSubmit()
   const { canAssignRole, canToggleStatus } = user
     ? getEditableUserFields(user, currentUser?.id, roles, roleOptions.length > 0)
@@ -39,16 +42,16 @@ export default function EditUserDialog({
 
   function submitEdit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    if (!user || !nickname.trim()) {
-      onError(t("nicknameRequired"))
-      return
-    }
+    if (!user) return
+    const nextError = validateEditUserValues({ nickname }, locale).nickname
+    setNicknameError(nextError)
+    if (nextError) return
 
     submit(
       () => updateUser(user.id, {
         nickname: nickname.trim(),
         is_disabled: isDisabled,
-        role_ids: roleIdsForUpdate(canAssignRole, selectedRoleId),
+        role_ids: roleIdsForUpdate(canAssignRole, selectedRoleId, user.role_ids),
       }),
       {
         onSuccess: () => onSuccess(t("userUpdated")),
@@ -72,7 +75,7 @@ export default function EditUserDialog({
       <TextInput
         label={t("colNickname")}
         value={nickname}
-        error={fieldError("nickname")}
+        error={nicknameError ?? fieldError("nickname")}
         required
         disabled={isPending}
         autoFocus

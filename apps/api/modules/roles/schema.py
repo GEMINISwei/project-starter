@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 
 from app.permissions import Permission
+from shared.auth.permissions import KnownPermissions
 from shared.http.schema import NonEmptyText, PaginatedResponse, SimpleListResponse
 from shared.http.schema import UuidText as UuidText
 
@@ -24,7 +25,7 @@ class RoleInfo(BaseModel):
     id: str
     code: str | None = None
     name: str
-    permissions: list[Permission]
+    permissions: KnownPermissions[Permission]
     is_disabled: bool
 
 

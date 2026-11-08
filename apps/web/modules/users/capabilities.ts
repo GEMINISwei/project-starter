@@ -61,11 +61,19 @@ export function getEditableUserFields(
  * 編輯送出的 `role_ids`。選「未指派」要送空陣列 —— `undefined` 在後端是「不改角色」,
  * 畫面會說更新成功, 角色卻原封不動。
  *
- * 看不到角色欄位時一律不送, 送了會撞上後端的保護規則。
+ * 看不到角色欄位時一律不送, 送了會撞上後端的保護規則。角色沒改時也不送: 原本的角色可能
+ * 已經停用 (下拉選單裡沒有它), 原樣送回去會被當成「指派停用的角色」擋下。
  */
-export function roleIdsForUpdate(canAssignRole: boolean, selectedRoleId: string) {
+export function roleIdsForUpdate(
+  canAssignRole: boolean,
+  selectedRoleId: string,
+  originalRoleIds: string[],
+) {
   if (!canAssignRole) return undefined
-  return selectedRoleId ? [selectedRoleId] : []
+  const next = selectedRoleId ? [selectedRoleId] : []
+  const unchanged = next.length === originalRoleIds.length
+    && next.every((id) => originalRoleIds.includes(id))
+  return unchanged ? undefined : next
 }
 
 /**

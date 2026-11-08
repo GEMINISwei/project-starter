@@ -1,6 +1,8 @@
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from enum import StrEnum
-from typing import cast
+from typing import Annotated, Any, TypeVar, cast
+
+from pydantic import ValidationError, WrapValidator
 
 #: 「擁有全部權限」的值。專案的 `Permission` enum 要有一個成員等於它 (慣例叫 `ALL`),
 #: 授權檢查與權限目錄都認這個值, 不認成員名稱。
@@ -12,6 +14,29 @@ class BasePermission(StrEnum):
 
 
 type Dependencies[T: BasePermission] = dict[T, set[T]]
+
+
+def _drop_unknown_items(value: Any, handler: Callable[[Any], Any]) -> Any:
+    try:
+        return handler(value)
+    except ValidationError as exc:
+        invalid = {
+            error["loc"][0]
+            for error in exc.errors()
+            if error["loc"] and isinstance(error["loc"][0], int)
+        }
+        if not invalid or not isinstance(value, list):
+            raise
+        return handler([item for index, item in enumerate(value) if index not in invalid])
+
+
+# 回應模型的權限清單用這個型別: 停用模組或改名權限之後, 資料庫裡的角色仍留著舊字串
+# (`covers()` 同一個前提), 標成 `list[Permission]` 會在驗證時丟例外變成 500,
+# 掛著那個角色的人連 `/users/me` 都拿不到, 整批進不了系統。舊字串對前端沒有意義, 濾掉即可。
+# 刻意不用 `type` 敘述: 那會變成具名的型別別名, OpenAPI 多出一個 `KnownPermissions_Permission_`
+# schema, 前端產生的型別跟著改名。用 TypeVar 的 Annotated 在套用時直接展開, schema 不變。
+_PermissionT = TypeVar("_PermissionT", bound=BasePermission)
+KnownPermissions = Annotated[list[_PermissionT], WrapValidator(_drop_unknown_items)]
 
 
 class PermissionResolver[PermissionT: BasePermission]:
