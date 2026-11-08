@@ -44,6 +44,8 @@
     內文不寫某一家專屬的工具，只能手動呼叫的兩家要一起設（[說明](docs/extending/agent-skills.md)）。
 17. **hook 的邏輯只放 `.agents/hooks/`**：`.claude/settings.json` 與 `.codex/hooks.json` 只負責呼叫，
     兩份的事件、matcher 與腳本要一致（[說明](docs/extending/agent-hooks.md)）。被 hook 擋下時照理由做，不要換個寫法繞過。
+    hook、agent 設定、CI 與檢查的設定是**防線檔案**，改動一律要使用者同意
+    （[清單](docs/extending/agent-hooks.md#防線檔案)）。
 
 各條由哪個工具或測試擋，見 [`testing.md`](docs/testing.md#架構本身也有測試)。
 完整規則見 [`architecture.md`](docs/architecture.md#強制依賴規則)。

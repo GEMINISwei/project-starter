@@ -32,8 +32,8 @@ diff 裡有改動但對不上任何一條驗收條件的，列出來：要嘛是
 - 新增的抑制註解：`noqa`、`type: ignore`、`eslint-disable`、`ts-expect-error`、測試的 skip。
   每一個都要在同一行寫理由，沒有理由的改掉
 - 實作開始之後改過的測試檔（經使用者同意的，PR 描述要寫明原本的斷言為什麼錯）
-- 防線本身的檔案：`.agents/`、`.claude/`、`.codex/`、`.githooks/`、`.github/workflows/`，
-  以及 lint、型別、覆蓋率門檻的設定。有改到就列進「檢查」段，說明改了什麼、為什麼
+- 防線本身的檔案（清單見 [`agent-hooks.md`](../../../docs/extending/agent-hooks.md#防線檔案)，改的時候已經經過使用者同意）、
+  `AGENTS.md` 與 skills：有改到就列進「檢查」段，說明改了什麼、為什麼，以及會不會讓哪一項檢查變寬鬆
 
 ## 4. 文件
 

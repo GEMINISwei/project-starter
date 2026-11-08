@@ -27,8 +27,8 @@ Claude 與 Codex 的 hook 協定相同（事件名稱、stdin 收的 JSON、回�
 
 | 腳本 | 事件 | 擋什麼 |
 |---|---|---|
-| `guard_commands.py` | `PreToolUse`（shell 指令） | push 到 `main`、用 `--no-verify` 略過 git hook（`commit -n` 也算）、改 `core.hooksPath`、合併 PR 或轉 Ready（`gh pr merge`、`gh pr ready`，以及同樣效果的 `gh api` 與 GraphQL mutation）、`npm` 的 `--force`／`--legacy-peer-deps`、直接下 `docker compose`、繞過確認自己放行測試檔或分支、用 shell 改測試檔（見下一節）、有開著的 PR 時開新分支（見〈一次一個 PR〉）、繞過 `publish.sh` 發布或部署（見下方） |
-| `guard_tests.py` | `PreToolUse`（改檔） | 實作開始後改測試檔，見下一節 |
+| `guard_commands.py` | `PreToolUse`（shell 指令） | push 到 `main`、用 `--no-verify` 略過 git hook（`commit -n` 也算）、改 `core.hooksPath`、合併 PR 或轉 Ready（`gh pr merge`、`gh pr ready`，以及同樣效果的 `gh api` 與 GraphQL mutation）、`npm` 的 `--force`／`--legacy-peer-deps`、直接下 `docker compose`、繞過確認自己放行測試檔、分支或防線檔案、用 shell 寫入防線檔案、用 shell 改測試檔（見下一節）、有開著的 PR 時開新分支（見〈一次一個 PR〉）、繞過 `publish.sh` 發布或部署（見下方） |
+| `guard_tests.py` | `PreToolUse`（改檔） | 實作開始後改測試檔（見〈測試鎖定〉）、任何時候改防線檔案（見〈防線檔案〉） |
 
 ## 測試鎖定
 
@@ -54,6 +54,29 @@ shell 指令改測試檔由 `guard_commands.py` 用同一套判斷攔下（兩�
 
 - 格式化工具（`ruff format`、`eslint --fix`、`prettier --write`）：只動排版、不動斷言，擋下來誤判太多。
 - 整批切換（`git checkout main`、`git stash`、`git reset`）與在腳本裡寫檔（`python -c`）。
+
+## 防線檔案
+
+決定其他規則擋不擋得住的檔案，改動前一律要使用者同意，**不分實作前後**（清單在 `.agents/hooks/protected_files.py`）：
+
+| 類別 | 路徑 |
+|---|---|
+| agent 的 hook 與設定 | `.agents/hooks/`、`.claude/`（含不進版控的 `settings.local.json`）、`.codex/` |
+| git hook | `.githooks/` |
+| CI | `.github/workflows/`、`.github/scripts/` |
+| 檢查的設定 | `apps/api/pyproject.toml`、`apps/web/package.json`、`eslint.config.mjs`、`.dependency-cruiser.cjs`、`knip.ts`、`tsconfig.json`、`vitest.config.ts` |
+| 檢查的入口 | `scripts/check.sh`、`Makefile` |
+
+這些檔案改了不會有任何檢查變紅：刪掉一個 CI 步驟，required check 的名字還在，照樣顯示綠燈；
+在 `settings.local.json` 設 `disableAllHooks`，所有 hook 就安靜地不生效。它們有時確實要改，所以不禁止，而是一定讓使用者看到。
+
+- 改檔工具與 shell 寫入（同〈測試鎖定〉認得的寫法）都會攔下。
+- 同意的方式跟測試鎖一樣：Claude 跳確認；Codex 擋下，agent 執行
+  `python3 .agents/hooks/approve_protected_edit.py <檔案>` 申請（`.codex/rules/approve-protected-edit.rules` 讓它跳確認）。
+  放行寫在 `.git/agent-approved-protected-edits`，只對列出的檔案、只在目前的 HEAD 有效。
+- **刻意不保護**：`AGENTS.md`、`docs/`、`.agents/skills/`、PR 模板。它們是說明，不執行檢查，而且改動頻繁。
+- 用 `uv add`、`npm install` 改 `pyproject.toml`、`package.json` 的相依不會被攔：守衛只認得直接寫檔的寫法。
+- 檔案改名或搬家時，清單會指到不存在的路徑；`apps/api/tests/test_agent_protected_files.py` 確認清單裡的路徑都存在。
 
 ## 一次一個 PR
 

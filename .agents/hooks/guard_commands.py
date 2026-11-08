@@ -22,6 +22,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import branch_lock
+import protected_files
 import test_lock
 from test_lock import (
     is_test_file,
@@ -182,6 +183,7 @@ def pushes_to_main(args: list[str], cwd: str) -> bool:
 APPROVALS = (
     (test_lock.APPROVAL_NAME, test_lock.APPROVE_COMMAND, "<測試檔>"),
     (branch_lock.APPROVAL_NAME, branch_lock.APPROVE_COMMAND, "<分支>"),
+    (protected_files.APPROVAL_NAME, protected_files.APPROVE_COMMAND, "<檔案>"),
 )
 
 
@@ -356,18 +358,20 @@ def written_paths(argv: list[str]) -> list[str]:
     return paths
 
 
-def test_writes(commands: list[tuple[list[str], str]], cwd: str) -> list[str]:
-    """這串指令裡寫到的測試檔 (相對 repo 根目錄)。"""
+def shell_writes(commands: list[tuple[list[str], str]], cwd: str) -> tuple[list[str], list[str]]:
+    """這串指令寫到、還需要使用者同意的 (測試檔, 防線檔案), 路徑相對 repo 根目錄。"""
     root = repo_root(Path(cwd))
     if root is None:
-        return []
-    files = {
-        relative(root, Path(where), path)
-        for argv, where in commands
-        for path in written_paths(argv)
-    }
-    tests = sorted(path for path in files if is_test_file(path))
-    return pending_test_edits(root, tests)
+        return [], []
+    files = sorted(
+        {
+            relative(root, Path(where), path)
+            for argv, where in commands
+            for path in written_paths(argv)
+        }
+    )
+    tests = pending_test_edits(root, [path for path in files if is_test_file(path)])
+    return tests, protected_files.pending_protected_edits(root, files)
 
 
 def with_cwd(commands: list[list[str]], cwd: str) -> list[tuple[list[str], str]]:
@@ -515,9 +519,12 @@ def main() -> int:
         if reason:
             decide("deny", reason)
             return 0
-    pending = test_writes(located, cwd)
-    if pending:
-        decide(*verdict(agent, pending))
+    tests, protected = shell_writes(located, cwd)
+    if protected:
+        decide(*protected_files.verdict(agent, protected))
+        return 0
+    if tests:
+        decide(*verdict(agent, tests))
         return 0
     branches = parallel_branches(located, cwd)
     if branches:
