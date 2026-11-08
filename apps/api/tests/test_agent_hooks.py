@@ -140,6 +140,9 @@ BLOCKED = [
     "gh api -X DELETE repos/o/r/releases/1",
     "gh api -X POST repos/o/r/actions/workflows/deploy.yml/dispatches -f ref=main",
     "gh api graphql -f query='mutation { createRelease(input: {}) { release { id } } }'",
+    # 用 API 重跑 run 看不出是哪個 workflow, 一律擋下, 改用 gh run rerun (守衛會查)。
+    "gh api -X POST repos/o/r/actions/runs/1/rerun",
+    "gh api -X POST repos/o/r/actions/runs/1/rerun-failed-jobs",
 ]
 
 ALLOWED = [
