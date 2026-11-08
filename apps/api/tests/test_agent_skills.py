@@ -94,7 +94,8 @@ def test_skills_with_external_effects_are_manual_only(name: str) -> None:
     assert (skill / "SKILL.md").exists(), f".agents/skills/{name}/SKILL.md 不存在"
     assert manual_only(skill) == (True, True), (
         f"{name} 會影響 repo 以外的東西, 只能由使用者手動呼叫: SKILL.md 加"
-        " disable-model-invocation: true, agents/openai.yaml 加 policy.allow_implicit_invocation: false"
+        " disable-model-invocation: true,"
+        " agents/openai.yaml 加 policy.allow_implicit_invocation: false"
     )
 
 
