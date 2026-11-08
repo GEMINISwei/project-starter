@@ -8,7 +8,6 @@
 """
 
 import json
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -16,13 +15,11 @@ from typing import Any
 
 import pytest
 
-from tests.test_agent_hooks import CLAUDE_SETTINGS, GUARD, HOOKS_DIR, git_repo
-from tests.test_docs import REPO_ROOT
+from tests.test_agent_hooks import GUARD, HOOKS_DIR, git_repo
 
-APPROVE = HOOKS_DIR / "approve_parallel_branch.py"
-APPROVE_COMMAND = "python3 .agents/hooks/approve_parallel_branch.py"
-APPROVAL_FILE = ".git/agent-approved-parallel-branches"
-CODEX_RULES = REPO_ROOT / ".codex" / "rules"
+APPROVE = HOOKS_DIR / "approve.py"
+APPROVE_COMMAND = "python3 .agents/hooks/approve.py branch"
+APPROVAL_FILE = ".git/agent-approvals"
 AGENTS = ("claude", "codex")
 BLOCKED = {"claude": "ask", "codex": "deny"}
 
@@ -85,7 +82,11 @@ def decision(agent: str, command: str, repo: Path, env: dict[str, str]) -> str |
 
 def approve(repo: Path, *branches: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(  # noqa: S603
-        [sys.executable, APPROVE, *branches], capture_output=True, text=True, cwd=repo, check=False
+        [sys.executable, APPROVE, "branch", *branches],
+        capture_output=True,
+        text=True,
+        cwd=repo,
+        check=False,
     )
 
 
@@ -131,6 +132,20 @@ def test_approved_branch_is_allowed_while_a_pr_is_open(
 
 
 @pytest.mark.parametrize("agent", AGENTS)
+def test_branch_approval_survives_new_commit(agent: str, repo: Path, tmp_path: Path) -> None:
+    # 分支的放行針對名稱, 不像測試與防線檔案的放行一有新 commit 就失效。
+    env = fake_gh(tmp_path, OPEN_PR)
+    assert approve(repo, "fix/urgent").returncode == 0
+    identity = ["-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run(  # noqa: S603
+        ["git", *identity, "commit", "-q", "--allow-empty", "-m", "x"],  # noqa: S607
+        cwd=repo,
+        check=True,
+    )
+    assert decision(agent, "git switch -c fix/urgent origin/main", repo, env) is None
+
+
+@pytest.mark.parametrize("agent", AGENTS)
 def test_pr_from_approved_branch_is_allowed(agent: str, tmp_path: Path) -> None:
     repo = git_repo(tmp_path / "repo", "fix/urgent")
     env = fake_gh(tmp_path, OPEN_PR)
@@ -151,11 +166,11 @@ def test_new_branch_is_allowed_when_open_prs_cannot_be_checked(
 @pytest.mark.parametrize(
     "command",
     [
-        f"echo '[\"feat/next\"]' > {APPROVAL_FILE}",
+        f"echo '{{}}' > {APPROVAL_FILE}",
         f"touch {APPROVAL_FILE}",
-        "./.agents/hooks/approve_parallel_branch.py feat/next",
-        "python .agents/hooks/approve_parallel_branch.py feat/next",
-        "cd apps && python3 ../.agents/hooks/approve_parallel_branch.py feat/next",
+        "./.agents/hooks/approve.py branch feat/next",
+        "python .agents/hooks/approve.py branch feat/next",
+        "cd apps && python3 ../.agents/hooks/approve.py branch feat/next",
     ],
 )
 @pytest.mark.parametrize("agent", AGENTS)
@@ -171,18 +186,3 @@ def test_guard_allows_the_prompted_parallel_branch_approval(
 ) -> None:
     command = f"{APPROVE_COMMAND} fix/urgent"
     assert decision(agent, command, repo, fake_gh(tmp_path, OPEN_PR)) is None
-
-
-def test_codex_rule_prompts_before_approving_parallel_branch() -> None:
-    rules = "\n".join(path.read_text(encoding="utf-8") for path in CODEX_RULES.glob("*.rules"))
-    pattern = re.compile(
-        r'prefix_rule\(\s*pattern\s*=\s*\[\s*"python3"\s*,\s*'
-        r'"\.agents/hooks/approve_parallel_branch\.py"\s*\][^)]*decision\s*=\s*"prompt"',
-        flags=re.DOTALL,
-    )
-    assert pattern.search(rules), ".codex/rules/ 要讓 approve_parallel_branch.py 一定經過使用者確認"
-
-
-def test_claude_asks_before_approving_parallel_branch() -> None:
-    settings = json.loads(CLAUDE_SETTINGS.read_text(encoding="utf-8"))
-    assert f"Bash({APPROVE_COMMAND}:*)" in settings.get("permissions", {}).get("ask", [])

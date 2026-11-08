@@ -7,7 +7,7 @@
 有 apps/ 或 e2e/ 底下不是測試的檔案, 就算開始了。
 
 兩家的同意方式不同: Claude 的 PreToolUse 可以回 ask, 畫面直接跳確認; Codex 只能回 deny,
-所以由 agent 執行 approve_test_edit.py 申請, `.codex/rules/` 讓這個指令一定要使用者確認,
+所以由 agent 執行 `approve.py test` 申請, `.codex/rules/` 讓這個指令一定要使用者確認,
 確認後寫下的放行只對列出的檔案、只在 HEAD 沒變之前有效。
 """
 
@@ -27,8 +27,9 @@ from tests.test_docs import REPO_ROOT
 GIT = shutil.which("git") or "/usr/bin/git"
 GUARD_TESTS = HOOKS_DIR / "guard_tests.py"
 GUARD_COMMANDS = HOOKS_DIR / "guard_commands.py"
-APPROVE = HOOKS_DIR / "approve_test_edit.py"
-APPROVE_COMMAND = "python3 .agents/hooks/approve_test_edit.py"
+APPROVE = HOOKS_DIR / "approve.py"
+APPROVE_COMMAND = "python3 .agents/hooks/approve.py test"
+APPROVAL_FILE = ".git/agent-approvals"
 CODEX_RULES = REPO_ROOT / ".codex" / "rules"
 AGENTS = ("claude", "codex")
 # Claude 停下來讓使用者確認; Codex 不支援 ask, 只能先擋下。
@@ -114,9 +115,13 @@ def decision(agent: str, repo: Path, path: str, action: str = "Update") -> str |
     return str(output["permissionDecision"])
 
 
-def approve(repo: Path, *paths: str) -> subprocess.CompletedProcess[str]:
+def approve(repo: Path, *paths: str, kind: str = "test") -> subprocess.CompletedProcess[str]:
     return subprocess.run(  # noqa: S603
-        [sys.executable, APPROVE, *paths], capture_output=True, text=True, cwd=repo, check=False
+        [sys.executable, APPROVE, kind, *paths],
+        capture_output=True,
+        text=True,
+        cwd=repo,
+        check=False,
     )
 
 
@@ -184,27 +189,27 @@ def test_approval_expires_after_new_commit(agent: str, implementing: Path) -> No
 
 @pytest.mark.parametrize("agent", AGENTS)
 def test_editing_approval_file_directly_is_denied(agent: str, repo: Path) -> None:
-    assert decision(agent, repo, ".git/agent-approved-test-edits") == "deny"
+    assert decision(agent, repo, APPROVAL_FILE) == "deny"
 
 
-def test_approve_rejects_non_test_paths(implementing: Path) -> None:
-    result = approve(implementing, SOURCE)
+@pytest.mark.parametrize(("kind", "path"), [("test", SOURCE), ("protected", "README.md")])
+def test_approve_rejects_paths_outside_kind(kind: str, path: str, implementing: Path) -> None:
+    result = approve(implementing, path, kind=kind)
     assert result.returncode != 0
-    assert not (implementing / ".git" / "agent-approved-test-edits").exists()
+    assert not (implementing / APPROVAL_FILE).exists()
 
 
 @pytest.mark.parametrize(
     "command",
     [
-        "echo '{}' > .git/agent-approved-test-edits",
-        "touch .git/agent-approved-test-edits",
-        f"./.agents/hooks/approve_test_edit.py {TEST}",
-        f"python .agents/hooks/approve_test_edit.py {TEST}",
-        f"cd apps && python3 ../.agents/hooks/approve_test_edit.py {TEST}",
-        # 直譯器的內嵌程式: 換個方式執行申請指令或寫放行檔。
-        "python3 -c \"import runpy; runpy.run_path('.agents/hooks/approve_test_edit.py')\"",
-        "python3 -c \"open('.git/agent-approved-test-edits', 'w').write('{}')\"",
-        "node -e \"require('fs').writeFileSync('.git/agent-approved-test-edits', '{}')\"",
+        f"echo '{{}}' > {APPROVAL_FILE}",
+        f"touch {APPROVAL_FILE}",
+        f"./.agents/hooks/approve.py test {TEST}",
+        f"python .agents/hooks/approve.py test {TEST}",
+        f"cd apps && python3 ../.agents/hooks/approve.py test {TEST}",
+        "python3 -c \"import runpy; runpy.run_path('.agents/hooks/approve.py')\"",
+        f"python3 -c \"open('{APPROVAL_FILE}', 'w').write('{{}}')\"",
+        f"node -e \"require('fs').writeFileSync('{APPROVAL_FILE}', '{{}}')\"",
     ],
 )
 @pytest.mark.parametrize("agent", AGENTS)
@@ -227,14 +232,13 @@ def test_guard_allows_the_prompted_approval_command(agent: str, repo: Path) -> N
 @pytest.mark.parametrize(
     "command",
     [
-        "chmod +x .agents/hooks/approve_test_edit.py",
-        "cat .agents/hooks/approve_test_edit.py",
-        "cat .git/agent-approved-test-edits",
-        "ls .git/agent-approved-test-edits",
-        # 導向的目標不是放行檔, 只是讀取。
-        "cat .git/agent-approved-test-edits 2>/dev/null",
-        "jq . .git/agent-approved-test-edits",
-        "python3 -m json.tool .git/agent-approved-test-edits",
+        "chmod +x .agents/hooks/approve.py",
+        "cat .agents/hooks/approve.py",
+        f"cat {APPROVAL_FILE}",
+        f"ls {APPROVAL_FILE}",
+        f"cat {APPROVAL_FILE} 2>/dev/null",
+        f"jq . {APPROVAL_FILE}",
+        f"python3 -m json.tool {APPROVAL_FILE}",
     ],
 )
 @pytest.mark.parametrize("agent", AGENTS)
@@ -257,123 +261,39 @@ def test_test_guard_is_configured_for_edit_tools() -> None:
         assert all({"Edit", "Write"} <= set(matcher.split("|")) for matcher in matchers)
 
 
-def test_codex_rule_prompts_before_approving_test_edits() -> None:
+def test_codex_rules_prompt_before_approving() -> None:
     rules = "\n".join(path.read_text(encoding="utf-8") for path in CODEX_RULES.glob("*.rules"))
     pattern = re.compile(
-        r'prefix_rule\(\s*pattern\s*=\s*\[\s*"python3"\s*,\s*"\.agents/hooks/approve_test_edit\.py"'
+        r'prefix_rule\(\s*pattern\s*=\s*\[\s*"python3"\s*,\s*"\.agents/hooks/approve\.py"'
         r'\s*\][^)]*decision\s*=\s*"prompt"',
         flags=re.DOTALL,
     )
-    assert pattern.search(rules), ".codex/rules/ 要讓 approve_test_edit.py 一定經過使用者確認"
+    assert pattern.search(rules), ".codex/rules/ 要讓 approve.py 一定經過使用者確認"
+    names = sorted(path.name for path in CODEX_RULES.glob("*.rules"))
+    assert names == ["approve.rules", "publish-release.rules"], f"Codex rule 只留兩條: {names}"
 
 
-def test_claude_asks_before_approving_test_edits() -> None:
+def test_claude_asks_before_approving() -> None:
     settings = json.loads(CLAUDE_SETTINGS.read_text(encoding="utf-8"))
     ask = settings.get("permissions", {}).get("ask", [])
-    assert f"Bash({APPROVE_COMMAND}:*)" in ask
+    assert "Bash(python3 .agents/hooks/approve.py:*)" in ask
+    assert not [rule for rule in ask if "approve_" in rule], f"舊的申請指令要拿掉: {ask}"
 
 
-# 用 shell 改測試檔 (`sed -i`、重新導向、刪除、從 git 還原) 跟改檔工具一樣要經過同意,
-# 否則測試鎖只擋得住其中一種寫法。只看明確指到測試檔的指令: `git checkout main` 這類
-# 整批切換不算, 格式化工具的 `--fix` 只動排版也不算 (見 docs/extending/agent-hooks.md)。
+# 用 shell 改測試檔不攔 (ADR 0011): 寫法擋不完, 交給 agent 自律與 CI 的 pr 事後檢查。
 SHELL_WRITES = [
     f"sed -i '' 's/x/y/' {TEST}",
-    f"sed -i.bak 's/x/y/' {TEST}",
-    f"perl -pi -e 's/x/y/' {TEST}",
     f"echo y > {TEST}",
-    f"echo y >> {TEST}",
-    f"cat > {TEST} <<'PY'\nassert True\nPY",
-    f"echo y | tee {TEST}",
-    f"cp /tmp/other.py {TEST}",
-    f"mv {TEST} /tmp/gone.py",
     f"rm {TEST}",
-    f"rm -f {E2E_SUPPORT}",
-    f"git rm -q {TEST}",
-    f"git checkout -- {TEST}",
     f"git checkout main -- {TEST}",
-    f"git restore {TEST}",
-    "cd apps/api && sed -i '' 's/x/y/' tests/modules/users/test_service.py",
-    # 直譯器的內嵌程式: 看不出是讀還是寫, 提到測試檔就當成寫入。
     f"python3 -c \"open('{TEST}', 'w').write('')\"",
-    f"node -e \"require('fs').writeFileSync('{TEST}', '')\"",
-    f"perl -e \"unlink '{TEST}'\"",
 ]
-
-SHELL_READS = [
-    f"cat {TEST}",
-    f"grep -n x {TEST}",
-    f"sed -n 1,20p {TEST}",
-    f"head {TEST}",
-    f"git diff {TEST}",
-    f"cp {TEST} /tmp/copy.py",
-    "cd apps/api && uv run pytest tests/modules/users/test_service.py -q",
-    f"echo y > {SOURCE}",
-    "git checkout main",
-]
-
-
-def shell_decision(agent: str, repo: Path, command: str) -> str | None:
-    payload = {"cwd": str(repo), "tool_name": "Bash", "tool_input": {"command": command}}
-    stdout = run(GUARD_COMMANDS, [agent], repo, payload)
-    if not stdout.strip():
-        return None
-    output = json.loads(stdout)["hookSpecificOutput"]
-    assert output["permissionDecisionReason"], "擋下時要說明理由與下一步"
-    return str(output["permissionDecision"])
 
 
 @pytest.mark.parametrize("command", SHELL_WRITES)
 @pytest.mark.parametrize("agent", AGENTS)
-def test_shell_writes_to_tests_need_approval_after_implementation_starts(
+def test_shell_writes_to_tests_are_not_guarded(
     agent: str, command: str, implementing: Path
 ) -> None:
-    assert shell_decision(agent, implementing, command) == BLOCKED[agent], f"沒有攔下: {command}"
-
-
-@pytest.mark.parametrize("command", SHELL_WRITES)
-@pytest.mark.parametrize("agent", AGENTS)
-def test_shell_writes_to_tests_are_allowed_before_implementation_starts(
-    agent: str, command: str, repo: Path
-) -> None:
-    assert shell_decision(agent, repo, command) is None, f"實作前誤擋: {command}"
-
-
-@pytest.mark.parametrize("command", SHELL_READS)
-@pytest.mark.parametrize("agent", AGENTS)
-def test_shell_reads_of_tests_are_never_blocked(
-    agent: str, command: str, implementing: Path
-) -> None:
-    assert shell_decision(agent, implementing, command) is None, f"誤擋: {command}"
-
-
-@pytest.mark.parametrize("agent", AGENTS)
-def test_approved_test_edit_via_shell_is_allowed(agent: str, implementing: Path) -> None:
-    assert approve(implementing, TEST).returncode == 0
-    assert shell_decision(agent, implementing, f"sed -i '' 's/x/y/' {TEST}") is None
-    assert shell_decision(agent, implementing, f"rm {OTHER_TEST}") == BLOCKED[agent]
-
-
-# 套用 patch 會改到 patch 標頭列出的檔案; 只看指令看不到路徑, 要讀 patch 本身。
-PATCH = (
-    f"diff --git a/{TEST} b/{TEST}\n"
-    f"--- a/{TEST}\n"
-    f"+++ b/{TEST}\n"
-    "@@ -1 +1 @@\n"
-    "-x\n"
-    "+y\n"
-)
-
-
-@pytest.mark.parametrize(
-    "command",
-    ["git apply change.patch", "git am change.patch", "patch -p1 < change.patch"],
-)
-@pytest.mark.parametrize("agent", AGENTS)
-def test_applying_patch_to_tests_needs_approval_after_implementation_starts(
-    agent: str, command: str, implementing: Path
-) -> None:
-    write(implementing, "change.patch", PATCH)
-    assert shell_decision(agent, implementing, command) == BLOCKED[agent], f"沒有攔下: {command}"
-    write(implementing, "source.patch", PATCH.replace(TEST, SOURCE))
-    other = command.replace("change.patch", "source.patch")
-    assert shell_decision(agent, implementing, other) is None, f"誤擋: {other}"
+    payload = {"cwd": str(implementing), "tool_name": "Bash", "tool_input": {"command": command}}
+    assert not run(GUARD_COMMANDS, [agent], implementing, payload).strip(), command

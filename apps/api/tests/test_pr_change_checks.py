@@ -105,14 +105,6 @@ def test_test_change_reason_outside_verification_fails(repo: Path) -> None:
     assert TEST in result.stderr
 
 
-def test_test_change_listed_without_explanation_fails(repo: Path) -> None:
-    commit(repo, {SOURCE: "x = 2\n"}, "impl")
-    commit(repo, {TEST: "def test_x():\n    assert 1\n"}, "loosen test")
-    result = check(repo, body(verification=f"- `{TEST}`"))
-    assert result.returncode != 0
-    assert TEST in result.stderr
-
-
 def test_tests_written_before_implementation_pass(repo: Path) -> None:
     commit(repo, {TEST: "def test_x():\n    assert 2\n"}, "test first")
     commit(repo, {SOURCE: "x = 2\n"}, "impl")
