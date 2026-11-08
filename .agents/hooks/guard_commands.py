@@ -21,9 +21,9 @@ import sys
 from collections.abc import Iterator
 from pathlib import Path
 
+import branch_lock
+import test_lock
 from test_lock import (
-    APPROVAL_NAME,
-    APPROVE_COMMAND,
     is_test_file,
     pending_test_edits,
     relative,
@@ -178,24 +178,34 @@ def pushes_to_main(args: list[str], cwd: str) -> bool:
     return any(refspec.lstrip("+").split(":")[-1] in MAIN_REFS for refspec in refspecs)
 
 
-def self_approval(argv: list[str]) -> bool:
-    """測試鎖定的放行只能經過固定寫法的申請指令: 那個寫法才會被兩家要求使用者確認。
+# 需要使用者確認的放行: (放行檔名, 固定寫法的申請指令, 申請的對象)。
+APPROVALS = (
+    (test_lock.APPROVAL_NAME, test_lock.APPROVE_COMMAND, "<測試檔>"),
+    (branch_lock.APPROVAL_NAME, branch_lock.APPROVE_COMMAND, "<分支>"),
+)
+
+
+def self_approval(argv: list[str]) -> str | None:
+    """放行只能經過固定寫法的申請指令: 那個寫法才會被兩家要求使用者確認。回傳該用的寫法。
 
     只擋「換寫法執行申請指令」與「寫入放行檔」; `chmod`、`cat` 這類只是提到檔名的不擋。
     """
-    if argv[: len(APPROVE_COMMAND)] == APPROVE_COMMAND:
-        return False
-    program = argv[0].rsplit("/", 1)[-1]
-    script = APPROVE_COMMAND[1].rsplit("/", 1)[-1]
-    arguments = [arg for arg in argv[1:] if not arg.startswith("-")]
-    runs_script = program == script or (
-        program in PYTHONS and bool(arguments) and arguments[0].endswith(script)
-    )
-    touches_approval = any(APPROVAL_NAME in arg for arg in argv)
-    writes_approval = touches_approval and (
-        program not in READ_ONLY or bool({">", ">>"} & set(argv))
-    )
-    return runs_script or writes_approval
+    for approval_name, approve_command, target in APPROVALS:
+        if argv[: len(approve_command)] == approve_command:
+            continue
+        program = argv[0].rsplit("/", 1)[-1]
+        script = approve_command[1].rsplit("/", 1)[-1]
+        arguments = [arg for arg in argv[1:] if not arg.startswith("-")]
+        runs_script = program == script or (
+            program in PYTHONS and bool(arguments) and arguments[0].endswith(script)
+        )
+        touches_approval = any(approval_name in arg for arg in argv)
+        writes_approval = touches_approval and (
+            program not in READ_ONLY or bool({">", ">>"} & set(argv))
+        )
+        if runs_script or writes_approval:
+            return f"{' '.join(approve_command)} {target}"
+    return None
 
 
 def bypasses_publish(argv: list[str]) -> bool:
@@ -372,6 +382,62 @@ def with_cwd(commands: list[list[str]], cwd: str) -> list[tuple[list[str], str]]
     return result
 
 
+def new_branch(argv: list[str], cwd: str) -> str | None:
+    """這個指令會開始的新分支 (開分支、開 worktree、開 PR); 不是的話回傳 None。"""
+    program = argv[0].rsplit("/", 1)[-1]
+    if program == "gh":
+        if argv[1:3] != ["pr", "create"]:
+            return None
+        head = [argv[i + 1] for i, arg in enumerate(argv[:-1]) if arg in {"--head", "-H"}]
+        return head[0] if head else current_branch(cwd)
+    if program != "git":
+        return None
+    subcommand, args = git_subcommand(argv)
+    flags = [arg for arg in args if arg.startswith("-")]
+    positional = [arg for arg in args if not arg.startswith("-")]
+    if subcommand == "switch" and {"-c", "-C", "--create", "--force-create"} & set(flags):
+        return positional[0] if positional else ""
+    if subcommand == "checkout" and {"-b", "-B"} & set(flags):
+        return positional[0] if positional else ""
+    if subcommand == "branch" and not flags and positional:
+        return positional[0]
+    if subcommand == "worktree" and positional[:1] == ["add"]:
+        named = [args[i + 1] for i, arg in enumerate(args[:-1]) if arg in {"-b", "-B"}]
+        if named:
+            return named[0]
+        return positional[2] if len(positional) > 2 else positional[-1].rsplit("/", 1)[-1]
+    return None
+
+
+def parallel_branches(commands: list[tuple[list[str], str]], cwd: str) -> list[str]:
+    """還有開著的 PR 時, 這串指令要開始、而且還沒被放行的分支。"""
+    branches = {
+        branch
+        for argv, where in commands
+        for branch in [new_branch(argv, where)]
+        if branch is not None
+    }
+    root = test_lock.repo_root(Path(cwd))
+    if not branches or root is None:
+        return []
+    pending = branches - branch_lock.approved_branches(root)
+    if not pending:
+        return []
+    return sorted(pending) if branch_lock.open_prs(cwd) else []
+
+
+def parallel_verdict(agent: str, branches: list[str]) -> tuple[str, str]:
+    rule = (
+        "使用者還有開著的 PR：一次只有一個進行中的 PR，合併後才開下一個"
+        "（docs/workflow.md〈一次一個 PR〉）。先回報，等使用者合併；"
+        "正式環境出問題要插隊，照 hotfix skill 向使用者說明並取得同意。"
+    )
+    if agent == "codex":
+        command = " ".join([*branch_lock.APPROVE_COMMAND, *branches])
+        return "deny", f"{rule}使用者同意插隊後執行 `{command}` 申請，它會請使用者確認。"
+    return "ask", rule
+
+
 def git_violation(argv: list[str], cwd: str) -> str | None:
     subcommand, args = git_subcommand(argv)
     if subcommand == "push" and pushes_to_main(args, cwd):
@@ -390,11 +456,9 @@ def git_violation(argv: list[str], cwd: str) -> str | None:
 
 
 def violation(argv: list[str], cwd: str) -> str | None:
-    if self_approval(argv):
-        return (
-            f"測試檔的放行只能用 `{' '.join(APPROVE_COMMAND)} <測試檔>` 申請，"
-            "它會請使用者確認；不要直接寫放行檔或換寫法呼叫。"
-        )
+    approval = self_approval(argv)
+    if approval:
+        return f"放行只能用 `{approval}` 申請，它會請使用者確認；不要直接寫放行檔或換寫法呼叫。"
     if bypasses_publish(argv) or (argv[0].rsplit("/", 1)[-1] == "gh" and deploys(argv)):
         return (
             f"發布 release 會直接部署，只能用 `{PUBLISH_COMMAND} <版號> [--prerelease]`，"
@@ -454,6 +518,10 @@ def main() -> int:
     pending = test_writes(located, cwd)
     if pending:
         decide(*verdict(agent, pending))
+        return 0
+    branches = parallel_branches(located, cwd)
+    if branches:
+        decide(*parallel_verdict(agent, branches))
         return 0
     # 發布 release 一定要使用者確認。Claude 的 permissions.ask 也會問, 這裡再回 ask 是因為
     # 權限模式 (例如自動放行) 可能略過設定檔; Codex 不支援 ask, 由 .codex/rules/ 的 prompt 負責。
