@@ -123,6 +123,19 @@ async def test_paging_back_returns_previous_page(paged_rows):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_get_page_backward_without_cursor_reports_previous_only(paged_rows):
+    """沒有游標往回翻 = 從最後一頁開始: 只能再往前, 不會有下一頁。"""
+    result = await paged_rows.get_page(limit=2, direction="prev")
+
+    assert [row["name"] for row in result["list_data"]] == ["row-3", "row-4"]
+    assert result["has_previous"] is True
+    assert result["has_next"] is False
+    assert result["prev_cursor"] is not None
+    assert result["next_cursor"] is None
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_total_count_reflects_filter_not_page_size(paged_rows):
     """total_count 算的是「符合條件的總數」, 不是這一頁的筆數。"""
     result = await paged_rows.get_page(limit=2, where=[paged_rows.group == "a"])

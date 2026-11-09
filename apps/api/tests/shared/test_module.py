@@ -70,3 +70,12 @@ def test_validate_modules_rejects_duplicate_table_classes():
                 ModuleManifest("two", tables=(SharedTable,)),
             )
         )
+
+
+def test_module_registering_non_table_model_fails_at_startup():
+    class NotATable:
+        pass
+
+    tables = (NotATable,)
+    with pytest.raises(RuntimeError, match="registered a non-table"):
+        validate_modules((ModuleManifest("one", tables=tables),))  # type: ignore[arg-type]  # 故意傳錯型別

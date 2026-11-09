@@ -199,3 +199,32 @@ async def test_cli_create_super_admin_rejects_duplicate_username(superuser_db):
     assert exc_info.value.status_code == 409
     assert exc_info.value.detail == UserError.USERNAME_EXISTS.value.zh
     assert await count(UserTable) == 1
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_revoke_all_sessions_invalidates_every_existing_token(superuser_db):
+    """帳號被盜時的緊急手段: 每個人的世代 +1, 手上的 token 全部對不上。"""
+    from modules.users.model import UserTable
+
+    async with session_scope():
+        for username in ("alice", "bob"):
+            await UserTable.create(
+                data={"username": username, "password": "hashed", "nickname": username}
+            )
+
+    async def versions() -> dict[str, int]:
+        found: dict[str, int] = {}
+        async with session_scope():
+            for username in ("alice", "bob"):
+                detail = await UserTable.find_detail_by_username(username)
+                assert detail is not None
+                found[username] = detail["auth_version"]
+        return found
+
+    before = await versions()
+    result = await in_session(superuser.revoke_all_sessions)
+
+    assert result.affected == 2
+    after = await versions()
+    assert all(after[username] == before[username] + 1 for username in before)

@@ -149,6 +149,55 @@ def test_expired_keys_are_swept():
     assert set(limiter._hits) == {"ip-new"}
 
 
+class _Clock:
+    """取代 `time.monotonic`, 讓測試自己決定時間, 不必 sleep。"""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+@pytest.fixture
+def clock(monkeypatch: pytest.MonkeyPatch) -> _Clock:
+    from shared.http import rate_limit
+
+    fake = _Clock()
+    monkeypatch.setattr(rate_limit.time, "monotonic", fake)
+    return fake
+
+
+def test_check_after_window_expires_allows_again(clock: _Clock):
+    """同一個 key 只丟掉掉出視窗的那幾次, 還在視窗內的照樣算數。"""
+    limiter = RateLimiter(max_attempts=2, window_seconds=100)
+    limiter.check("ip-1")  # t=0
+    clock.now = 60
+    limiter.check("ip-1")  # t=60, 額度用完
+
+    with pytest.raises(LangException):
+        limiter.check("ip-1")
+
+    clock.now = 101  # t=0 那次掉出視窗, t=60 那次還在
+    limiter.check("ip-1")
+
+    with pytest.raises(LangException):
+        limiter.check("ip-1")
+
+
+def test_capacity_sweep_frees_expired_keys_without_evicting_active(clock: _Clock):
+    """表格滿了先清過期的; 清出空間就不必淘汰還在視窗內的 key。"""
+    limiter = RateLimiter(max_attempts=5, window_seconds=100, max_keys=2)
+    clock.now = 10
+    limiter.check("expired")
+    clock.now = 100  # 這次 check 會做一次定期清理, 但 t=10 那筆還在視窗內
+    limiter.check("active")
+    clock.now = 150  # 離上次清理不到一個視窗, 新 key 進來時由容量檢查觸發清理
+    limiter.check("new")
+
+    assert set(limiter._hits) == {"active", "new"}
+
+
 def test_key_count_never_exceeds_max_keys():
     """即使所有 key 都還在視窗內, 也不能無限成長。"""
     limiter = RateLimiter(max_attempts=5, window_seconds=3600, max_keys=50)
