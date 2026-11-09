@@ -4,6 +4,8 @@ PR 標題 squash 後就是 main 的 commit, 所以必須是 Conventional Commits
 (docs/workflow.md〈提交與 CI〉);
 描述固定「摘要、驗證、檢查」三段。`gh pr create --body` 會跳過模板, 漏了也不會報錯。
 標題與描述可以在 GitHub 上直接改, 所以 workflow 要在 edited 時也跑。
+合併或關閉之後再改 (例如回頭勾「檢查」的 checkbox) 也會觸發 edited, 那時格式已經不影響任何東西,
+分支也可能刪了, 改動檢查拿不到 PR 的 commit 而失敗, 在已合併的 PR 上留下紅叉: 只在 PR 開著時檢查。
 
 住在 api 底下的理由同 `test_nginx_templates.py`: `make check` 一定會跑到這裡。
 """
@@ -77,3 +79,11 @@ def test_pr_workflow_runs_when_title_or_body_is_edited() -> None:
     assert match, "pr.yml 要用 pull_request.types 列出觸發的事件"
     types = {item.strip() for item in match.group(1).split(",")}
     assert {"opened", "edited", "synchronize", "reopened"} <= types
+
+
+def test_pr_workflow_skips_closed_pull_requests() -> None:
+    workflow = WORKFLOW.read_text("utf-8")
+    job = re.search(r"^  pr:\n(.*?)(?=^  \S|\Z)", workflow, flags=re.MULTILINE | re.DOTALL)
+    assert job, "pr.yml 找不到 pr job"
+    condition = "if: github.event.pull_request.state == 'open'"
+    assert re.search(rf"^    {re.escape(condition)}$", job.group(1), flags=re.MULTILINE)
