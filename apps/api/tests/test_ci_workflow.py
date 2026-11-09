@@ -13,6 +13,8 @@
   不另開一個 job 建同樣的東西再丟掉。
 - 快取 scope 與 deploy.yml 的 build 共用: 部署讀的是 CI 剛寫進去的層, 兩邊用同一組參數建,
   CI 測的與部署的才是同一份建置設定。
+- e2e 依 matrix 分份 (shard): 份號與總份數經 `E2E_SHARD` 交給 `make check e2e`, 一份失敗不取消
+  其他份 (各份的結果都要看到)。失敗報告的名稱帶份號, 多份時才不會互相覆蓋。
 - 要裝前端套件的 job 快取 `node_modules`: key 要涵蓋 Node 版本與兩份清單, 否則命中舊快取時
   `npm ci` 該擋的 (清單與 lock 不一致、原生模組對不上 Node 版本) 都會被略過。
 
@@ -235,3 +237,21 @@ def test_web_jobs_skip_npm_ci_on_cache_hit() -> None:
         assert len(npm_ci) == 1, name
         condition = f"if: steps.{cache_id.group(1)}.outputs.cache-hit != 'true'"
         assert condition in npm_ci[0], name
+
+
+def test_e2e_job_splits_into_shards() -> None:
+    job = _ci_job("e2e")
+    strategy = r"^    strategy:\n(?:^      .*\n)*^      fail-fast: false$"
+    assert re.search(strategy, job, flags=re.MULTILINE)
+    assert re.search(r"^        shard: \[[\d, ]+\]$", job, flags=re.MULTILINE)
+    runs = [step for step in _steps(job) if re.search(r"^run: make check e2e$", step, re.MULTILINE)]
+    assert len(runs) == 1
+    expected = "E2E_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}"
+    assert re.search(rf"^\s+{re.escape(expected)}$", runs[0], flags=re.MULTILINE)
+
+
+def test_e2e_report_artifact_is_named_by_shard() -> None:
+    uploads = [step for step in _steps(_ci_job("e2e")) if "actions/upload-artifact@" in step]
+    assert len(uploads) == 1
+    name = r"^\s+name: playwright-report-\$\{\{ matrix\.shard \}\}$"
+    assert re.search(name, uploads[0], flags=re.MULTILINE)
