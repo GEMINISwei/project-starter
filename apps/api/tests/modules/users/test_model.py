@@ -17,11 +17,16 @@ CI 上會真的跑)。
 刪掉模組時連同它的測試目錄整包刪除即可。
 """
 
-import pytest
+import contextlib
+from collections.abc import Iterator
 
-from modules.roles.public import RoleTable
+import pytest
+from sqlalchemy import event
+
+from modules.roles.model import RoleTable
 from modules.users.model import UserDetail, UserTable
 from shared.auth.contracts import CurrentUser
+from shared.db.session import active_session
 
 from ..helpers import assert_covers
 
@@ -110,3 +115,72 @@ async def test_update_with_empty_role_ids_clears_roles(db):
     result = await UserTable.find_detail_by_id(created["id"])
     assert result is not None
     assert result["role_ids"] == []
+
+
+@contextlib.contextmanager
+def count_queries() -> Iterator[list[str]]:
+    """記下這段期間送到資料庫的每一條 SQL。"""
+    engine = active_session().sync_session.get_bind()
+    statements: list[str] = []
+
+    def record(_connection, _cursor, statement, *_args) -> None:
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", record)
+    try:
+        yield statements
+    finally:
+        event.remove(engine, "before_cursor_execute", record)
+
+
+async def test_find_detail_by_username_runs_three_queries(db):
+    """身分來源每個請求都會跑: 使用者、自己的關聯表、roles 的公開介面, 固定三次。
+
+    users 不能 JOIN roles 的資料表 (只能走 `modules.roles.public`), 所以比合在一起查多一次;
+    這個測試鎖住的是「不會再多」—— 例如逐一查每個角色。
+    """
+    first = await RoleTable.create(data={"name": "甲", "permissions": ["users:read"]})
+    second = await RoleTable.create(data={"name": "乙", "permissions": ["roles:read"]})
+    await UserTable.create(
+        data={
+            "username": "three-queries",
+            "password": "hashed",
+            "nickname": "三次",
+            "role_ids": [first["id"], second["id"]],
+        }
+    )
+
+    with count_queries() as statements:
+        result = await UserTable.find_detail_by_username("three-queries")
+
+    assert result is not None
+    assert set(result["role_ids"]) == {first["id"], second["id"]}
+    assert len(statements) == 3
+
+
+async def test_find_list_query_count_does_not_grow_with_users(db):
+    """列表一次補完整頁的角色, 查詢次數與這一頁有幾個人無關 (沒有 N+1)。"""
+    role = await RoleTable.create(data={"name": "共用", "permissions": ["users:read"]})
+
+    async def add_user(username: str) -> None:
+        await UserTable.create(
+            data={
+                "username": username,
+                "password": "hashed",
+                "nickname": username,
+                "role_ids": [role["id"]],
+            }
+        )
+
+    await add_user("page-1")
+    with count_queries() as one_user:
+        await UserTable.find_list(limit=20)
+
+    for index in range(2, 5):
+        await add_user(f"page-{index}")
+    with count_queries() as four_users:
+        page = await UserTable.find_list(limit=20)
+
+    assert len(page["list_data"]) == 4
+    assert all(user["role_ids"] == [role["id"]] for user in page["list_data"])
+    assert len(four_users) == len(one_user)

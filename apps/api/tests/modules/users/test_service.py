@@ -13,7 +13,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from app.permissions import Permission
-from modules.roles.public import RoleTable
+from modules.roles.model import RoleTable
 from modules.users import service as user_service
 from modules.users.errors import UserError
 from modules.users.model import UserDetail, UserTable
