@@ -6,9 +6,11 @@ UserTable 之類的正式 model: 這些是 shared 的行為, 測試不該綁在�
 """
 
 import os
+import uuid
 
 import pytest_asyncio
-from sqlalchemy import String, delete, select
+from sqlalchemy import ARRAY, String, delete, select
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from shared.db.session import configure_session_factory, create_engine, session_scope
@@ -52,6 +54,19 @@ class DetailRow(BaseTable):
 
     def to_detail(self) -> dict:
         return {**self.to_dict(), "label": f"#{self.name}"}
+
+
+class RefRow(BaseTable):
+    """帶 UUID 欄位與 UUID 陣列欄位的最小資料表, 給「只寫真的有變的欄位」的比對用。
+
+    兩種欄位從資料庫讀回來是 `uuid.UUID`, 呼叫端傳進來的是字串; 比對時要看值不看型別。
+    """
+
+    __tablename__ = "test_ref_rows"
+
+    name: Mapped[str] = mapped_column(String)
+    owner_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    member_ids: Mapped[list[uuid.UUID]] = mapped_column(ARRAY(UUID(as_uuid=True)), default=list)
 
 
 async def _connect(model: type[BaseTable]):
@@ -189,3 +204,25 @@ async def empty_detail_table():
     yield DetailRow
 
     await _teardown(engine, DetailRow)
+
+
+@pytest_asyncio.fixture
+async def empty_paged_rows():
+    """空的 `PagedRow` 資料表, 由測試自己放進需要的資料。"""
+    engine = await _connect(PagedRow)
+
+    async with session_scope():
+        yield PagedRow
+
+    await _teardown(engine, PagedRow)
+
+
+@pytest_asyncio.fixture
+async def ref_rows():
+    """空的 `RefRow` 資料表。"""
+    engine = await _connect(RefRow)
+
+    async with session_scope():
+        yield RefRow
+
+    await _teardown(engine, RefRow)

@@ -220,3 +220,27 @@ async def test_get_permission_options_requires_authentication(client: AsyncClien
     response = await client.get("/api/roles/permission-options")
 
     assert response.status_code == 401
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_role_create_get_update_disable_through_http(client: AsyncClient, db):
+    """路由 → service → 資料庫 → 回應格式整條走一次 (其他路由測試把 service 換掉了)。"""
+    authenticate(client, "super")
+
+    created = await client.post("/api/roles/", json={"name": "編輯", "permissions": []})
+    assert created.status_code == 200
+    role_id = created.json()["id"]
+
+    fetched = await client.get(f"/api/roles/{role_id}")
+    assert fetched.status_code == 200
+    assert fetched.json()["name"] == "編輯"
+
+    body = {"name": "資深編輯", "permissions": [], "is_disabled": False}
+    assert (await client.patch(f"/api/roles/{role_id}", json=body)).status_code == 200
+    # 原封不動再存一次: 沒有任何欄位改變, 回 204。
+    assert (await client.patch(f"/api/roles/{role_id}", json=body)).status_code == 204
+
+    assert (await client.delete(f"/api/roles/{role_id}")).status_code == 200
+    listed = await client.get("/api/roles/", params={"limit": 20, "is_disabled": True})
+    assert [role["name"] for role in listed.json()["list_data"]] == ["資深編輯"]

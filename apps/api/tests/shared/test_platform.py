@@ -19,7 +19,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from shared.auth.contracts import CurrentUser
 from shared.auth.tokens import create_token
 from shared.db.table import BaseTable
-from shared.http.errors import BaseError, LangException, LangText
+from shared.http.errors import BaseError, LangException, LangText, NoChangeError
 from shared.module import ModuleManifest
 from shared.platform import create_platform_app
 from tests.integration import restore_session_factory
@@ -235,6 +235,27 @@ async def probe_client():
     transport = ASGITransport(app=application, raise_app_exceptions=False)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
+
+
+@pytest.mark.asyncio
+async def test_no_change_error_returns_204(calls: list[str]):
+    """更新時沒有任何欄位真的改變, 回 204 而不是 200 帶一份沒變的資料。
+
+    前端據此顯示「沒有變更」。
+    """
+    router = APIRouter(prefix="/probe")
+
+    @router.patch("/unchanged")
+    async def unchanged_route() -> dict[str, bool]:
+        raise NoChangeError()
+
+    application = create_minimal_app(ModuleManifest("probe", routers=(router,)))
+    transport = ASGITransport(app=application)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.patch("/api/probe/unchanged")
+
+    assert response.status_code == 204
+    assert response.content == b""
 
 
 @pytest.mark.asyncio

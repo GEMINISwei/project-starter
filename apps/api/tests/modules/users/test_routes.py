@@ -9,6 +9,7 @@ from modules.users import service as user_service
 from modules.users.errors import UserError
 from modules.users.model import UserTable
 from shared.auth import passwords
+from shared.http.errors import LangException
 
 from ..helpers import authenticate
 
@@ -298,6 +299,34 @@ def _login_always_fails(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.mark.asyncio
+async def test_login_success_resets_failed_attempt_counter(
+    client: AsyncClient, _clean_login_limiter, monkeypatch: pytest.MonkeyPatch
+):
+    """登入成功要把這組 IP + 帳號的失敗次數歸零, 否則打錯幾次密碼的人登入後仍被算進額度。"""
+    from modules.users.schema import UserToken
+
+    limiter = _clean_login_limiter
+    failures = [False] * (limiter.max_attempts - 1)
+    attempts = iter([*failures, True, *failures])
+
+    async def login_user(form_data, env):
+        if next(attempts):
+            return UserToken(access_token="jwt", token_type="bearer")
+        raise LangException(401, UserError.INVALID_CREDENTIALS)
+
+    monkeypatch.setattr(account, "login_user", login_user)
+    payload = {"username": "victim", "password": "pw"}
+
+    for _ in range(limiter.max_attempts - 1):
+        assert (await client.post("/api/users/login", data=payload)).status_code == 401
+    assert (await client.post("/api/users/login", data=payload)).status_code == 200
+
+    # 歸零之後又有完整的額度: 再錯 max_attempts - 1 次都還不會被擋。
+    for _ in range(limiter.max_attempts - 1):
+        assert (await client.post("/api/users/login", data=payload)).status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_login_rate_limit_returns_429_with_retry_after(
     client: AsyncClient, _clean_login_limiter, _login_always_fails
 ):
@@ -380,6 +409,28 @@ def _token_with_auth_version(username: str, auth_version: int) -> str:
 
     payload: TokenSubject = {"username": username, "auth_version": auth_version}
     return create_token(payload, app.state.env)["access_token"]
+
+
+@pytest.mark.asyncio
+async def test_token_of_deleted_user_returns_401(client: AsyncClient, set_current_users):
+    """token 還沒過期, 但簽發對象已經不在了: 不能因為簽章正確就放行。"""
+    set_current_users({})
+    authenticate(client, "super")
+
+    response = await client.get("/api/users/me")
+
+    assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_token_of_disabled_user_returns_401(client: AsyncClient, set_current_users):
+    """停用要立刻生效, 不必等手上的 token 過期。"""
+    set_current_users({"super": {**USERS["super"], "is_disabled": True}})
+    authenticate(client, "super")
+
+    response = await client.get("/api/users/me")
+
+    assert response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -561,3 +612,25 @@ async def test_change_own_password_is_rate_limited_per_user(
 
     assert response.status_code == 429
     assert int(response.headers["retry-after"]) >= 1
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_user_create_get_disable_through_http(client: AsyncClient, db):
+    """路由 → service → 資料庫 → 回應格式整條走一次 (其他路由測試把 service 換掉了)。"""
+    authenticate(client, "super")
+
+    created = await client.post(
+        "/api/users/",
+        json={"username": "new-user", "password": "pass-word-1", "nickname": "新人"},
+    )
+    assert created.status_code == 200
+    user_id = created.json()["id"]
+
+    fetched = await client.get(f"/api/users/{user_id}")
+    assert fetched.status_code == 200
+    assert fetched.json()["username"] == "new-user"
+    assert "password" not in fetched.json()
+
+    assert (await client.delete(f"/api/users/{user_id}")).status_code == 200
+    assert (await client.get(f"/api/users/{user_id}")).json()["is_disabled"] is True

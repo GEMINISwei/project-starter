@@ -27,6 +27,7 @@ from modules.roles.model import RoleTable
 from modules.users.model import UserDetail, UserTable
 from shared.auth.contracts import CurrentUser
 from shared.db.session import active_session
+from shared.db.table import PagedResult
 
 from ..helpers import assert_covers
 
@@ -182,3 +183,50 @@ async def test_find_list_query_count_does_not_grow_with_users(db):
     assert len(page["list_data"]) == 4
     assert all(user["role_ids"] == [role["id"]] for user in page["list_data"])
     assert len(four_users) == len(one_user)
+
+
+async def _user(username: str, nickname: str, **extra) -> dict:
+    return await UserTable.create(
+        data={"username": username, "password": "hashed", "nickname": nickname, **extra}
+    )
+
+
+def _usernames(page: PagedResult) -> list[str]:
+    return sorted(user["username"] for user in page["list_data"])
+
+
+async def test_find_list_filters_by_name(db):
+    """暱稱的關鍵字篩選, 大小寫不敏感、部分符合即可。"""
+    await _user("ming", "王小明")
+    await _user("da", "王大明")
+    await _user("li", "李四")
+
+    assert _usernames(await UserTable.find_list(limit=20, name="小明")) == ["ming"]
+    assert _usernames(await UserTable.find_list(limit=20, name="王")) == ["da", "ming"]
+
+
+async def test_find_list_filters_by_role_and_unassigned(db):
+    """指定角色只列掛著它的人; `unassigned` 列沒有任何角色的人; 格式錯的 id 列出零筆。"""
+    role = await RoleTable.create(data={"name": "篩選", "permissions": []})
+    await _user("with-role", "有角色", role_ids=[role["id"]])
+    await _user("no-role", "沒角色")
+
+    assert _usernames(await UserTable.find_list(limit=20, role_id=role["id"])) == ["with-role"]
+    assert _usernames(await UserTable.find_list(limit=20, role_id="unassigned")) == ["no-role"]
+    # 打錯的 id 若被忽略會回傳全部, 看起來像「所有人都掛著這個角色」。
+    assert _usernames(await UserTable.find_list(limit=20, role_id="not-a-uuid")) == []
+
+
+async def test_find_list_filters_by_disabled_status(db):
+    await _user("active", "啟用中")
+    await _user("disabled", "已停用", is_disabled=True)
+
+    assert _usernames(await UserTable.find_list(limit=20, is_disabled=True)) == ["disabled"]
+    assert _usernames(await UserTable.find_list(limit=20, is_disabled=False)) == ["active"]
+    assert _usernames(await UserTable.find_list(limit=20)) == ["active", "disabled"]
+
+
+async def test_update_unknown_user_returns_none(db):
+    """查無此人回 None, 由 service 轉成 404; 格式不合法的 id 也一樣, 不能變成 500。"""
+    assert await UserTable.update_by_id(id="0123abcd-4567-89ab-cdef-0123456789ab", data={}) is None
+    assert await UserTable.update_by_id(id="not-a-uuid", data={"nickname": "x"}) is None
