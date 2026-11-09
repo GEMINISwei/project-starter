@@ -48,8 +48,8 @@ export function resolveLocale(acceptLanguage: string | null | undefined): Locale
   if (!acceptLanguage) return DEFAULT_LOCALE
 
   for (const part of acceptLanguage.split(",")) {
-    const tag = part.split(";")[0]?.trim().toLowerCase() ?? ""
-    const primary = tag.split("-")[0] ?? ""
+    const tag = part.split(";")[0].trim().toLowerCase()
+    const primary = tag.split("-")[0]
     if (isLocale(primary)) return primary
   }
 
