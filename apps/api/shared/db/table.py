@@ -77,6 +77,34 @@ def is_unique_violation(error: Exception) -> bool:
     return getattr(getattr(error, "orig", None), "sqlstate", None) == "23505"
 
 
+class ForeignKeyError(BaseError):
+    STILL_REFERENCED = LangText(
+        zh="仍有其他資料使用中，無法完成操作", en="Still In Use By Other Records"
+    )
+    REFERENCE_NOT_FOUND = LangText(zh="參照的資料不存在", en="Referenced Record Not Found")
+
+
+def is_foreign_key_violation(error: Exception) -> bool:
+    """這個 `IntegrityError` 是不是外鍵違反 (SQLSTATE `23503`)? 理由同 `is_unique_violation`。"""
+    if not isinstance(error, IntegrityError):
+        return False
+    return getattr(getattr(error, "orig", None), "sqlstate", None) == "23503"
+
+
+def foreign_key_error(error: IntegrityError) -> ForeignKeyError:
+    """外鍵違反是哪一種: 刪掉仍被參照的資料, 還是寫入不存在的參照。
+
+    **依觸發錯誤的 SQL 種類判斷。** PostgreSQL 對兩種情況給的 SQLSTATE、資料表與約束名稱
+    完全相同 (資料表都是參照的那一張), 只有 detail 文字不同, 而那段文字會隨語系變。
+    SQL 是程式自己產生的, 不受語系影響。唯一的誤判是「改掉被參照資料的主鍵」, 但主鍵是
+    UUID、不會被修改。
+    """
+    statement = (error.statement or "").lstrip().upper()
+    if statement.startswith("DELETE"):
+        return ForeignKeyError.STILL_REFERENCED
+    return ForeignKeyError.REFERENCE_NOT_FOUND
+
+
 def _encode_cursor(sort_value: Any, row_id: str) -> str:
     if isinstance(sort_value, datetime):
         sort_value = sort_value.isoformat()

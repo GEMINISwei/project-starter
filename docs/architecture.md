@@ -239,6 +239,7 @@ ORM relationship、JOIN 與 `detail_loaders()`。
 
 - 外鍵用字串宣告（`ForeignKey("roles.id")`），不 import 對方的資料表。依賴方向跟外鍵方向一致，被參照的模組不知道誰在參照它。
 - `ondelete` 由持有外鍵的一方決定：關聯表與擴充表 `CASCADE`；業務資料預設 `RESTRICT`；選填的關聯 `SET NULL`。
+  `RESTRICT` 擋下的刪除，使用者會看到 409「仍有其他資料使用中」，不是 500。
 
 ### 讀對方的資料
 
@@ -255,7 +256,9 @@ ORM relationship、JOIN 與 `detail_loaders()`。
 
 被參照的一方需要知道誰在參照自己時（刪角色前檢查還有沒有人用、停用使用者時連動取消訂單），不可反過來 import：
 
-1. 先交給資料庫：`RESTRICT` 讓刪除失敗。
+1. 先交給資料庫：`RESTRICT` 讓刪除失敗。平台會把外鍵違反統一轉成 409：刪除時是「仍有其他資料使用中」，
+   新增或更新時是「參照的資料不存在」（`shared/platform.py`），模組不必自己攔 `IntegrityError`。
+   兩種情況 PostgreSQL 只有會隨語系變的 detail 文字不同，所以依觸發錯誤的 SQL 種類區分（`foreign_key_error()`）。
 2. 需要明確的訊息或業務上的連動時，由持有外鍵的模組透過 manifest 提供，組裝層接上（同 `current_user_resolver`）。
    通用的 hook／事件機制**還沒有實作**，第一個真正需要的功能出現時再設計。
 
