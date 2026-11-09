@@ -11,7 +11,8 @@ description: 開始任何要進 main 的改動時使用（新功能、修正、�
    沒有就從最新的 `main` 開 `<type>/<kebab-case>`。一個分支只做一件事，途中發現的別的問題記下來另開。
 2. **驗收條件**：每條接一個測試名稱（前端與 E2E 用中文句子，後端 `test_<動作>_<條件>_<結果>`）。
    寫不出測試名稱的先問。**列給使用者確認才往下**，對話裡談定的方向也一樣。
-3. **先寫測試**：放該 app 的 `tests/`，與原始碼同構；改到畫面流程時 E2E 也先寫。跑單項確認紅燈
+   只改 Markdown 時寫成可檢查的結果（見 [`testing.md`](../../../docs/testing.md#驗收條件與測試名稱)）。
+3. **先寫測試**（只改 Markdown 時跳過）：放該 app 的 `tests/`，與原始碼同構；改到畫面流程時 E2E 也先寫。跑單項確認紅燈
    （`uv run pytest tests/ -k xxx`、`npm run test -- -t "名稱"`、`make check integration <測試檔>`、
    `make e2e up` 後 `make e2e test <檔案>`）。完整的檢查只在 CI 跑，本機不跑。
 4. **commit 測試、push、開 Draft PR**：標題 Conventional Commits；描述照 [PR 模板](../../../.github/PULL_REQUEST_TEMPLATE.md)
