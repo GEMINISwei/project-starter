@@ -9,14 +9,14 @@ from sqlalchemy.exc import IntegrityError
 from shared.db.table import ForeignKeyError, foreign_key_error, is_foreign_key_violation
 
 
-class _Orig(Exception):
+class _DriverError(Exception):
     def __init__(self, sqlstate: str) -> None:
         super().__init__(sqlstate)
         self.sqlstate = sqlstate
 
 
 def _integrity_error(sqlstate: str, statement: str = "DELETE FROM parents") -> IntegrityError:
-    return IntegrityError(statement, {}, _Orig(sqlstate))
+    return IntegrityError(statement, {}, _DriverError(sqlstate))
 
 
 def test_is_foreign_key_violation_matches_only_sqlstate_23503():
