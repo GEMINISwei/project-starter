@@ -13,11 +13,11 @@ import pytest
 import pytest_asyncio
 from fastapi import APIRouter
 from httpx import ASGITransport, AsyncClient
-from shared.events import Event, EventBus, EventHandler, publish, use_event_bus
 from sqlalchemy import Column, MetaData, Table, insert, select
 from sqlalchemy.dialects.postgresql import UUID
 
 from shared.db.session import active_session, configure_session_factory, create_engine
+from shared.events import Event, EventBus, EventHandler, publish, use_event_bus
 from shared.http.errors import BaseError, LangException, LangText
 from shared.module import ModuleManifest
 from shared.platform import platform_scope
