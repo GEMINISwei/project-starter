@@ -3,6 +3,9 @@
 推翻一個決定要動三處: 新的 ADR 寫「取代：[NNNN](…)」, 舊的那份把狀態改成「被 [NNNN](…) 取代」,
 索引的狀態欄跟著改。漏掉任何一處都不會報錯, 讀者卻會依舊的那份行事, 或在索引裡看不出它已失效。
 
+推翻的是模板的決定 (`docs/starter-decisions/`) 時, 那一區不改, 所以改由 `docs/decisions/README.md`
+的〈推翻的模板決定〉列出它: 讀者讀模板的決定之前先看這張表, 才知道哪幾份在這個專案已經失效。
+
 規則寫成以目錄為參數的函式, 用暫存目錄裡的假 ADR 證明它抓得到錯, 再對真的 `docs/decisions/` 跑一次。
 """
 
@@ -19,6 +22,8 @@ INDEX_ROW = re.compile(
     flags=re.MULTILINE,
 )
 SUPERSEDED_BY = re.compile(r"^被 \[(\d{4})\]")
+STARTER_LINK = re.compile(r"\[starter-decisions/(\d{4})\]\([^)]*\)")
+OVERRIDDEN_HEADING = "## 推翻的模板決定"
 
 
 def read_decisions(directory: Path) -> dict[str, str]:
@@ -37,6 +42,27 @@ def status(text: str) -> str:
 def supersedes(text: str) -> list[str]:
     match = SUPERSEDES_LINE.search(text)
     return NUMBER_LINK.findall(match[1]) if match else []
+
+
+def starter_supersedes(text: str) -> list[str]:
+    match = SUPERSEDES_LINE.search(text)
+    return STARTER_LINK.findall(match[1]) if match else []
+
+
+def overridden_in_index(directory: Path) -> set[str]:
+    index = (directory / "README.md").read_text(encoding="utf-8")
+    _, _, section = index.partition(f"\n{OVERRIDDEN_HEADING}")
+    return set(STARTER_LINK.findall(section.split("\n## ", 1)[0]))
+
+
+def starter_supersession_errors(directory: Path) -> list[str]:
+    listed = overridden_in_index(directory)
+    return [
+        f"{number} 取代 starter-decisions/{old}, 但索引的〈推翻的模板決定〉沒有列出它"
+        for number, text in read_decisions(directory).items()
+        for old in starter_supersedes(text)
+        if old not in listed
+    ]
 
 
 def plain_status(text: str) -> str:
@@ -99,6 +125,11 @@ def test_index_status_matches_each_decision() -> None:
     assert not errors, "\n".join(errors)
 
 
+def test_starter_supersessions_are_listed_in_index() -> None:
+    errors = starter_supersession_errors(DECISIONS_DIR)
+    assert not errors, "\n".join(errors)
+
+
 # ── 規則本身抓得到錯 ──────────────────────────────────────────────────────────
 
 
@@ -134,4 +165,25 @@ def test_index_check_catches_stale_status(tmp_path: Path) -> None:
 
     assert index_status_errors(tmp_path) == [
         "索引的 0001 狀態是「採用」, ADR 寫的是「被 0002 取代」"
+    ]
+
+
+STARTER_TARGET = "[starter-decisions/0004](../starter-decisions/0004-x.md)"
+
+
+def test_supersession_check_accepts_starter_decision_listed_in_index(tmp_path: Path) -> None:
+    write_decision(tmp_path, "0001", "採用（2026-11-01）", STARTER_TARGET)
+    write_index(tmp_path, {"0001": "採用"})
+    with (tmp_path / "README.md").open("a", encoding="utf-8") as index:
+        index.write(f"\n{OVERRIDDEN_HEADING}\n\n| {STARTER_TARGET} | [0001](0001-decision.md) |\n")
+
+    assert starter_supersession_errors(tmp_path) == []
+
+
+def test_supersession_check_catches_starter_decision_missing_from_index(tmp_path: Path) -> None:
+    write_decision(tmp_path, "0001", "採用（2026-11-01）", STARTER_TARGET)
+    write_index(tmp_path, {"0001": "採用"})
+
+    assert starter_supersession_errors(tmp_path) == [
+        "0001 取代 starter-decisions/0004, 但索引的〈推翻的模板決定〉沒有列出它"
     ]
