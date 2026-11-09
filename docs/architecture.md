@@ -78,7 +78,7 @@ app（組裝層） → modules（垂直功能） → shared（平台能力）
    （`tests/app/theme.test.ts` 擋）。
 9. 後端不得有 `api`／`core`／`services`／`repositories` 這類**水平分層**的頂層套件。
 
-違反就紅燈（`make check`），各條由現成工具執行，都涵蓋 re-export、動態 `import()` 與相對 import：
+違反就紅燈（CI 的 `lint`，本機可跑 `make check lint`），各條由現成工具執行，都涵蓋 re-export、動態 `import()` 與相對 import：
 
 | 規則 | 後端 | 前端 |
 |---|---|---|
@@ -225,7 +225,7 @@ apps/web/shared/api/entities.ts                ← 平台 entity（Permission、
 apps/web/modules/*/types.ts                    ← 業務 entity，以 Schema<"RoleInfo"> 命名
 ```
 
-兩份產出都進版控，對外介面的變更在 review 的 diff 裡看得到。只有 `make gen-types` 寫進 repo；`make check` 與
+兩份產出都進版控，對外介面的變更在 review 的 diff 裡看得到。只有 `make gen-types` 寫進 repo；`make check contract` 與
 `make release` 重產到暫存目錄再比對，不一致就擋，不改工作目錄（`scripts/lib/contract.sh`）。
 什麼時候要跑 `make gen-types` 見 [`development.md`](development.md#指令)。
 兩個檔案的路徑只定義在 `scripts/lib/common.sh` 的 `CONTRACT`、`WEB_SCHEMA`。
@@ -249,7 +249,7 @@ OpenAPI 的 `info.version` 固定是 `"1"`：規格要求必填，但前後端�
 | `apps/web/config/routes.ts`、`config/shell/nav-icons.ts` | 移除 manifest 與圖示 |
 
 權限的標籤與分類跟著模組的 `permissions.py` 一起消失，角色畫面不必改。收尾**先 `make gen-types`
-再 `make check`**，前端還在用的已刪除端點或權限才會變成編譯錯誤。另外清掉 `apps/web/.next`
+再 `make check types`**，前端還在用的已刪除端點或權限才會變成編譯錯誤。另外清掉 `apps/web/.next`
 （否則 `tsc` 會找已刪除路由的型別），帶環境變數的模組要把
 [同步點](development.md#環境變數的同步點)一起縮小。
 

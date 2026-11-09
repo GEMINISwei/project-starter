@@ -58,7 +58,7 @@ nginx 模板**，以 CLI 建隨機密碼的超管，跑完 Playwright 連 volume
 - 每個 checkout（含 worktree）一套：專案名稱取自路徑，port（3901 起找空的）與隨機帳密記在 git 目錄的
   `e2e-stack.env`，不 commit，互不影響。
 - 本機 Playwright 只輸出失敗摘要（`dot`）。
-- dev 與正式 build 的差異要到 CI 才看得到；改到 nginx、compose 或只有正式環境才有的行為時，本機也跑 `make check e2e`。
+- dev 與正式 build 的差異要到 CI 才看得到（CI 的 `e2e` 用正式環境的 image）。
 - 失敗時先讀 `e2e/test-results/` 裡該測試的 `error-context.md`，看不出才開 trace。由修的 agent 自己讀，不交給子代理。
 
 **只放跨層的 smoke 測試**：proxy 導向、cookie 屬性、Server Action、權限導向、撤銷這類整套跑起來才看得到的行為。
@@ -125,10 +125,10 @@ nginx 模板**，以 CLI 建隨機密碼的超管，跑完 Playwright 連 volume
 | 實作開始後用改檔工具改測試檔要使用者同意、放行只對列出的檔案且有新 commit 就失效、不能自己寫放行 | `apps/api/tests/test_agent_test_guard.py` |
 | 有開著的 PR 時開新分支要使用者同意、放行針對分支名稱 | `apps/api/tests/test_agent_one_pr.py` |
 | 改防線檔案（hook、agent 設定、CI、檢查的設定）一律要使用者同意、清單裡的路徑都存在 | `apps/api/tests/test_agent_protected_files.py` |
-| agent 收尾前改過的程式要跑過 `make check`、開工時提示現況、每個 hook 用 `PATH` 上的 `python3` 跑得起來 | `apps/api/tests/test_agent_session_hooks.py` |
+| 沒有收尾前的 Stop hook、開工時提示現況、每個 hook 用 `PATH` 上的 `python3` 跑得起來 | `apps/api/tests/test_agent_session_hooks.py` |
 | AI agent 的 commit 帶寫到模型與版本的 `Co-authored-by`、Codex 執行的指令帶 `AI_AGENT` | `.githooks/commit-msg`（`apps/api/tests/test_githooks.py`） |
 | PR 標題是 Conventional Commits、描述有摘要／驗證／檢查三段且不是模板原樣 | CI 的 `pr`（`.github/scripts/check-pr.sh`、`apps/api/tests/test_pr_checks.py`） |
-| 實作後改的測試檔在「驗證」段寫出路徑與理由、防線檔案與 agent 說明列進「檢查」、新增的抑制註解有理由 | CI 的 `pr`（`.github/scripts/check-pr-changes.py`、`apps/api/tests/test_pr_change_checks.py`） |
+| 新增的抑制註解有理由 | CI 的 `pr`（`.github/scripts/check-pr-changes.py`、`apps/api/tests/test_pr_change_checks.py`） |
 | `make init dev` 擋下缺少 `python3` 3.9 以上、`.claude/skills` 不是 symlink，裝了 Codex 卻沒信任專案時提醒；`make init prod` 不做這些 | `apps/api/tests/test_init_agent_setup.py` |
 | lock 檔與 `make gen-types` 的產出列在 `.ignore`（AI agent 的搜尋不撞進去） | `apps/api/tests/test_search_ignore.py` |
 
@@ -142,14 +142,13 @@ nginx 模板**，以 CLI 建隨機密碼的超管，跑完 Playwright 連 volume
 1. 測試變紅時預設它是對的，先改實作讓它變綠。
 2. 真的覺得測試要改（介面改名、斷言本來就寫錯、漏了情境要補）時，**先停下來說明**那個測試驗證的條件、
    沒過的原因，以及為什麼是測試而不是實作要改。
-3. 得到同意後才動測試檔，並在 PR 描述的「驗證」段寫一行：測試檔的路徑，同一行寫明**原本那個斷言為什麼是錯的**
-   （CI 的 `pr` 檢查這一行在不在，寫得對不對靠審查）。
+3. 得到同意後才動測試檔，並在 PR 描述的「驗證」段寫一行：測試檔的路徑，同一行寫明**原本那個斷言為什麼是錯的**。
 
 AI agent 這一側：實作開始後用改檔工具改測試檔，hook 會停下來等使用者同意；用 shell 改不攔，靠 agent 自律與
-CI 的 `pr`（[做法](extending/agent-hooks.md#測試鎖定)）。
+審查時看 diff 裡的測試檔（[做法](extending/agent-hooks.md#測試鎖定)）。
 
-紅燈階段用單項指令跑（`uv run pytest tests/ -k xxx`、`npm run test -- -t "名稱"`），
-`make check` 要等實作完成、全部轉綠才會過。
+紅燈階段用單項指令跑（`uv run pytest tests/ -k xxx`、`npm run test -- -t "名稱"`、
+`make check integration <測試檔>`）。完整的檢查只在 CI 跑，要等實作完成、全部轉綠才會過。
 
 ## 驗收條件與測試名稱
 

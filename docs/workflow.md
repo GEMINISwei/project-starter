@@ -17,14 +17,12 @@ Feature Branch → Draft PR → Incremental Commits → Code Review → Squash M
    - **驗證**：做過的驗證與結果，**成功失敗都寫**，沒驗到的寫原因。
    - **檢查**：請審查者確認的 checkbox，只寫 diff 看不出、要人去確認的事（例：在部署主機跑一次、對下游的影響）。
 
-   CI 的 `pr` 另外檢查這個 PR 的改動（`.github/scripts/check-pr-changes.py`；改描述會重跑）：
-   - 實作開始後改了測試檔：「驗證」段寫出路徑與原因（[說明](testing.md#改程式不改測試)）
-   - 動到防線檔案或 agent 說明（`AGENTS.md`、`.agents/skills/`）：「檢查」段列出檔案或目錄
-     （[清單](extending/agent-hooks.md#防線檔案)）
-   - 新增的抑制註解：同一行寫理由（[說明](development.md#抑制註解)）
+   CI 的 `pr` 另外檢查這個 PR 新增的抑制註解，同一行要寫理由（`.github/scripts/check-pr-changes.py`，
+   [說明](development.md#抑制註解)）。實作後改的測試檔與動到的[防線檔案](extending/agent-hooks.md#防線檔案)
+   不用另外列出，審查時看 diff 的檔案清單。
 3. **Incremental Commits**：小步提交、常 push，一個 commit 一個說得清楚的步驟（先測試、再實作、再整理）。
    訊息會併進 squash 後的內文，寫「做了什麼、為什麼」，不要一路 `wip`、`fix`。
-4. **Code Review**：`make check` 綠、「驗證」寫完、整份 diff 自己讀過（AI agent 照 `feature-workflow` 第 7 步）
+4. **Code Review**：CI 綠、「驗證」寫完、整份 diff 自己讀過（AI agent 照 `feature-workflow` 第 7 步）
    才按 **Ready for review**。回應 review 用新的 commit，不 force push 改寫看過的歷史。CI 綠、意見處理完才合併。
 5. **Squash Merge**：一律 **Squash and merge**，`main` 一個 PR 一個 commit，標題就是 PR 標題，所以 PR 標題要符合
    下面的 commit 格式。合併後刪分支。
@@ -61,7 +59,7 @@ GitHub 端設定一次，流程才不靠自覺：
 - PR 標題與 commit：[Conventional Commits](https://www.conventionalcommits.org/zh-hant/v1.0.0/)，`<type>: <祈使句>`
   （`feat: add product list page`）。PR 標題是硬規定（squash 後留在 `main`），分支上的 commit 建議照寫。
   標題與描述三段由 `pr.yml` 檢查，在 GitHub 上改標題或描述也會重跑。
-- 送出前 `make check` 通過，實質改動在 [`CHANGELOG.md`](../CHANGELOG.md) 的 `## [Unreleased]` 留一筆。
+- CI 通過，實質改動在 [`CHANGELOG.md`](../CHANGELOG.md) 的 `## [Unreleased]` 留一筆。
 - commit 訊息不能有 GitHub 的 CI 略過標記（`[skip ci]` 這類與 `skip-checks: true`，`.githooks/commit-msg` 擋）：
   squash 會把每個 commit 的訊息併進 `main`，帶著它 `main` 就不跑 CI，部署也找不到 CI 結果。
   要略過檢查就寫成 workflow 的條件。
@@ -69,7 +67,8 @@ GitHub 端設定一次，流程才不靠自覺：
 CI（`.github/workflows/ci.yml`）每個檢查項目各自一個 job、平行跑，跑的就是本機的 `make check <項目>`：
 `lint`、`contract`、`migrate`、`types`、`web-test`、`build`、`api-test`、`api-integration`（`make check integration`）、
 `e2e`（另外確認 web image 沒有真的 Server Action 金鑰）。最後由 `ci-gate` 等全部 job 跑完再判定，
-ruleset 只要求它（`.github/scripts/ci-gate.sh`）。**本機綠，CI 就綠。**
+ruleset 只要求它（`.github/scripts/ci-gate.sh`）。**完整的檢查只在 CI 跑**：本機在寫測試時只跑單項，
+push 之後等 CI 的結果，有錯就修正再 push（新的 commit 會取消還在跑的舊 run）。
 部署由 `deploy.yml` 在 Publish release 時執行（[說明](operations.md#自動部署)）。
 
 **docs 模式**：PR 改的檔案全部是 Markdown 時，只跑 `api-test` 與 `web-test`（文件的連結與格式檢查在裡面），
@@ -101,7 +100,7 @@ Co-authored-by: Claude Opus 5.5 <noreply@anthropic.com>
 - trailer 放最後、前面空一行，一位一行；多個 AI 參與就各寫一行。
 - **`.githooks/commit-msg` 檢查 agent 的 commit**：`AI_AGENT` 有值時（Claude Code 自己會設，Codex 由
   `.codex/config.toml` 補上）沒有 trailer 或名稱沒寫版本就擋下；人自己 commit 不檢查。要 `make init dev` 設好
-  `core.hooksPath` 才生效（沒設時 `make check` 提醒）。squash 時 GitHub 會把 trailer 帶進 `main`，合併時不要刪。
+  `core.hooksPath` 才生效。squash 時 GitHub 會把 trailer 帶進 `main`，合併時不要刪。
 
 查共同作者：
 
@@ -115,7 +114,7 @@ git log --format='%h %s%n  %(trailers:key=Co-authored-by,valueonly,separator=%x2
 
 - **套件與 GitHub Actions**：Dependabot 只開安全更新（要開 Settings 的三項，見〈GitHub 設定〉）。
 - **Docker image**：漏洞資料庫不涵蓋 image，每月一次 PR，只送 patch（nginx 1.31.7 → 1.31.8）。
-- **整批升級**：發版前盤點落後多少再決定範圍：開分支、升級、`make check`、實際建 image 跑起來，再開 PR。
+- **整批升級**：發版前盤點落後多少再決定範圍：開分支、升級、push 讓 CI 跑完、實際建 image 跑起來，再開 PR。
   api Dockerfile 用 `COPY --from` 帶的 uv、CI 下載的 shellcheck（`scripts/lib/shellcheck.sh`）不在 Dependabot 範圍，
   要用 `docker scout` 之類掃 image 才看得到。Dependency graph 的「Check for updates」在版本更新關掉後不會開 PR，不能取代盤點。
 

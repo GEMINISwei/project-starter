@@ -9,7 +9,7 @@
 [`operations.md`](docs/operations.md)（部署、備份、主機設定）、
 [`decisions/`](docs/decisions/README.md)（刻意不採用主流做法的設計決策，提議改掉之前先讀）。
 
-## 硬規則（`make check` 會擋）
+## 硬規則（CI 會擋）
 
 1. **跨模組只走 public entry**：前端 `public.server.ts`／`public.client.ts`，後端 `public.py`。組裝層也一樣。
 2. **`shared/` 不可引用 `modules/` 或組裝層**。shared 放多個模組共用的能力，模組化的功能放 `modules/`。
@@ -101,11 +101,10 @@
 
 | 改了什麼 | 要做 |
 |---|---|
-| 任何程式碼 | `make check` |
-| model 的欄位、索引、約束 | `make db migration "說明"`（或併進上次發版後新增、同一個功能的那支），讀過產出，再 `make check integration` |
-| 跟資料庫互動的後端程式 | `make check integration`（`make check` 裡 integration 會 skip） |
+| 任何程式碼 | push，照 `watch-pr` 等 CI。完整的檢查只在 CI 跑，本機不必先跑；寫測試時只跑那一項確認紅燈 |
+| model 的欄位、索引、約束 | `make db migration "說明"`（或併進上次發版後新增、同一個功能的那支），讀過產出 |
+| 跟資料庫互動的後端程式 | 紅燈階段用 `make check integration <測試檔>` 只跑那幾個（需要 Docker） |
 | 登入、導向、權限、cookie | `make e2e test <檔案>` 跑相關的 spec（先 `make e2e up`）；正式環境的完整版本由 CI 跑 |
-| nginx、compose、只有正式環境才有的行為 | `make check e2e`（`make check` 不含它） |
 | 後端 schema、權限、語系 | `make gen-types`，兩份產出一起 commit |
 | 發版（跟 tag 對齊的只有 `APP_VERSION` 與 CHANGELOG） | `make release <版號>`，不要手動改；`package.json`、`pyproject.toml`、lock 檔與 OpenAPI 的 `info.version` 不跟發版（[說明](docs/operations.md#自動部署)） |
 | 環境變數 | `.env.example`、compose、讀取端（後端 `app/config.py`／前端 `shared/runtime/`）；要詢問或自動產生的才動 `scripts/init.sh`（[說明](docs/development.md#環境變數的同步點)） |

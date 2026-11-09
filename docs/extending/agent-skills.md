@@ -21,7 +21,7 @@ Claude 與 Codex 用同一種格式（Agent Skills），只維護一份：
   開頭講清楚什麼時候用，兩家靠它決定要不要載入。
 - **不寫某一家專屬的工具或語法**：寫「在背景等 CI 跑完」，不寫工具名稱，不用 `$ARGUMENTS`（測試擋）。
 - **固定的步驟寫成腳本**放在 skill 的 `scripts/`（`make check lint` 跑 shellcheck），要判斷的才寫成文字。
-- **連結用相對路徑**指回 `docs/`（`../../../docs/…`），`make check` 檢查連結有效。
+- **連結用相對路徑**指回 `docs/`（`../../../docs/…`），CI 檢查連結有效。
 
 ## 只能手動呼叫
 
@@ -32,6 +32,6 @@ Claude 與 Codex 用同一種格式（Agent Skills），只維護一份：
 | Claude | `SKILL.md` 的 frontmatter 加 `disable-model-invocation: true` |
 | Codex | `agents/openai.yaml` 寫 `policy:` → `allow_implicit_invocation: false` |
 
-例見 `.agents/skills/release/`。只設一邊時 `make check` 擋（`apps/api/tests/test_agent_skills.py`）。
+例見 `.agents/skills/release/`。只設一邊時 CI 擋（`apps/api/tests/test_agent_skills.py`）。
 兩邊都忘了也算「一致」，所以影響 repo 以外的 skill 另外列在同一份測試的 `EXTERNAL_EFFECT_SKILLS`，要求一定是手動；
 新增這類 skill 時把名字加進去。

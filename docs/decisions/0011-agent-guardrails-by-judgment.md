@@ -27,7 +27,8 @@
 
 - hook 與它的測試大幅縮小，誤擋減少；繼承的專案依自己的風險調整〈高風險先問〉即可。
 - agent 若判斷錯誤，會在 CI 或審查時才被發現，而不是動手當下。
-- 測試鎖只攔改檔工具，用 shell 改測試檔要靠 agent 自律與 CI 的 `pr`。
+- 測試鎖只攔改檔工具，用 shell 改測試檔要靠 agent 自律與審查時看 diff；CI 不再要求把改過的測試檔與防線檔案
+  寫進 PR 描述，那只是把使用者在 hook 確認過、diff 裡也看得到的事再寫一次。
 - 需要多個 agent 平行開發時，要先改流程（一個任務一個 worktree、放行與檢查紀錄以 worktree 為單位），再重新檢討。
 - agent 在無人看著的環境執行時，判斷層沒有人可以問，要改回較嚴格的 hook 或 GitHub 端的關卡
   （同 [0010](0010-no-environment-reviewer-for-deploys.md)）。
