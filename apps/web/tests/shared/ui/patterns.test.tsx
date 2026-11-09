@@ -135,6 +135,30 @@ describe("shared list patterns", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
   })
 
+  it("Menu 再按一次觸發按鈕會收起選單", async () => {
+    render(<Menu trigger="⋯" triggerLabel="操作" items={[{ label: "編輯", onClick: vi.fn() }]} />)
+
+    await userEvent.click(screen.getByRole("button", { name: "操作" }))
+    await userEvent.click(screen.getByRole("button", { name: "操作" }))
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument()
+  })
+
+  it("Menu 按方向鍵以外的鍵不移動焦點", async () => {
+    render(
+      <Menu
+        trigger="⋯"
+        triggerLabel="操作"
+        items={[{ label: "編輯", onClick: vi.fn() }, { label: "刪除", onClick: vi.fn() }]}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole("button", { name: "操作" }))
+    await userEvent.keyboard("a")
+
+    expect(screen.getByRole("menuitem", { name: "編輯" })).toHaveFocus()
+  })
+
   it("Menu 點選單外面會關閉", async () => {
     render(<Menu trigger="⋯" triggerLabel="操作" items={[{ label: "編輯", onClick: vi.fn() }]} />)
 
