@@ -10,7 +10,8 @@ Server Action、權限導向、撤銷 session 只有整套跑起來才看得到�
 
 ## 決定
 
-- CI 的 `e2e` 是 required check（`make check e2e`，正式環境 image）。只放跨層的 smoke 測試，畫面分支用 vitest。
+- CI 的 `e2e` 是合併條件（`make check e2e`，正式環境 image；由 required check `ci-gate` 納入，只改 Markdown 的 PR 才跳過）。
+  只放跨層的 smoke 測試，畫面分支用 vitest。
 - 部署沿用該 commit 在 `main` 上已成功的 CI，查不到才重跑；PR 上的 run 不算（測的不是 squash 後的 commit）。
 - 開發中用 `make e2e`：每個 checkout 一套常駐 dev mode 環境（原始碼 bind mount），每次只跑指定的 spec。
   改到 nginx、compose 或只有正式環境才有的行為時，本機也跑 `make check e2e`。
@@ -24,5 +25,5 @@ Server Action、權限導向、撤銷 session 只有整套跑起來才看得到�
 - 回滾到舊 tag 時沿用的是當時那份 CI 的結果。
 - 不開 retries：偶發失敗要修等待條件，不能靠重跑。
 - dev 與正式 build 的差異要到 CI 才發現，晚但不會漏。常駐環境佔資源，PR 合併後要 `make e2e down`。
-- E2E 拖慢合併時先縮範圍或平行化，不移出 required checks；本機綠 CI 紅經常是 dev 差異造成時，
+- E2E 拖慢合併時先縮範圍或平行化，不移出合併條件；本機綠 CI 紅經常是 dev 差異造成時，
   把差異收進 overlay 或改回本機也跑正式版本。
