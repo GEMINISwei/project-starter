@@ -76,5 +76,6 @@ def test_module_registering_non_table_model_fails_at_startup():
     class NotATable:
         pass
 
+    tables = (NotATable,)
     with pytest.raises(RuntimeError, match="registered a non-table"):
-        validate_modules((ModuleManifest("one", tables=(NotATable,)),))  # type: ignore[arg-type]
+        validate_modules((ModuleManifest("one", tables=tables),))  # type: ignore[arg-type]  # 故意傳錯型別
