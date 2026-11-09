@@ -169,3 +169,31 @@ def test_deploy_summary_records_image_digests() -> None:
     assert "API_IMAGE" in summary[0]
     assert "WEB_IMAGE" in summary[0]
     assert "matrix.environment" in summary[0]
+
+
+SSH_JOBS = ["migration-check", "deploy"]
+
+
+def _steps(job: str) -> list[str]:
+    return re.split(r"^      - ", _job(job), flags=re.MULTILINE)[1:]
+
+
+@pytest.mark.parametrize("job", SSH_JOBS)
+def test_deploy_jobs_prepare_ssh_with_shared_script(job: str) -> None:
+    # 連主機前的準備只寫在 deploy-ssh.sh: 兩個 job 各寫一份時, 改了一邊另一邊會在碰主機時才失敗。
+    steps = _steps(job)
+    assert any(".github/scripts/deploy-ssh.sh" in step for step in steps)
+    assert not any("> ~/.ssh/deploy_key" in step for step in steps)
+    assert "> ~/.ssh/deploy_key" not in _workflow()
+
+
+@pytest.mark.parametrize("job", SSH_JOBS)
+def test_deploy_ssh_script_comes_from_workflow_commit(job: str) -> None:
+    # 回滾到比 deploy-ssh.sh 還舊的 tag 時, 那個 tag 裡沒有這支腳本, 所以取 workflow 自己的 commit。
+    checkouts = [
+        step
+        for step in _steps(job)
+        if step.startswith("uses: actions/checkout@") and ".github/scripts" in step
+    ]
+    assert checkouts, f"{job} 要 checkout .github/scripts"
+    assert all("ref:" not in step for step in checkouts)
