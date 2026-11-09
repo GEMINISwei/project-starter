@@ -303,17 +303,19 @@ jobs:
     permissions:
       contents: read
     steps:
-      # 讀資料庫 revision 的腳本用 workflow 自己這份: 主機上的 checkout 與要部署的 tag 都可能是
-      # 還沒有 `make db revision` 的舊版。
+      # 讀資料庫 revision 的腳本與 deploy-ssh.sh 用 workflow 自己這份: 主機上的 checkout 與要部署的
+      # tag 都可能是還沒有它們的舊版。
       - uses: actions/checkout@v7
         with:
-          sparse-checkout: scripts
+          sparse-checkout: |
+            scripts
+            .github/scripts
       - uses: actions/checkout@v7
         with:
           ref: refs/tags/${{ needs.version.outputs.tag }}
           path: target
           sparse-checkout: apps/api/migrations/versions
-      - name: 檢查 secrets
+      - name: 準備 SSH
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -321,24 +323,7 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           ENVIRONMENT: ${{ matrix.environment }}
-        run: |
-          missing=()
-          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_PATH DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS; do
-            [ -n "${!name}" ] || missing+=("${name}")
-          done
-          if [ "${#missing[@]}" -gt 0 ]; then
-            echo "environment ${ENVIRONMENT} 缺少 secrets：${missing[*]}" >&2
-            exit 1
-          fi
-      - name: 準備 SSH
-        env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+        run: .github/scripts/deploy-ssh.sh "${ENVIRONMENT}"
       # 這份 Makefile 與 scripts/ 經 SSH 的 stdin 送到主機的暫存目錄, 接上主機的 .env 跑
       # `make db revision`; 主機的 repo 目錄一個檔案都不動。
       - name: 資料庫不會往回
@@ -383,8 +368,12 @@ jobs:
       contents: read
       packages: read
     steps:
-      # 剛建好、還沒填 secrets 的 environment 在這裡就停, 不必等 SSH 報出看不懂的錯。
-      - name: 檢查 secrets
+      # deploy-ssh.sh 取自這份 workflow 所在的 commit, 理由同 targets: 回滾到的舊 tag 裡可能沒有它。
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: .github/scripts
+      # 缺 secrets 時在這裡就停 (見腳本開頭)。
+      - name: 準備 SSH
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
@@ -392,15 +381,7 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
           ENVIRONMENT: ${{ matrix.environment }}
-        run: |
-          missing=()
-          for name in DEPLOY_HOST DEPLOY_USER DEPLOY_PATH DEPLOY_SSH_KEY DEPLOY_KNOWN_HOSTS; do
-            [ -n "${!name}" ] || missing+=("${name}")
-          done
-          if [ "${#missing[@]}" -gt 0 ]; then
-            echo "environment ${ENVIRONMENT} 缺少 secrets：${missing[*]}" >&2
-            exit 1
-          fi
+        run: .github/scripts/deploy-ssh.sh "${ENVIRONMENT}"
       # 保留組數來自 Variables (environment 的會蓋過 repo 的), 沒設就是 10。設錯的值在碰主機之前就擋,
       # 不要等部署完才在清理那步只留一個警告。
       - name: 檢查 BACKUP_KEEP
@@ -411,16 +392,6 @@ jobs:
             echo "::error::BACKUP_KEEP 必須是正整數，目前是「${BACKUP_KEEP}」"
             exit 1
           fi
-      - name: 準備 SSH
-        env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: |
-          install -m 700 -d ~/.ssh
-          printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          # 主機指紋事先登記, 不用 StrictHostKeyChecking=no: 那等於誰冒充主機都收得到 token。
-          printf '%s\n' "${DEPLOY_KNOWN_HOSTS}" > ~/.ssh/known_hosts
       # 腳本經 SSH 的 stdin 送過去 (bash -s), token 不會出現在任一端的指令列 (ps 看得到)。
       # 值一律 %q 轉義後才拼進腳本, 遠端固定用 bash 解讀, 不受部署帳號的登入 shell 影響。
       #
