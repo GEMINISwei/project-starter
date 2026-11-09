@@ -2,6 +2,22 @@
 
 正式環境的部署、主機設定、備份與救援。系統功能怎麼運作見 [`features/`](features/README.md)，本機開發見 [`development.md`](development.md)。
 
+## 為什麼這樣設計
+
+- **主機 clone 整份 repo，只從 tag 啟動**：主機與開發機用同一套指令；只認 tag，避免上線沒發版、沒經過 CI 的程式碼
+  （[starter-decisions/0008](starter-decisions/0008-full-repo-checkout-on-hosts.md)）。
+- **migrate 先單獨跑，成功才切換服務**：migration 或 seed 失敗時線上維持原狀
+  （[starter-decisions/0006](starter-decisions/0006-seed-in-migrate-service.md)）。
+- **部署前先備份，而且在 checkout 新 tag 之前**：備份檔名的版號就是這份資料所屬的版本，回滾後才還原得回去
+  （〈[備份與還原](#備份與還原)〉）。
+- **api 單一行程，部署會短暫停機**：不必處理新舊版本並存，也不必為限流多一個要維運的服務
+  （[starter-decisions/0004](starter-decisions/0004-single-api-process.md)）。
+- **發布前在對話裡確認，不設 environment reviewer**：只有一位維護者時，逐套放行太繁瑣
+  （[starter-decisions/0010](starter-decisions/0010-no-environment-reviewer-for-deploys.md)）。
+- **可觀測性只到 stdout**：錯誤內容可能帶著使用者資料，送不送第三方是專案自己的決定
+  （[starter-decisions/0007](starter-decisions/0007-no-built-in-error-tracking.md)）。
+- **`MODE=production` 擋下危險指令**：防的是手誤，不是權限控制（〈[生產部署](#生產部署)〉）。
+
 ## 生產部署
 
 在**部署主機上**：
