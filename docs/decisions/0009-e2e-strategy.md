@@ -18,6 +18,14 @@ Server Action、權限導向、撤銷 session 只有整套跑起來才看得到�
 - dev 與 build 都用 Turbopack，不加 `--webpack`（`apps/web/tests/package.test.ts` 擋）。下游專案實測
   dev 整套從約 5.2 分鐘降到約 2.8 分鐘、CPU 時間減半，webpack 首次編譯造成的逾時消失；build 跟著換，
   dev 與正式環境才不會多差一層打包工具。
+- CI 的 `e2e` 依檔案分份（matrix 加 Playwright `--shard`），**每份各起一套環境**，不在同一套加 worker：
+  runner 同時要跑整套服務，2 個 worker 已是 CPU 的上限；同一 IP 的登入有上限、成功也不歸零，worker 一多會碰到限流。
+- 份數看 Summary：每份約 75 秒的固定成本（裝瀏覽器、建 image、起環境）一定要付，總時間約是「固定成本 ＋ 測試時間 ÷ 份數」。
+  一份的 Playwright 秒數接近固定成本時加一份。份數再多也降不到固定成本以下，那時改壓固定成本
+  （快取瀏覽器、image 只建一次再傳給各份），不再加份數。
+- 不採用：依改動挑 spec（跨層行為對不到單一模組，漏跑的會直接進 `main`，部署又沿用 `main` 的結果）；
+  每個功能一個 job（大小不一，最大的拖住整體，清單還要跟著維護）；合併報告的 job
+  （`ci-gate` 要等它，平時又多一段時間，改成每份失敗時各自上傳 `playwright-report-<份號>`）。
 
 ## 後果
 

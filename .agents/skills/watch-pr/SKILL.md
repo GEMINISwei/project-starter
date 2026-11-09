@@ -19,7 +19,7 @@ description: 開好或更新 PR 之後使用：在背景等 CI，失敗就直接
 全部通過時回報每個 job 的結果。
 
 `e2e` 失敗自己讀，不交給子代理（修的人要讀過原因，子代理也得重讀程式碼）：
-`gh run download <run id> -n playwright-report -D <暫存目錄>`，先讀失敗測試的 `error-context.md`，看不出來才開
+`gh run download <run id> -p 'playwright-report-*' -D <暫存目錄>`（每個失敗的份一個目錄），先讀失敗測試的 `error-context.md`，看不出來才開
 trace 的特定部分，再用 `make e2e test <檔案>` 只重跑那幾個。
 
 ## 2. 等合併（交給使用者審查時開始，整個 PR 一次）
