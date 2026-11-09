@@ -12,6 +12,7 @@ description: 開始任何要進 main 的改動時使用（新功能、修正、�
 2. **驗收條件**：每條接一個測試名稱（前端與 E2E 用中文句子，後端 `test_<動作>_<條件>_<結果>`）。
    寫不出測試名稱的先問。**列給使用者確認才往下**，對話裡談定的方向也一樣。
    只改 Markdown 時寫成可檢查的結果（見 [`testing.md`](../../../docs/testing.md#驗收條件與測試名稱)）。
+   驗收條件分屬幾件互不相依的事時，先提議拆成幾個 PR，由使用者決定；互相依賴或改到同一批檔案的才併在一起。
 3. **先寫測試**（只改 Markdown 時跳過）：放該 app 的 `tests/`，與原始碼同構；改到畫面流程時 E2E 也先寫。跑單項確認紅燈
    （`uv run pytest tests/ -k xxx`、`npm run test -- -t "名稱"`、`make check integration <測試檔>`、
    `make e2e up` 後 `make e2e test <檔案>`）。完整的檢查只在 CI 跑，本機不跑。
