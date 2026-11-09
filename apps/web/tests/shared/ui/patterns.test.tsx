@@ -205,6 +205,26 @@ describe("shared list patterns", () => {
     expect(routerPush).toHaveBeenCalledWith("/records")
   })
 
+  it("FilterDialog 沒給初始值的欄位當成空的，送出時不放進網址", async () => {
+    render(
+      <FilterDialog
+        title="篩選"
+        open
+        onClose={vi.fn()}
+        fields={[
+          { name: "name", label: "名稱", type: "text" },
+          { name: "is_disabled", label: "狀態", type: "select", options: [{ value: "", label: "全部" }] },
+        ]}
+        initialValues={{}}
+      />,
+    )
+
+    expect(screen.getByLabelText("名稱")).toHaveValue("")
+    await userEvent.click(screen.getByRole("button", { name: "篩選" }))
+
+    expect(routerPush).toHaveBeenCalledWith("/records")
+  })
+
   it("FilterDialog 按重置會清空所有欄位", async () => {
     render(
       <FilterDialog
