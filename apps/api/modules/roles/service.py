@@ -129,3 +129,4 @@ async def disable_role(id: str) -> RoleOperate:
 def validate_regular_permissions(permissions: list[Permission]) -> None:
     if Permission.ALL in permissions:
         raise LangException(403, RoleError.CANNOT_USE_ALL_PERMISSION)
+

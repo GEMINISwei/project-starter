@@ -160,13 +160,16 @@ async def test_request_id_is_generated_when_missing(
 
 
 @pytest.mark.asyncio
-async def test_unsafe_request_id_is_replaced(client: AsyncClient, records: list[logging.LogRecord]):
+async def test_unsafe_request_id_is_replaced(
+    client: AsyncClient, records: list[logging.LogRecord]
+):
     """帶換行的值可以偽造出一整行假的請求紀錄, 所以不合格的一律換掉而不是照抄。"""
-    response = await client.get("/definitely-not-a-route", headers={"X-Request-ID": "a b\tc"})
+    response = await client.get(
+        "/definitely-not-a-route", headers={"X-Request-ID": "a b\tc"}
+    )
 
     assert response.headers["X-Request-ID"] != "a b\tc"
     assert "a b" not in records[0].getMessage()
-
 
 # ── 每次請求的資料庫 session 邊界 ─────────────────────────────────────────────
 #
@@ -309,7 +312,9 @@ async def test_version_route_returns_the_app_version(version_client: AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_version_route_requires_authentication(version_client: AsyncClient, calls: list[str]):
+async def test_version_route_requires_authentication(
+    version_client: AsyncClient, calls: list[str]
+):
     response = await version_client.get("/api/system/version")
 
     assert response.status_code == 401

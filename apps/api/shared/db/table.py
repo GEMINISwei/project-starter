@@ -108,7 +108,7 @@ def parse_uuid(value: str) -> uuid.UUID | None:
     """
     try:
         return uuid.UUID(str(value))
-    except ValueError, TypeError, AttributeError:
+    except (ValueError, TypeError, AttributeError):
         return None
 
 
@@ -152,7 +152,9 @@ class BaseTable(DeclarativeBase):
 
     # 主鍵是 uuid4 而不是自增整數: id 對外可見, 自增整數等於公開資料量、也能被逐一遍歷。
     # 值在 INSERT 當下才產生, 剛 `cls(...)` 出來的實例 `id` 還是 None, 要讀 id 先 `flush()`。
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
     # 一律 naive UTC (見 shared/time.utc_now)。欄位型別也刻意是 `TIMESTAMP WITHOUT
     # TIME ZONE`: 整個系統只存 UTC, 讓資料庫多記一個永遠是 UTC 的時區只會讓
     # 「讀回來是 aware 還是 naive」隨驅動版本飄。

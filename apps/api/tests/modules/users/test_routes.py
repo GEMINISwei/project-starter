@@ -184,6 +184,8 @@ async def test_post_users_missing_required_fields_returns_422(client: AsyncClien
     }
 
 
+
+
 @pytest.mark.asyncio
 async def test_patch_missing_user_returns_404(client: AsyncClient, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(UserTable, "find_detail_by_id", AsyncMock(return_value=None))
