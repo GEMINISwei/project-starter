@@ -41,3 +41,4 @@
 | [0009](0009-e2e-strategy.md) | E2E：CI 必跑正式環境 image，開發中用常駐的 dev 環境 | 採用 |
 | [0010](0010-no-environment-reviewer-for-deploys.md) | 部署不設 environment reviewer，由發布前的確認把關 | 採用 |
 | [0011](0011-agent-guardrails-by-judgment.md) | agent 防線以判斷為主，hook 只擋確認點 | 採用 |
+| [0012](0012-lock-mobile-zoom.md) | 手機上鎖住畫面縮放，像原生 App | 採用 |

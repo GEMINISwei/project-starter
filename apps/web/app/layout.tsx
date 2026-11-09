@@ -1,4 +1,4 @@
-import type { Metadata } from "next"
+import type { Metadata, Viewport } from "next"
 import { NotifyViewport } from "@/shared/ui"
 import { HTML_LANG } from "@/shared/i18n/locale"
 import { getLocale } from "@/shared/i18n/locale.server"
@@ -10,6 +10,14 @@ import { PublicConfigProvider } from "@/shared/runtime/context"
 import "./theme.css"
 import "@/shared/ui/styles/base.css"
 import "@/shared/ui/styles/message-page.css"
+
+// 手機上畫面不能縮放, 手感才像原生 App; 代價與擋不到的情況見 docs/decisions/0012-lock-mobile-zoom.md。
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+}
 
 // 用 `generateMetadata` 而不是靜態的 `metadata`: 標題來自執行期的環境變數, 而靜態 metadata 會
 // 在預先渲染的頁面上於 build 期定案 (同 `shared/runtime/config.ts` 要解決的問題)。

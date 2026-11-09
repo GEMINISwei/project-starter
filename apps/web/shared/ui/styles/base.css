@@ -4,6 +4,9 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
+/* 雙擊不放大畫面 (viewport 的 user-scalable 只管雙指), 點擊也不再等雙擊判定的延遲。 */
+html { touch-action: manipulation; }
+
 html, body {
   margin: 0;
   height: 100%;
