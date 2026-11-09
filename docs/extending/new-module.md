@@ -109,7 +109,7 @@ make gen-types
 ## 6. 檢查
 
 ```bash
-make check               # lint + contract + migrate + types + test + build
+make check test          # 前後端單元測試
 make check integration   # 需要資料庫的測試 + model 與 migration 一致
 make check e2e           # 畫面流程有改時：拋棄式正式環境 + Playwright
 ```

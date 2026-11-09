@@ -13,7 +13,7 @@
 #
 # 結果寫成表格附加到 GITHUB_STEP_SUMMARY; 缺漏寫成 ::error:: 到 stdout, 有任何缺漏就以 1 結束。
 #
-# 要能在 macOS 內建的 bash 3.2 跑 (make check 的測試在本機執行)。
+# 要能在 macOS 內建的 bash 3.2 跑 (它的測試也會在本機執行)。
 set -euo pipefail
 
 ACCEPT="application/vnd.oci.image.index.v1+json"

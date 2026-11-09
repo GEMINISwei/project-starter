@@ -63,7 +63,7 @@ make services [volumes|logs [服務]|restart|down]   # 不帶參數 = 版本與 
 make backup                                  # 資料庫與上傳檔案一起備份，期間對外服務暫停
 make db   psql|restore [檔案]|reset|migrate|migration "說明"|superuser
 make uploads restore [檔案]
-make check [lint|contract|migrate|types|test|build|integration|e2e]   # 不帶參數 = 前六項，送出前跑
+make check lint|contract|migrate|types|test|build|integration [測試檔…]|e2e   # 單項；完整的檢查在 CI 跑
 make e2e up|test <檔案...>|grep "名稱"|down   # 開發中反覆跑 E2E 的常駐 dev 環境，每個 checkout 一套
 make gen-types                               # 改過後端 schema／權限／語系後必跑
 ```

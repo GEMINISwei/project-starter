@@ -267,7 +267,7 @@ tag），第一版是 `make release 0.0.1`。
 跟 git tag 對齊的版號只有兩處：後端的 `APP_VERSION` 與 CHANGELOG 的版本段落；只改了 api 或 web
 也一樣升這一個。前端顯示的版號經 `GET /api/system/version` 取自 `APP_VERSION`。
 `make release` 會改 `APP_VERSION`，並把 CHANGELOG 的 `[Unreleased]` 改成這個版號；不要手動改，
-`make check` 會擋下兩者不一致（`apps/api/tests/test_version.py`）。
+CI 會擋下兩者不一致（`apps/api/tests/test_version.py`）。
 
 其餘的版號**刻意不跟發版**，有實際變更時才改，git 上的 diff 才代表真的有東西變了：
 

@@ -210,7 +210,6 @@ case "${1:-}" in
         echo "完成。接著："
         echo "  make start          # 啟動開發環境（首次建置 image 約 2–5 分鐘）"
         echo "  make db superuser   # 啟動後建立第一個超級管理者（網頁上沒有註冊入口）"
-        echo "  make check          # 送出前的檢查"
         echo
         print_agent_checklist
         ;;

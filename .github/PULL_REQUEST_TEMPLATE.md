@@ -12,11 +12,11 @@
 <!-- 做過哪些驗證、結果如何，成功與失敗都寫；沒驗到的寫原因。
      驗收條件一條一行，接測試名稱與結果。寫不出測試名稱，代表那一條還沒想清楚。
      AI agent 寫的驗收條件，先給使用者確認才開始寫測試。
-     實作開始之後改過的測試檔，在這一段寫一行：路徑與原因寫在同一行（CI 會檢查）。
+     實作開始之後改過的測試檔，在這一段寫一行：路徑與原因寫在同一行。
 - 管理者不能停用自己的帳號 → `test_cannot_disable_self`：通過
-- `make check`：通過
-     依改動補上：schema／權限／語系 → `make gen-types`；model → `make db migration "說明"` 與
-     `make check integration`；新增模組 → 前後端的 `ENABLED_MODULES` -->
+- CI：通過
+     依改動補上：schema／權限／語系 → `make gen-types`；model → `make db migration "說明"`；
+     新增模組 → 前後端的 `ENABLED_MODULES` -->
 
 -
 

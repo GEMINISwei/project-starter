@@ -111,6 +111,17 @@ def test_ci_runs_each_check_as_its_own_job() -> None:
         assert len(runs) == 1, f"{name} job 要跑 make check {target}"
 
 
+def test_ci_runs_on_push_pull_request_and_workflow_call() -> None:
+    # 不能手動執行: main 沒有 CI 結果時部署會自己跑一次, 失敗的 run 用 rerun 重跑。
+    workflow = CI_WORKFLOW.read_text(encoding="utf-8")
+    triggers = workflow.split("\non:\n", 1)[1].split("\n\n", 1)[0]
+    assert re.findall(r"^  ([a-z_]+):", triggers, flags=re.MULTILINE) == [
+        "push",
+        "pull_request",
+        "workflow_call",
+    ]
+
+
 def test_ci_gate_needs_every_other_job() -> None:
     assert _needs(_ci_job(GATE)) == set(_ci_jobs()) - {GATE}
 

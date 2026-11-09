@@ -4,7 +4,7 @@
 #
 #   make gen-types   改過後端 schema/權限/語系後必跑
 #
-# 這是唯一會把契約寫進 repo 的指令。`make check` 與 `make release` 只比對, 不一致就擋
+# 這是唯一會把契約寫進 repo 的指令。`make check contract` 與 `make release` 只比對, 不一致就擋
 # (scripts/lib/contract.sh)。兩份產出都要一起 commit: $CONTRACT 是契約本體,
 # $WEB_SCHEMA 是它的 TypeScript 投影。細節見 docs/architecture.md〈前後端契約〉。
 set -euo pipefail

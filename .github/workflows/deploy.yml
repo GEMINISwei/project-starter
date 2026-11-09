@@ -102,7 +102,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           ref: refs/tags/${{ steps.tag.outputs.tag }}
-      # 比對後端的 APP_VERSION (跟 tag 對齊的版號); CHANGELOG 與它一致由 make check 的
+      # 比對後端的 APP_VERSION (跟 tag 對齊的版號); CHANGELOG 與它一致由 CI 的
       # apps/api/tests/test_version.py 保證, 下面的 ci job 會跑到。
       - name: tag 與 APP_VERSION 一致
         env:
@@ -179,7 +179,7 @@ jobs:
             split("\n") | map(select(length > 0) | split("\t") | {group: .[0], environment: .[1]})
             | {include: .}' <<< "${selected}")" >> "${GITHUB_OUTPUT}"
 
-  # 這個 commit 在 main 上已經跑過同一套 CI 而且成功 (push, 或 push 被略過時手動補跑) 就不再跑:
+  # 這個 commit 在 main 上已經跑過同一套 CI 而且成功 (push 觸發的) 就不再跑:
   # tag 指向的就是合併進 main 的 commit, 重跑的結果相同。PR 的 run 不算, 它測的是 PR 的 head。
   # 查不到 (main 的 CI 還沒跑完、run 已經過了保存期限、或那次是紅的) 就照舊先跑 CI;
   # 查詢本身失敗則整次停下, 不默默跳過。判斷腳本取自這份 workflow 的 commit, 理由同 targets。

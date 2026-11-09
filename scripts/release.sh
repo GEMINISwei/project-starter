@@ -5,7 +5,7 @@
 #   make release 0.0.3   把 APP_VERSION 改成 0.0.3, CHANGELOG 的 [Unreleased] 改成這個版號
 #
 # 跟 git tag 對齊的版號只有這兩處 (前端的版號經 API 取自 APP_VERSION), 由這支腳本一起改,
-# `make check` 的 `apps/api/tests/test_version.py` 擋住兩者不一致。
+# CI 跑的 `apps/api/tests/test_version.py` 擋住兩者不一致。
 # pyproject.toml、package.json 與 lock 檔刻意不跟發版: 那些是套件自己的版號, 有實際變更時才改,
 # git 上的 diff 才有意義。OpenAPI 的 info.version 固定不動 (見 shared/platform.py)。
 #

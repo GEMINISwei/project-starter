@@ -22,7 +22,6 @@ Hook 在 agent 呼叫工具前後執行，可以擋下這次呼叫。這裡只�
 |---|---|---|
 | `guard_commands.py` | `PreToolUse`（shell） | **deny**：push 到 `main`（`--dry-run` 不算）、`--no-verify`／`commit -n`、改 `core.hooksPath`、`gh pr merge`／`gh pr ready`、`gh release create/edit/delete`、`gh workflow run deploy…`、不經固定寫法執行 `publish.sh`、自己寫放行<br>**確認**：`publish.sh`、`gh api` 用 GET 以外的方法（GraphQL 看有沒有 `mutation`）、`gh run rerun`、有開著的 PR 時開新分支 |
 | `guard_tests.py` | `PreToolUse`（改檔工具） | **確認**：實作開始後改測試檔、改防線檔案；**deny**：直接改放行檔 |
-| `require_check.py` | `Stop` | 改過的程式還沒跑過 `make check` 就要求先跑 |
 | `session_context.py` | `SessionStart` | 不擋，把分支、開著的 PR、測試鎖狀態加進上下文 |
 
 `bash -c`、`eval` 的內容會展開來看，heredoc 的內容當成資料不看。
@@ -43,8 +42,8 @@ Hook 在 agent 呼叫工具前後執行，可以擋下這次呼叫。這裡只�
 
 - **測試檔**：`apps/*/tests/**`、`e2e/tests/**`，輔助檔與資料也算（`test_lock.py`）。
 - **實作開始了**：分支相對 `origin/main`（含未 commit 與未追蹤）改了 `apps/`、`e2e/`、`.agents/hooks/`、
-  `.github/scripts/`、`scripts/` 底下的非測試、非 Markdown 檔案。CI 的 `pr` 用同一個判斷。
-- 只攔改檔工具。用 shell 改測試檔不攔，由 CI 的 `pr` 要求在「驗證」段寫出改過的測試檔。
+  `.github/scripts/`、`scripts/` 底下的非測試、非 Markdown 檔案。
+- 只攔改檔工具。用 shell 改測試檔不攔，由審查時看 diff 裡的測試檔補（[ADR 0011](../decisions/0011-agent-guardrails-by-judgment.md)）。
 
 ## 防線檔案
 
@@ -59,8 +58,8 @@ Hook 在 agent 呼叫工具前後執行，可以擋下這次呼叫。這裡只�
 | 檢查的入口 | `scripts/check.sh`、`Makefile` |
 
 - 改了不會有檢查變紅（刪掉 CI 步驟照樣綠燈、`disableAllHooks` 讓 hook 安靜失效），所以要讓使用者看到。
-- 用 shell 改不攔；CI 的 `pr` 要求動到的防線檔案列進 PR 的「檢查」段。
-- 刻意不保護：`AGENTS.md`、`docs/`、`.agents/skills/`、PR 模板（CI 一樣要求列進「檢查」段）。
+- 用 shell 改不攔，由審查時看 diff 的檔案清單補。
+- 刻意不保護：`AGENTS.md`、`docs/`、`.agents/skills/`、PR 模板（改了一樣在 diff 裡看得到）。
 
 ## 一次一個 PR
 
@@ -68,11 +67,10 @@ Hook 在 agent 呼叫工具前後執行，可以擋下這次呼叫。這裡只�
 開新分支（`git switch -c`、`git checkout -b`、`git branch <名稱>`）、`git worktree add`、`gh pr create` 要確認。
 查不到 PR（沒網路、沒登入）時放行。
 
-## 收尾前的 make check
+## 沒有收尾前的檢查
 
-`make check`（不帶參數）全部通過時，`scripts/check.sh` 呼叫 `check_stamp.py record`，把工作目錄的內容
-（不含 Markdown）記成 git tree。收尾時分支有非 Markdown 的改動、而且內容跟紀錄不同，就要求先跑 `make check`。
-同一輪被要求過一次就放行（`stop_hook_active`），agent 停下來可能只是要問問題。
+不設 `Stop` hook：完整的檢查只在 CI 跑，agent push 之後照 `watch-pr` 等結果，紅了就修正再 push。
+本機收尾前再要求跑一次，只是把 CI 會跑的東西多跑一遍。
 
 ## 開工時的現況
 
