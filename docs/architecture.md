@@ -208,13 +208,13 @@ modules/products/
 `app/permissions.py` 的 `Permission` 與 `shared/http/errors.py` 的 `Language` 是**僅有的兩處**
 「新增功能要改共用檔案」的地方。它們要進 OpenAPI 成為字串聯集，前端才拿得到編譯期保護
 （權限打錯字是 `tsc` 失敗，而不是執行期靜默失效），所以不要改成由模組動態貢獻
-（[ADR 0003](decisions/0003-centralized-permission-and-language.md)）。
+（[starter-decisions/0003](starter-decisions/0003-centralized-permission-and-language.md)）。
 
 ## 模組之間的資料關聯
 
 規則在這裡，**怎麼做**（範例、`ondelete` 的選法、前端怎麼用對方的東西、跨模組排序與彙總）在
 [`extending/cross-module.md`](extending/cross-module.md)。設計取捨（為什麼保留外鍵、允許共用交易）見
-[ADR 0013](decisions/0013-cross-module-references-by-id.md)。
+[starter-decisions/0013](starter-decisions/0013-cross-module-references-by-id.md)。
 
 ### 先決定怎麼切模組
 

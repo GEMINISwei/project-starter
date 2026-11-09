@@ -16,7 +16,7 @@ Claude 與 Codex 用同一種格式（Agent Skills），只維護一份：
 
 ## 寫法
 
-- **只寫步驟**，用祈使句；理由只在不寫會做錯的地方留一句，細節連回 `docs/`，不複製（[ADR 0011](../decisions/0011-agent-guardrails-by-judgment.md)）。
+- **只寫步驟**，用祈使句；理由只在不寫會做錯的地方留一句，細節連回 `docs/`，不複製（[starter-decisions/0011](../starter-decisions/0011-agent-guardrails-by-judgment.md)）。
 - **frontmatter 只依賴 `name` 與 `description`**：`name` 與資料夾同名（小寫英數與 `-`）；`description` 一行，
   開頭講清楚什麼時候用，兩家靠它決定要不要載入。
 - **不寫某一家專屬的工具或語法**：寫「在背景等 CI 跑完」，不寫工具名稱，不用 `$ARGUMENTS`（測試擋）。
