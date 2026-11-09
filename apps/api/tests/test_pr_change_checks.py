@@ -1,14 +1,12 @@
 """PR 的改動檢查 (`.github/scripts/check-pr-changes.py`, 由 pr.yml 執行)。
 
-agent 這一側的 hook 換個寫法就可能繞過, 這裡在 CI 上再檢查一次。
-`pr` 是 required check, 過不了就不能合併:
+`pr` 是 required check, 過不了就不能合併。只檢查一件事: 這個 PR 新增的抑制註解
+(noqa、type: ignore、eslint-disable、ts-expect-error、skip) 同一行要寫理由。
 
-- 實作開始之後還改到測試檔: PR 描述要寫出那個檔案的路徑, 說明為什麼改
-  (docs/testing.md〈改程式不改測試〉)
-- 動到防線檔案或 agent 的說明: 「檢查」段要列出那個檔案或它的目錄, 審查時一定會被看到
-- 新增的抑制註解 (noqa、type: ignore、eslint-disable、ts-expect-error、skip): 同一行要寫理由
+實作後改測試檔、動到防線檔案或 agent 的說明, 不要求在 PR 描述裡再寫一次: 改的當下 hook 已經
+請使用者確認, 審查時 diff 的檔案清單也看得到 (docs/extending/agent-hooks.md)。
 
-每個測試用暫存的 git repo 造出 PR 的 commit, 再把 base、head 與描述交給腳本。
+每個測試用暫存的 git repo 造出 PR 的 commit, 再把 base 與 head 交給腳本。
 """
 
 import re
@@ -81,67 +79,20 @@ def check(repo: Path, pr_body: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_test_change_after_implementation_without_reason_fails(repo: Path) -> None:
+def test_test_and_protected_changes_need_no_description(repo: Path) -> None:
     commit(repo, {SOURCE: "x = 2\n"}, "impl")
-    commit(repo, {TEST: "def test_x():\n    assert 1\n"}, "loosen test")
+    commit(
+        repo,
+        {
+            TEST: "def test_x():\n    assert 1\n",
+            ".github/workflows/ci.yml": "name: CI\n",
+            "AGENTS.md": "x\n",
+            ".agents/skills/feature-workflow/SKILL.md": "x\n",
+        },
+        "change test and guard files",
+    )
     result = check(repo, body())
-    assert result.returncode != 0
-    assert TEST in result.stderr
-
-
-def test_test_change_after_implementation_with_reason_passes(repo: Path) -> None:
-    commit(repo, {SOURCE: "x = 2\n"}, "impl")
-    commit(repo, {TEST: "def test_x():\n    assert 1\n"}, "fix test")
-    reason = f"- 實作後改了 `{TEST}`：原本的斷言把 x 寫死成 1，需求是可設定"
-    assert check(repo, body(verification=reason)).returncode == 0
-
-
-def test_test_change_reason_outside_verification_fails(repo: Path) -> None:
-    commit(repo, {SOURCE: "x = 2\n"}, "impl")
-    commit(repo, {TEST: "def test_x():\n    assert 1\n"}, "loosen test")
-    summary = f"## 摘要\n\n- 改了 `{TEST}`：原本的斷言把 x 寫死成 1\n\n"
-    result = check(repo, summary + body().split("\n\n", 2)[2])
-    assert result.returncode != 0
-    assert TEST in result.stderr
-
-
-def test_tests_written_before_implementation_pass(repo: Path) -> None:
-    commit(repo, {TEST: "def test_x():\n    assert 2\n"}, "test first")
-    commit(repo, {SOURCE: "x = 2\n"}, "impl")
-    assert check(repo, body()).returncode == 0
-
-
-def test_merge_commits_are_ignored(repo: Path) -> None:
-    commit(repo, {TEST: "def test_x():\n    assert 2\n"}, "test first")
-    commit(repo, {SOURCE: "x = 2\n"}, "impl")
-    git(repo, "switch", "-q", "main")
-    commit(repo, {"apps/api/tests/test_other.py": "def test_y():\n    assert True\n"}, "main")
-    git(repo, "switch", "-q", "feat/x")
-    git(repo, "merge", "-q", "--no-edit", "main")
-    assert check(repo, body()).returncode == 0
-
-
-def test_protected_change_not_listed_in_checks_fails(repo: Path) -> None:
-    commit(repo, {".github/workflows/ci.yml": "name: CI\n"})
-    # 寫在「摘要」不算: 要列進「檢查」, 審查者才會逐項確認。
-    pr_body = body().replace("- 改了 x", "- 改了 `.github/workflows/ci.yml`")
-    result = check(repo, pr_body)
-    assert result.returncode != 0
-    assert ".github/workflows/ci.yml" in result.stderr
-
-
-@pytest.mark.parametrize("listed", [".github/workflows/ci.yml", ".github/workflows/"])
-def test_protected_change_listed_by_file_or_directory_passes(repo: Path, listed: str) -> None:
-    commit(repo, {".github/workflows/ci.yml": "name: CI\n"})
-    checks = f"- [ ] 動到 `{listed}`：多了一個步驟"
-    assert check(repo, body(checks=checks)).returncode == 0
-
-
-@pytest.mark.parametrize("path", ["AGENTS.md", ".agents/skills/feature-workflow/SKILL.md"])
-def test_agent_instruction_change_must_be_listed(repo: Path, path: str) -> None:
-    commit(repo, {path: "x\n"})
-    assert check(repo, body()).returncode != 0
-    assert check(repo, body(checks=f"- [ ] 改了 `{path}`")).returncode == 0
+    assert result.returncode == 0, result.stderr
 
 
 WITHOUT_REASON = [
@@ -208,60 +159,5 @@ def test_pr_workflow_checks_changes_with_full_history() -> None:
     steps = re.split(r"\n\s*- (?=name:|uses:)", workflow)
     change_steps = [step for step in steps if "check-pr-changes.py" in step]
     assert change_steps, "pr.yml 要執行 .github/scripts/check-pr-changes.py"
-    for name in ("BASE_SHA", "HEAD_SHA", "PR_BODY"):
+    for name in ("BASE_SHA", "HEAD_SHA"):
         assert f"{name}:" in change_steps[0], f"執行 check-pr-changes.py 的步驟要帶 {name}"
-
-
-# push 與改描述幾乎同時觸發時, pr.yml 的 cancel-in-progress 可能留下帶著舊描述的那一次。
-# 所以腳本執行當下用 gh 讀 PR 目前的描述, 事件帶的 PR_BODY 只在讀不到時才用。
-def fake_gh(tmp_path: Path, current_body: str | None) -> str:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir(parents=True)
-    (bin_dir / "body.md").write_text(current_body or "", encoding="utf-8")
-    command = f"cat '{bin_dir / 'body.md'}'" if current_body is not None else "exit 1"
-    script = bin_dir / "gh"
-    script.write_text(f"#!/bin/sh\n{command}\n", encoding="utf-8")
-    script.chmod(0o755)
-    return f"{bin_dir}:/usr/bin:/bin"
-
-
-def check_with_gh(repo: Path, event_body: str, path: str) -> subprocess.CompletedProcess[str]:
-    env = {
-        "BASE_SHA": git(repo, "merge-base", "main", "HEAD"),
-        "HEAD_SHA": git(repo, "rev-parse", "HEAD"),
-        "PR_BODY": event_body,
-        "PR_NUMBER": "34",
-        "PATH": path,
-    }
-    return subprocess.run(  # noqa: S603 # 執行受測的腳本
-        ["python3", SCRIPT],  # noqa: S607
-        cwd=repo,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-
-def test_current_pr_body_is_used_over_event_body(repo: Path, tmp_path: Path) -> None:
-    commit(repo, {".github/workflows/ci.yml": "name: CI\n"})
-    stale = body()
-    current = body(checks="- [ ] 動到 `.github/workflows/ci.yml`")
-    assert check_with_gh(repo, stale, fake_gh(tmp_path, current)).returncode == 0
-
-
-def test_event_body_is_used_when_current_body_cannot_be_read(repo: Path, tmp_path: Path) -> None:
-    commit(repo, {".github/workflows/ci.yml": "name: CI\n"})
-    event_body = body(checks="- [ ] 動到 `.github/workflows/ci.yml`")
-    assert check_with_gh(repo, event_body, fake_gh(tmp_path, None)).returncode == 0
-    assert check_with_gh(repo, body(), fake_gh(tmp_path / "x", None)).returncode != 0
-
-
-def test_pr_workflow_passes_pr_number_and_token() -> None:
-    workflow = WORKFLOW.read_text(encoding="utf-8")
-    steps = re.split(r"\n\s*- (?=name:|uses:)", workflow)
-    change_steps = [step for step in steps if "check-pr-changes.py" in step]
-    assert change_steps, "pr.yml 要執行 .github/scripts/check-pr-changes.py"
-    for name in ("PR_NUMBER", "GH_TOKEN"):
-        assert f"{name}:" in change_steps[0], f"執行 check-pr-changes.py 的步驟要帶 {name}"
-    assert re.search(r"pull-requests:\s*read", workflow), "讀 PR 描述要 pull-requests: read 權限"

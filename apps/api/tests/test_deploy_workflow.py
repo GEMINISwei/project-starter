@@ -1,6 +1,6 @@
 """deploy.yml: 重用 main 的 CI 結果、主機依 digest 拉 image。
 
-- 要部署的 tag 指向的 commit 在 main 上已經跑過同一套 CI (push 或手動補跑) 而且成功時,
+- 要部署的 tag 指向的 commit 在 main 上已經跑過同一套 CI (push 觸發) 而且成功時,
   不再重跑一次 (`.github/scripts/ci-passed.sh` 判斷)。找不到就照舊先跑 CI, 判斷失敗則整次停下。
   PR 的 run 不算: 它測的是 PR 的 head, 不是 squash 之後 main 上的 commit。
 - build 推完 image 後輸出 digest, 主機以 `<repo>@sha256:…` 拉: 重跑舊的部署 job 時, 組名標籤
@@ -46,8 +46,9 @@ def test_ci_passed_when_main_push_run_succeeded() -> None:
     assert answer(ci_passed(run())) == "true"
 
 
-def test_ci_passed_when_main_manual_run_succeeded() -> None:
-    assert answer(ci_passed(run(event="workflow_dispatch"))) == "true"
+def test_ci_not_passed_when_only_manual_run_succeeded() -> None:
+    # ci.yml 不再能手動執行; 只認 push 觸發的, 查不到就由部署自己跑一次 CI。
+    assert answer(ci_passed(run(event="workflow_dispatch"))) == "false"
 
 
 def test_ci_not_passed_when_only_pull_request_runs_succeeded() -> None:
