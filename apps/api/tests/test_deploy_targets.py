@@ -170,16 +170,20 @@ def test_deploy_waits_for_migration_check_of_every_system() -> None:
 def test_targets_summary_lists_groups_not_deployed() -> None:
     # 部署結果看 job 列表就夠, 但沒列在這次的組 (例如 Variable 漏設) 在列表上看不出來,
     # 只有 targets 知道, 所以由它寫進 Summary。
-    step = re.search(r"^          \{\n(.*?)^          \} >> \"\$\{GITHUB_STEP_SUMMARY\}\"$",
-                     _job("targets"), flags=re.MULTILINE | re.DOTALL)
+    step = re.search(
+        r"^          \{\n(.*?)^          \} >> \"\$\{GITHUB_STEP_SUMMARY\}\"$",
+        _job("targets"),
+        flags=re.MULTILINE | re.DOTALL,
+    )
     assert step, "targets job 沒有寫 Summary"
     assert "這次沒有部署的組" in step.group(1)
     assert "${others}" in step.group(1)
 
 
 def _host_script() -> list[str]:
-    match = re.search(r"- name: 部署到主機\n(.*?)(?=^      - |\Z)", _deploy_job(),
-                      flags=re.MULTILINE | re.DOTALL)
+    match = re.search(
+        r"- name: 部署到主機\n(.*?)(?=^      - |\Z)", _deploy_job(), flags=re.MULTILINE | re.DOTALL
+    )
     assert match, "deploy job 找不到「部署到主機」"
     return match.group(1).splitlines()
 

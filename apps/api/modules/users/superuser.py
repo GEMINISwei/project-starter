@@ -12,7 +12,7 @@
 
 from sqlalchemy.exc import IntegrityError
 
-from modules.roles.public import RoleTable
+from modules.roles.public import get_super_admin_role_id
 from shared.auth import passwords
 from shared.db.table import is_unique_violation
 from shared.http.errors import LangException
@@ -31,7 +31,7 @@ async def create_super_admin(form_data: SuperAdminCreate) -> UserOperate:
     if await UserTable.find_detail_by_username(username=form_data.username):
         raise LangException(409, UserError.USERNAME_EXISTS)
 
-    role_ids = [await RoleTable.get_super_admin_role_id()]
+    role_ids = [await get_super_admin_role_id()]
     password_hash = await passwords.hash_password_async(form_data.password)
 
     try:

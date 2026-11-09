@@ -1,12 +1,15 @@
-from typing import Literal, TypedDict, cast
+import uuid
+from collections import defaultdict
+from collections.abc import Sequence
+from typing import Literal, Self, TypedDict, cast, override
 
-from sqlalchemy import Column, ForeignKey, String, Table, select, update
+from sqlalchemy import Column, ForeignKey, String, Table, delete, exists, insert, select, update
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Mapped, mapped_column, relationship, selectinload
+from sqlalchemy.orm import Mapped, mapped_column
 
-from modules.roles.public import RoleTable
+from modules.roles.public import RoleDetail, expand_permissions, find_role_details
 from shared.auth.contracts import CurrentUser
 from shared.db.query import ilike_contains
 from shared.db.session import resolve_session
@@ -24,6 +27,10 @@ from shared.time import utc_now
 # 對外仍然是 `role_ids` (一個字串陣列, 見 `to_detail()`), 資料庫裡則是這張關聯表:
 # 外鍵保證指到的角色真的存在、`role_id` 篩選變成資料庫做得到的 `EXISTS` (不必把整張
 # users 撈回來過濾), 角色被刪掉時也不會留下孤兒 id。
+#
+# 外鍵用字串 `"roles.id"` 宣告: 資料庫層的一致性照樣有, 程式這一側卻不必 import roles 的資料表。
+# users 也不建到 roles 的 ORM 關聯, 角色資料一律經由 `modules.roles.public` 取得
+# (規則見 docs/architecture.md〈模組之間的資料關聯〉)。
 #
 # 這裡刻意用 Core 的 `Table` 而不是再開一個 `BaseTable` 子類: 它沒有自己的 id 與
 # 時間戳, 也不會有人對它做 CRUD —— 包成 model 只會讓 `app/registry.py` 多一個要註冊、
@@ -75,42 +82,51 @@ class UserTable(BaseTable):
     # 全員撤銷 (`make db revoke-sessions`) 也是每一列各 +1, 沒有另一個全站的版號。
     auth_version: Mapped[int] = mapped_column(default=1)
 
-    # `lazy="raise"` 而不是預設的 lazy load: async session 裡的隱式 lazy load 會丟
-    # `MissingGreenlet`, 訊息完全看不出「你忘了 selectinload」。設成 raise 之後
-    # 錯誤會直接指名這個關聯, 而不是指向 greenlet。
-    roles: Mapped[list[RoleTable]] = relationship(
-        secondary=user_roles,
-        lazy="raise",
-        order_by=RoleTable.created_at,
-    )
-
     __table_args__ = pagination_indexes("users")
 
-    @classmethod
-    def detail_loaders(cls) -> tuple[selectinload, ...]:  # type: ignore[valid-type]
-        """`role_ids` 與 `permissions` 都是從 roles 算出來的, 所以一律要載入關聯。
-
-        """
-        return (selectinload(cls.roles),)
-
     def to_detail(self) -> dict:
-        """對外的使用者形狀: 去掉 password, 補上 `role_ids` 與展開後的 `permissions`。
-
-        `role_ids` 列出**全部**指派到的角色, `permissions` 只聯集**未停用**角色的權限:
-        停用一個角色要能立刻收回權限, 但不該讓它從使用者的角色清單上消失。
-        """
+        """這一列自己的欄位, 去掉 password。角色相關的欄位由 `to_details()` 補上。"""
         data = self.to_dict()
         data.pop("password", None)
-        data["role_ids"] = [str(role.id) for role in self.roles]
-        data["permissions"] = sorted(
-            {
-                permission
-                for role in self.roles
-                if not role.is_disabled
-                for permission in role.permissions
-            }
-        )
         return data
+
+    @override
+    @classmethod
+    async def to_details(cls, rows: Sequence[Self], session: AsyncSession) -> list[dict]:
+        """對外的使用者形狀: 補上 `role_ids` 與展開後的 `permissions`。
+
+        整批共兩次查詢 (自己的關聯表一次、roles 一次), 與這批有幾個人無關。
+        `role_ids` 列出**全部**指派到的角色 (依角色建立順序), `permissions` 只聯集**未停用**
+        角色的權限 (規則在 roles 的 `expand_permissions`): 停用一個角色要能立刻收回權限,
+        但不該讓它從使用者的角色清單上消失。
+        """
+        if not rows:
+            return []
+        assigned = await cls._assigned_role_ids([row.id for row in rows], session)
+        every_role_id = sorted({role_id for ids in assigned.values() for role_id in ids})
+        roles = await find_role_details(every_role_id) if every_role_id else []
+
+        details = []
+        for row in rows:
+            own = assigned.get(row.id, set())
+            own_roles: list[RoleDetail] = [role for role in roles if role["id"] in own]
+            data = row.to_detail()
+            data["role_ids"] = [role["id"] for role in own_roles]
+            data["permissions"] = expand_permissions(own_roles)
+            details.append(data)
+        return details
+
+    @staticmethod
+    async def _assigned_role_ids(
+        user_ids: list[uuid.UUID], session: AsyncSession
+    ) -> dict[uuid.UUID, set[str]]:
+        statement = select(user_roles.c.user_id, user_roles.c.role_id).where(
+            user_roles.c.user_id.in_(user_ids)
+        )
+        assigned: defaultdict[uuid.UUID, set[str]] = defaultdict(set)
+        for user_id, role_id in await session.execute(statement):
+            assigned[user_id].add(str(role_id))
+        return assigned
 
     @classmethod
     async def find_detail_by_username(
@@ -127,14 +143,12 @@ class UserTable(BaseTable):
         —— cast 本身不會驗證。執行期的把關在 `GET /users/me` 的 `UserMe.model_validate()`。
         """
         db = resolve_session(session)
-        statement = (
-            select(cls).options(*cls.detail_loaders()).where(cls.username == username).limit(1)
-        )
-        row = (await db.scalars(statement)).unique().first()
+        statement = select(cls).where(cls.username == username).limit(1)
+        row = (await db.scalars(statement)).first()
         if row is None:
             return None
 
-        data = row.to_detail()
+        data = (await cls.to_details([row], db))[0]
         # password 預設不出現在 `to_detail()` 裡 (那是對外形狀), 登入流程要比對密碼時
         # 才明確補回來 —— 而不是反過來「預設帶著、記得要刪」。
         if include_password:
@@ -242,14 +256,19 @@ class UserTable(BaseTable):
         filters: list[Condition] = []
         if name:
             filters.append(ilike_contains(cls.nickname, name))
+        # 只查自己的關聯表 (`EXISTS`), 不需要 roles 的資料表。
+        assigned = select(user_roles.c.user_id).where(user_roles.c.user_id == cls.id)
         if role_id == "unassigned":
-            # `~roles.any()` 展開成 `NOT EXISTS (SELECT … FROM user_roles …)`。
-            filters.append(~cls.roles.any())
+            filters.append(~exists(assigned))
         elif role_id:
             parsed = parse_uuid(role_id)
             # 格式不合法的 role_id 要篩出**零筆**, 不是被忽略掉而回傳全部 ——
             # 後者會讓一個打錯字的查詢看起來像是「這個角色底下有所有人」。
-            filters.append(cls.roles.any(RoleTable.id == parsed) if parsed else cls.id.is_(None))
+            filters.append(
+                exists(assigned.where(user_roles.c.role_id == parsed))
+                if parsed
+                else cls.id.is_(None)
+            )
         if is_disabled is not None:
             filters.append(cls.is_disabled.is_(is_disabled))
         return filters
@@ -284,14 +303,18 @@ class UserTable(BaseTable):
     # user_roles 這張關聯表。下面兩個覆寫就是那道轉換: service 層完全不知道有關聯表。
 
     @staticmethod
-    async def _load_roles(db: AsyncSession, role_ids: list[str]) -> list[RoleTable]:
-        parsed = [parsed_id for role_id in role_ids if (parsed_id := parse_uuid(role_id))]
-        if not parsed:
-            return []
-        rows = (await db.scalars(select(RoleTable).where(RoleTable.id.in_(parsed)))).all()
-        # 依傳入順序排回來, 讓 `role_ids` 的往返保持穩定 (IN 查詢不保證順序)。
-        by_id = {row.id: row for row in rows}
-        return [by_id[parsed_id] for parsed_id in parsed if parsed_id in by_id]
+    async def _existing_role_ids(role_ids: list[str]) -> set[str]:
+        """只留下真的存在的角色。不存在的 id 略過, 而不是讓外鍵在寫入時才報錯。"""
+        return {role["id"] for role in await find_role_details(role_ids)} if role_ids else set()
+
+    @staticmethod
+    async def _replace_roles(db: AsyncSession, user_id: uuid.UUID, role_ids: set[str]) -> None:
+        await db.execute(delete(user_roles).where(user_roles.c.user_id == user_id))
+        if role_ids:
+            await db.execute(
+                insert(user_roles),
+                [{"user_id": user_id, "role_id": uuid.UUID(role_id)} for role_id in role_ids],
+            )
 
     @classmethod
     async def create(cls, data: dict, session: AsyncSession | None = None) -> dict:
@@ -300,9 +323,9 @@ class UserTable(BaseTable):
         db = resolve_session(session)
 
         row = cls(**cls._coerce(payload))
-        row.roles = await cls._load_roles(db, role_ids)
         db.add(row)
         await db.flush()
+        await cls._replace_roles(db, row.id, await cls._existing_role_ids(role_ids))
         return row.to_dict()
 
     @classmethod
@@ -314,7 +337,7 @@ class UserTable(BaseTable):
         *,
         also_changed: bool = False,
     ) -> dict | None:
-        """與基底相同的「只寫真的有變的欄位」語義, 另外把 `role_ids` 轉成關聯。
+        """與基底相同的「只寫真的有變的欄位」語義, 另外把 `role_ids` 寫進關聯表。
 
         角色的比對用**集合**: `{a, b}` 與 `{b, a}` 是同一組指派, 若比對順序, 前端把
         多選框的順序換一下就會被當成一次更新 (而它其實什麼都沒改)。
@@ -325,17 +348,14 @@ class UserTable(BaseTable):
         db = resolve_session(session)
 
         row_id = parse_uuid(id)
-        if row_id is None:
-            return None
-        statement = select(cls).options(*cls.detail_loaders()).where(cls.id == row_id).limit(1)
-        row = (await db.scalars(statement)).unique().first()
-        if row is None:
+        if row_id is None or await cls.find_by_id(id, session=db) is None:
             return None
 
         roles_changed = False
         if has_roles:
-            wanted = await cls._load_roles(db, role_ids)
-            roles_changed = {role.id for role in wanted} != {role.id for role in row.roles}
+            wanted = await cls._existing_role_ids(role_ids)
+            current = (await cls._assigned_role_ids([row_id], db)).get(row_id, set())
+            roles_changed = wanted != current
 
         # 欄位的比對交給基底, 避免兩套「怎麼算有變」的規則。`also_changed` 告訴它
         # 「角色改了」也算一次更新, 否則欄位剛好都沒變時會被判成 204 而把角色的異動丟掉。
@@ -344,7 +364,6 @@ class UserTable(BaseTable):
         )
 
         if roles_changed:
-            row.roles = wanted
-            await db.flush()
+            await cls._replace_roles(db, row_id, wanted)
 
         return result

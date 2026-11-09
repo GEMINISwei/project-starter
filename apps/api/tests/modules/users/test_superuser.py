@@ -158,9 +158,7 @@ async def test_cli_create_super_admin_assigns_super_admin_role(superuser_db):
     """新建立的超管掛上超管角色, 而且有 auth_version (否則第一次重設密碼的 +1 會從缺值開始)。"""
     from modules.users.model import UserTable
 
-    created = await in_session(
-        lambda: superuser.create_super_admin(form_data=_super_admin_form())
-    )
+    created = await in_session(lambda: superuser.create_super_admin(form_data=_super_admin_form()))
 
     async with session_scope():
         detail = await UserTable.find_detail_by_id(created.id)

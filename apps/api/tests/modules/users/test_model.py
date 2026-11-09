@@ -51,9 +51,7 @@ async def test_current_user_matches_the_resolver_output(db):
 
 async def test_current_user_never_leaks_the_password_by_default(db):
     """`to_detail()` 預設要把 password 拿掉 —— 它會被放進 `GET /users/me` 的來源 dict。"""
-    await UserTable.create(
-        data={"username": "no-leak", "password": "hashed", "nickname": "不外洩"}
-    )
+    await UserTable.create(data={"username": "no-leak", "password": "hashed", "nickname": "不外洩"})
 
     result = await UserTable.find_detail_by_username("no-leak")
 
@@ -154,7 +152,7 @@ async def test_find_detail_by_username_runs_three_queries(db):
         result = await UserTable.find_detail_by_username("three-queries")
 
     assert result is not None
-    assert set(result["role_ids"]) == {first["id"], second["id"]}
+    assert result["permissions"] == ["roles:read", "users:read"]
     assert len(statements) == 3
 
 

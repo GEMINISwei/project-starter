@@ -106,7 +106,7 @@ def test_doc_paths_in_source_point_to_existing_files() -> None:
         relative = path.relative_to(REPO_ROOT)
         try:
             text = path.read_text(encoding="utf-8")
-        except (FileNotFoundError, UnicodeDecodeError):  # 刪了還沒 git rm 的檔案、二進位檔
+        except FileNotFoundError, UnicodeDecodeError:  # 刪了還沒 git rm 的檔案、二進位檔
             continue
         missing += [
             f"{relative}: {target}"

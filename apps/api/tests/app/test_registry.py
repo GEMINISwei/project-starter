@@ -126,10 +126,7 @@ def test_disabling_a_module_also_removes_its_permissions_from_the_catalog(target
     values = {item["value"] for item in catalog.assignable_permissions()}
     removed = {str(spec.value) for spec in target.permissions}
     kept = {
-        str(spec.value)
-        for module in remaining
-        for spec in module.permissions
-        if spec.assignable
+        str(spec.value) for module in remaining for spec in module.permissions if spec.assignable
     }
     assert values.isdisjoint(removed)
     assert kept <= values

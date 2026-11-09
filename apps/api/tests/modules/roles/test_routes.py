@@ -191,9 +191,7 @@ async def test_get_permission_options_returns_labels_grouped_by_module(client: A
     """
     authenticate(client, "super")
 
-    response = await client.get(
-        "/api/roles/permission-options", headers={"Accept-Language": "en"}
-    )
+    response = await client.get("/api/roles/permission-options", headers={"Accept-Language": "en"})
 
     assert response.status_code == 200
     body = response.json()

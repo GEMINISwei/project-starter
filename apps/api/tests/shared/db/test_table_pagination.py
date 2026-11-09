@@ -115,9 +115,7 @@ async def test_paging_back_returns_previous_page(paged_rows):
 
     back = await paged_rows.get_page(limit=2, cursor=second["prev_cursor"], direction="prev")
 
-    assert [row["name"] for row in back["list_data"]] == [
-        row["name"] for row in first["list_data"]
-    ]
+    assert [row["name"] for row in back["list_data"]] == [row["name"] for row in first["list_data"]]
     assert back["has_previous"] is False
 
 
@@ -240,9 +238,7 @@ async def test_pagination_is_stable_when_sort_values_tie(tied_rows):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_tied_pagination_with_foreign_id_does_not_lose_or_repeat(
-    tied_rows, rewriting_detail
-):
+async def test_tied_pagination_with_foreign_id_does_not_lose_or_repeat(tied_rows, rewriting_detail):
     """`id` 被 `to_detail()` 改成另一張表的合法 UUID, 而排序值全部相同。
 
     這條路徑不會噴 400 —— 游標解得開, 只是 tie-breaker 比到了錯的東西,
