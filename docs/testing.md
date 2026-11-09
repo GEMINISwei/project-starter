@@ -4,7 +4,7 @@
 make check test                             # 前後端單元測試（帶覆蓋率；後端平行跑，不含 integration）
 make check integration                      # 起拋棄式 PostgreSQL 跑 integration + alembic check
 make check e2e                              # 起拋棄式的正式環境，用 Playwright 從瀏覽器跑過整條路
-make e2e test <檔案...>                     # 開發中：在常駐的 dev 環境只跑指定的 spec（先 make e2e up）
+make e2e test <檔案或目錄...>               # 開發中：在常駐的 dev 環境只跑指定的 spec（先 make e2e up）
 cd apps/api && uv run pytest tests/ -k xxx  # 只跑後端某些測試
 cd apps/web && npm run test:watch           # 前端 watch 模式
 ```
@@ -51,7 +51,7 @@ nginx 模板**，以 CLI 建隨機密碼的超管，跑完 Playwright 連 volume
 | 指令 | 做什麼 |
 |---|---|
 | `make e2e up` | 起一套這個 checkout 專用的環境：**dev mode**，原始碼直接掛進容器，改了不必重建；已經起著就沿用 |
-| `make e2e test <檔案...>` | 重設資料、重建超管、重啟 api（清掉記憶體裡的登入限流計數），再只跑那幾個 spec；沒給檔案時拒絕，整套用 `make check e2e` |
+| `make e2e test <檔案或目錄...>` | 重設資料、重建超管、重啟 api（清掉記憶體裡的登入限流計數），再只跑那幾個 spec；沒給檔案時拒絕，整套用 `make check e2e` |
 | `make e2e grep "名稱"` | 同上，只跑名稱符合的測試 |
 | `make e2e down` | 拆掉這套環境，連資料一起刪；PR 合併後執行 |
 
@@ -66,7 +66,14 @@ nginx 模板**，以 CLI 建隨機密碼的超管，跑完 Playwright 連 volume
 
 - 名稱用中文句子，斷言用中文文案（`locale: "zh-TW"`）。選元素用 `getByRole`／`getByLabel`，不用 class 或 DOM 結構。
 - 用會自動重試的斷言等待（`toBeVisible()`、`toHaveURL()`），**不寫固定 sleep**；不開 retries，偶發失敗要修等待條件。
-- **檔案之間平行**（2 個 worker），同檔依序：一個子功能一個檔案，整套才不會被最大的檔案拖住。
+- **目錄依功能分**：`e2e/tests/<功能>/` 是使用者看得到的功能。有對應模組的用模組名稱（`users/`），停用模組時
+  連同目錄一起刪；不屬於模組的照功能取名（`auth/` 登入與權限、`layout/` 版面）。不用技術分層或裝置當目錄。
+  跨兩個以上功能的完整流程放 `journeys/`。只跑一個功能：`make e2e test auth/`。
+- **一個檔案一條流程或一個子功能**：檔案之間平行（2 個 worker），同檔依序，整套才不會被最大的檔案拖住，
+  之後拆 shard 也分得平均。
+- **裝置交給 project**：`desktop`（Desktop Chrome）與 `mobile`（Pixel 7）。預設只跑 desktop：兩邊都跑時間加倍，
+  同一 IP 的登入次數也加倍。手機上行為不同的（用到 720px 的版面切換或觸控專屬的處理）加 `{ tag: "@mobile" }`
+  兩邊都跑，只有手機才有意義的加 `@mobile-only`。不在測試裡用 `test.use` 自己設 viewport。
 - **共用準備，不共用結果**：可以共用帳號與登入狀態，不能用別的測試建的資料（一個失敗會連累一串、也不能單獨重跑）。
   建立的資料名稱帶 uuid。
 - **登入狀態**：`auth.setup.ts` 讓超管從畫面登入一次並保存，其他測試預設載入；要從未登入開始的用

@@ -11,7 +11,7 @@ if (!baseURL) {
 
 export default defineConfig({
   testDir: "./tests",
-  // 檔案之間平行, 同一個檔案裡的測試在同一個 worker 依序跑 (一個子功能一個檔案)。
+  // 檔案之間平行, 同一個檔案裡的測試在同一個 worker 依序跑 (目錄依功能, 一個子功能一個檔案)。
   // 測試之間只共用準備好的帳號與登入狀態, 不共用彼此的結果 (docs/testing.md〈E2E〉)。
   // 2 個: runner 同時還要跑整套服務, 再多 CPU 會搶不過來。
   workers: 2,
@@ -31,9 +31,19 @@ export default defineConfig({
   projects: [
     // 超管先登入一次並保存狀態, 其他測試預設載入它; 要從未登入開始的測試自己改成 SIGNED_OUT。
     { name: "setup", testMatch: /.*\.setup\.ts/ },
+    // 裝置是每個功能都有的面向, 由 project 決定, 不開目錄。預設只跑桌機: 兩邊都跑時間加倍,
+    // 同一個 IP 的登入次數也加倍 (限流)。手機上行為不同的標 @mobile (兩邊都跑),
+    // 只有手機才有意義的標 @mobile-only。手機用 Chromium 模擬, CI 只裝這一個瀏覽器。
     {
-      name: "chromium",
+      name: "desktop",
       use: { ...devices["Desktop Chrome"], storageState: ADMIN_STATE },
+      grepInvert: /@mobile-only/,
+      dependencies: ["setup"],
+    },
+    {
+      name: "mobile",
+      use: { ...devices["Pixel 7"], storageState: ADMIN_STATE },
+      grep: /@mobile/,
       dependencies: ["setup"],
     },
   ],
