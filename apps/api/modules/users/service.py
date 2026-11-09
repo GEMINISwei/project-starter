@@ -13,7 +13,7 @@ from typing import Any, Literal
 from sqlalchemy.exc import IntegrityError
 
 from app.permissions import Permission
-from modules.roles.public import RoleTable
+from modules.roles.public import find_role_details
 from shared.auth import passwords
 from shared.auth.contracts import CurrentUser
 from shared.db.session import release_connection
@@ -185,7 +185,7 @@ async def validate_role_ids(role_ids: list[str]) -> None:
 
     **無條件拒絕帶 `Permission.ALL` 的角色**: 超級管理者只能由 CLI 產生。
     """
-    roles = await RoleTable.find_details_by_ids(role_ids)
+    roles = await find_role_details(role_ids)
     if len(roles) != len(set(role_ids)):
         raise LangException(404, UserError.ROLE_NOT_FOUND)
     if any(role["is_disabled"] is True for role in roles):

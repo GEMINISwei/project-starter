@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from typing import Literal, TypedDict, cast
 
 from sqlalchemy import ARRAY, String
@@ -147,3 +148,38 @@ class RoleTable(BaseTable):
         if role is None:
             raise RuntimeError(f"system role not found: {code}")
         return role["id"]
+
+
+# ── 給其他模組的能力 (經由 `public.py` 轉出) ─────────────────────────────────
+#
+# 其他模組拿不到 `RoleTable` (`tests/test_architecture.py` 擋), 只拿得到下面這幾個函式與
+# `RoleDetail`。函式在呼叫當下才去找 `RoleTable` 的方法, 所以測試替換那些方法時這裡跟著生效。
+
+
+async def find_role_details(role_ids: list[str]) -> list[RoleDetail]:
+    """依 id 批次取角色, 依建立順序排列; 不存在或格式不合法的 id 直接略過。
+
+    一次取完一批, 呼叫端補一整頁的資料時才不會變成每列一次查詢。不收 `session`:
+    跨模組的呼叫一律用目前的 session (`transaction()` 也會把它設成目前的), 所以自然與呼叫端
+    在同一個交易裡。
+    """
+    return await RoleTable.find_details_by_ids(role_ids)
+
+
+async def get_super_admin_role_id() -> str:
+    return await RoleTable.get_super_admin_role_id()
+
+
+def expand_permissions(roles: Iterable[RoleDetail]) -> list[str]:
+    """一組角色合起來的權限, 只聯集**未停用**的角色, 去重並排序。
+
+    停用一個角色要能立刻收回權限; 這條規則屬於角色本身, 所以放在這裡而不是讓呼叫端各寫一份。
+    """
+    return sorted(
+        {
+            permission
+            for role in roles
+            if not role["is_disabled"]
+            for permission in role["permissions"]
+        }
+    )

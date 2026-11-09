@@ -203,6 +203,17 @@ class BaseTable(DeclarativeBase):
         return self.to_dict()
 
     @classmethod
+    async def to_details(cls, rows: Sequence[Self], _session: AsyncSession) -> list[dict]:
+        """一批實例的對外形狀, `find_detail_*`/`get_page`/`get_all` 都經過這裡。
+
+        預設逐列 `to_detail()`。要補**別的模組**的資料時覆寫這個: 模組之間不建 ORM 關聯
+        (`detail_loaders()` 只用於模組內), 只能呼叫對方 `public.py` 的批次函式, 而那是
+        async 的、也要一次補完一整批, 列表才不會變成每列一次查詢 (例: `UserTable` 的角色)。
+        `_session` 是給覆寫的子類查詢用的, 預設實作用不到。
+        """
+        return [row.to_detail() for row in rows]
+
+    @classmethod
     def _coerce(cls, data: dict) -> dict:
         """把字串形式的 id 轉成 `uuid.UUID` 再交給驅動。
 
@@ -246,9 +257,10 @@ class BaseTable(DeclarativeBase):
         **呼叫端必須自備條件。** 這裡只負責限制成一筆; 沒有條件時回傳的是資料表掃描
         順序上的第一筆。以 id 取單筆請一律用下面的 `find_detail_by_id`。
         """
+        db = resolve_session(session)
         statement = cls._apply_loaders(select(cls).where(*where)).limit(1)
-        row = (await resolve_session(session).scalars(statement)).unique().first()
-        return None if row is None else row.to_detail()
+        row = (await db.scalars(statement)).unique().first()
+        return None if row is None else (await cls.to_details([row], db))[0]
 
     @classmethod
     async def find_detail_by_id(cls, id: str, session: AsyncSession | None = None) -> dict | None:
@@ -276,10 +288,11 @@ class BaseTable(DeclarativeBase):
         """
         # 預設順序與 get_page 一致 (含 id 當 tie-breaker), 同一份資料在兩個端點順序相同。
         ordering = order_by or (cls.created_at.asc(), cls.id.asc())
+        db = resolve_session(session)
         statement = cls._apply_loaders(select(cls).where(*where)).order_by(*ordering)
-        rows = (await resolve_session(session).scalars(statement)).unique().all()
+        rows = (await db.scalars(statement)).unique().all()
 
-        list_data = [row.to_detail() for row in rows]
+        list_data = await cls.to_details(rows, db)
         return {"list_data": list_data, "count": len(list_data)}
 
     @classmethod
@@ -362,7 +375,7 @@ class BaseTable(DeclarativeBase):
         total_count = await db.scalar(select(func.count()).select_from(cls).where(*where)) or 0
 
         return {
-            "list_data": [row.to_detail() for row in rows],
+            "list_data": await cls.to_details(rows, db),
             "next_cursor": next_cursor,
             "prev_cursor": prev_cursor,
             "has_next": has_next,
@@ -472,4 +485,3 @@ async def seed_tables(models: Iterable[type[BaseTable]], session: AsyncSession) 
     """
     for model in models:
         await model.ensure_seed(session=session)
-

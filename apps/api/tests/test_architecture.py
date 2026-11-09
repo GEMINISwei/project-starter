@@ -5,8 +5,13 @@ pyproject.toml 的 `[tool.importlinter]`。這裡放 import-linter 管不到的:
 它的掃描範圍是否涵蓋所有原始碼, 以及 tests/ 的結構。
 """
 
+import importlib
 import tomllib
 from pathlib import Path
+
+from sqlalchemy import Table
+
+from shared.db.table import BaseTable
 
 SRC = Path(__file__).parents[1]
 
@@ -54,3 +59,25 @@ def test_test_packages_mirror_the_source():
         and not (SRC / directory.relative_to(tests_root)).is_dir()
     )
     assert strays == []
+
+
+def test_module_public_entries_export_no_orm_tables():
+    """跨模組只拿得到能力 (函式與它的回傳型別), 拿不到資料表。
+
+    import-linter 只管「從哪裡 import」, 管不到 public 轉出了什麼。public 一旦轉出 ORM 類別或
+    `Table`, 拿到的模組就能讀寫任何欄位、自己組查詢, 整張表都變成對外介面 —— 而遇到「需要
+    對方的資料」時, 那正是最省事的寫法。規則見 docs/architecture.md〈模組之間的資料關聯〉。
+    """
+    entries = sorted((SRC / "modules").glob("*/public.py"))
+    assert entries, "找不到任何模組的 public.py, 這個檢查等於沒有跑"
+
+    offenders = []
+    for path in entries:
+        module = importlib.import_module(f"modules.{path.parent.name}.public")
+        for name, value in vars(module).items():
+            if name.startswith("_"):
+                continue
+            is_orm_class = isinstance(value, type) and issubclass(value, BaseTable)
+            if is_orm_class or isinstance(value, Table):
+                offenders.append(f"{module.__name__}.{name}")
+    assert offenders == []
