@@ -1,6 +1,6 @@
 # Session
 
-登入狀態怎麼撤銷、為什麼不會續期。為什麼不採用 refresh token 見 [ADR 0001](../decisions/0001-revoke-sessions-by-auth-version.md)。
+登入狀態怎麼撤銷、為什麼不會續期。為什麼不採用 refresh token 見 [starter-decisions/0001](../starter-decisions/0001-revoke-sessions-by-auth-version.md)。
 
 ## 撤銷
 

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test"
 
-// WebApp 在手機上要像原生 App: 畫面不能縮放 (理由與代價見 docs/decisions/0012-lock-mobile-zoom.md)。
+// WebApp 在手機上要像原生 App: 畫面不能縮放 (理由與代價見 docs/starter-decisions/0012-lock-mobile-zoom.md)。
 // viewport 鎖住雙指縮放, `touch-action` 擋雙擊放大; iOS Safari 分頁會忽略 `user-scalable`,
 // 所以輸入框字級另外保持至少 16px, 點擊時才不會自動放大。
 // 手機的 viewport 與觸控由 playwright.config.ts 的 mobile project 提供, 這裡只標 @mobile-only。

@@ -263,7 +263,7 @@ run_e2e() (
     started="${SECONDS}"
     (cd e2e && npm test -- ${shard_args[@]+"${shard_args[@]}"})
     # 只記 Playwright 本身: job 的總時間減掉它就是每份都要付的固定成本, 份數照這兩個數字調
-    # (docs/decisions/0009-e2e-strategy.md)。
+    # (docs/testing.md)。
     if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
         echo "e2e shard ${E2E_SHARD:-1/1}：Playwright $((SECONDS - started)) 秒" >> "${GITHUB_STEP_SUMMARY}"
     fi

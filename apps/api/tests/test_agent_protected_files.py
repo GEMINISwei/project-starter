@@ -106,7 +106,7 @@ def test_editing_protected_files_needs_approval(agent: str, path: str, repo: Pat
     assert decision(agent, repo, path) == BLOCKED[agent], f"沒有攔下: {path}"
 
 
-# 用 shell 改防線檔案不攔 (ADR 0011): 寫法擋不完, 改動由 CI 的 pr 要求列進「檢查」段。
+# 用 shell 改防線檔案不攔 (starter-decisions/0011): 寫法擋不完, 改動由 CI 的 pr 要求列進「檢查」段。
 @pytest.mark.parametrize(
     "command",
     [

@@ -277,7 +277,7 @@ jobs:
     if: needs.changes.outputs.mode == 'full'
     # 依檔案分份 (Playwright --shard), 每份各起一套拋棄式環境: 同一套加 worker 會跟服務搶 CPU,
     # 同一 IP 的登入次數也會碰到限流。每份的固定成本 (裝瀏覽器、建 image、起環境) 約 75 秒,
-    # Summary 記下每份 Playwright 本身的秒數, 接近固定成本時就加一份 (docs/decisions/0009-e2e-strategy.md)。
+    # Summary 記下每份 Playwright 本身的秒數, 接近固定成本時就加一份 (docs/testing.md)。
     # 一份失敗不取消其他份: 各份的結果都要看到; ci-gate 看的是全部份數彙總後的結果。
     name: e2e (${{ matrix.shard }}/${{ strategy.job-total }})
     strategy:

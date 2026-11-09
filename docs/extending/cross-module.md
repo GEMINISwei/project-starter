@@ -1,7 +1,7 @@
 # 跨模組：用到別的模組的資料或能力
 
 功能要用到別的模組的東西時照這份做。規則與理由在 [`architecture.md`](../architecture.md#模組之間的資料關聯)
-與 [ADR 0013](../decisions/0013-cross-module-references-by-id.md)，檢查會擋的部分見 [`testing.md`](../testing.md#架構本身也有測試)。
+與 [starter-decisions/0013](../starter-decisions/0013-cross-module-references-by-id.md)，檢查會擋的部分見 [`testing.md`](../testing.md#架構本身也有測試)。
 
 範例都取自 users 與 roles：users 參照 roles（使用者身上掛角色），roles 不知道 users 存在。
 

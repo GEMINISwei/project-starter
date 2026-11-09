@@ -1,7 +1,7 @@
 # 帳號、角色與密碼
 
 誰能建立帳號、角色與權限怎麼分、後台開放給誰，以及忘記密碼時怎麼辦。為什麼網頁不開註冊見
-[ADR 0002](../decisions/0002-no-web-signup.md)。
+[starter-decisions/0002](../starter-decisions/0002-no-web-signup.md)。
 
 ## 帳號
 

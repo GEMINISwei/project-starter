@@ -57,7 +57,8 @@ flowchart LR
 | [`docs/features/`](docs/features/README.md) | 功能怎麼運作，一個主題一份：帳號與角色、Session、限流、語系 |
 | [`docs/extending/`](docs/extending/README.md) | 開新案時的擴充項目：新增模組、權限、migration、語系 |
 | [`docs/operations.md`](docs/operations.md) | 部署、主機設定、備份與救援 |
-| [`docs/decisions/`](docs/decisions/README.md) | 設計決策（ADR）：刻意不採用主流做法的地方與理由 |
+| [`docs/starter-decisions/`](docs/starter-decisions/README.md) | 模板的設計決策：刻意不採用主流做法的地方與理由，專案裡不改 |
+| [`docs/decisions/`](docs/decisions/README.md) | 專案自己的設計決策（ADR），包括推翻了模板的哪幾份 |
 
 ## 開新專案時
 

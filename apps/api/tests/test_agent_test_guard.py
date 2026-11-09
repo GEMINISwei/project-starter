@@ -279,7 +279,7 @@ def test_claude_asks_before_approving() -> None:
     assert "Bash(python3 .agents/hooks/approve.py:*)" in ask
 
 
-# 用 shell 改測試檔不攔 (ADR 0011): 寫法擋不完, 交給 agent 自律與 CI 的 pr 事後檢查。
+# 用 shell 改測試檔不攔 (starter-decisions/0011): 寫法擋不完, 交給 agent 自律與 CI 的 pr 事後檢查。
 SHELL_WRITES = [
     f"sed -i '' 's/x/y/' {TEST}",
     f"echo y > {TEST}",
