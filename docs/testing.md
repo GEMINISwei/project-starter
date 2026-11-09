@@ -1,8 +1,8 @@
 # 測試
 
 ```bash
-make check test                             # 前後端單元測試（帶覆蓋率；後端平行跑，不含 integration）
-make check integration                      # 起拋棄式 PostgreSQL 跑 integration + alembic check
+make check test                             # 前後端單元測試（後端平行跑，不含 integration；前端帶覆蓋率門檻）
+make check integration                      # 起拋棄式 PostgreSQL 跑全部後端測試、檢查覆蓋率門檻，再跑 alembic check
 make check e2e                              # 起拋棄式的正式環境，用 Playwright 從瀏覽器跑過整條路
 make e2e test <檔案或目錄...>               # 開發中：在常駐的 dev 環境只跑指定的 spec（先 make e2e up）
 cd apps/api && uv run pytest tests/ -k xxx  # 只跑後端某些測試
@@ -20,6 +20,8 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 - **只寫守得住行為的測試**：重寫常數、驗框架行為、寫死專案目前內容的測試只增加維護成本，帶到新專案就是技術債。
 - **每個 PR 都跑正式環境的 E2E**：導向、cookie、Server Action 這類行為只有整套跑起來才看得到，壞了也不會報錯；
   開發中改用常駐的 dev 環境只跑相關的 spec（[starter/0009](starter/0009-e2e-strategy.md)）。
+- **覆蓋率門檻是防退步的地板，不是目標**：起點是當時的實測值往下留 5 個百分點，之後由專案自行調整；
+  不為數字補測試（〈[覆蓋率門檻](#覆蓋率門檻)〉）。
 - **規則能寫成檢查就寫成檢查**：架構與流程的規則多半由測試守住，文件只留檢查不了的（〈[架構本身也有測試](#架構本身也有測試)〉）。
 
 ## 測試放哪裡
@@ -106,7 +108,8 @@ trace 用 `npx playwright show-trace <zip>` 打開。
 - **後端單元**：`tests/modules/conftest.py` 的 `client` fixture 直接打 app，service 與資料表方法用 monkeypatch 換掉，
   不需要資料庫（`tests/modules/users/test_routes.py`）。
 - **後端 integration**：標 `@pytest.mark.integration`，用 `tests/integration.py` 的 `require_postgres`，
-  由 `make check integration` 跑。`make check test` 排除有標記的測試，而且帶 `REQUIRE_INTEGRATION=1`：
+  由 `make check integration` 跑（後端的覆蓋率門檻也在這裡，見〈[覆蓋率門檻](#覆蓋率門檻)〉）。
+  `make check test` 排除有標記的測試，而且帶 `REQUIRE_INTEGRATION=1`：
   忘了標記、又去連資料庫的測試會失敗，不會被 skip 掉。直接跑 pytest 時本機沒資料庫就 skip。
 - **前端**：Vitest + Testing Library。`.server.ts` 也能測：`server-only` 換成空模組，`cookies`、`headers`、`redirect`
   用 `vi.mock` 換掉（`tests/shared/api/request.server.test.ts`）。
@@ -131,6 +134,7 @@ trace 用 `npx playwright show-trace <zip>` 打開。
 | compose 只由 `scripts/lib/compose.sh` 呼叫 | `apps/api/tests/test_compose_usage.py` |
 | 沒有未使用的匯出 | knip（`npm run check:deadcode`） |
 | model 改了有寫 migration | `make check integration` |
+| 每個 app 都有覆蓋率門檻、下方門檻表與設定一致 | `apps/api/tests/test_coverage_thresholds.py` |
 | nginx 每個 location 都覆寫用戶端 IP、兩份模板都帶安全標頭 | `apps/api/tests/test_nginx_templates.py` |
 | 容器 nginx 只信任私有網段、port 只綁 `127.0.0.1`、主機範例覆寫轉送標頭 | `apps/api/tests/test_nginx_trusted_proxy.py` |
 | nginx 與 Next 的上傳上限一致 | `apps/web/tests/next.config.test.ts` |
@@ -159,6 +163,31 @@ trace 用 `npx playwright show-trace <zip>` 打開。
 | lock 檔與 `make gen-types` 的產出列在 `.ignore`（AI agent 的搜尋不撞進去） | `apps/api/tests/test_search_ignore.py` |
 
 規則本身見 [`architecture.md`](architecture.md#強制依賴規則)。
+
+## 覆蓋率門檻
+
+門檻是**防退步的地板，不是目標**：要擋的是一批測試被刪掉、或整批變成 skip 而燈號照樣是綠的；
+不要為了數字補測試，畫面與薄包裝刻意不算進來（見 `vitest.config.ts` 的 `include`）。
+
+- **每個 app 一組門檻，量那個 app 所有能算的測試**：單元與 integration 都算，E2E 跨好幾個行程不算。
+  只量一部分的話，沒量到的那段程式碼永遠顯示成沒測到，退步了也看不出來。
+  後端由 `make check integration` 把兩段的覆蓋率合併後檢查（`pyproject.toml` 的 `fail_under`），
+  前端由 vitest 檢查（`vitest.config.ts` 的 `thresholds`）。
+- **起點是當時的實測值往下留 5 個百分點**（取整數往下）。這是模板交給繼承專案的起點，之後調高或放寬
+  由專案自己決定，在 commit 寫明原因（例：刪掉某個模組、某段改由 integration 測）。門檻是防線檔案，
+  AI agent 要先問。
+- **前端只看 lines 與 branches**：lines 看有沒有跑到，branches 看每條路有沒有走過；statements 與 lines
+  幾乎重複，functions 的資訊也包含在 lines 裡。branches 比 lines 低是正常的，JSX 的條件渲染也算分岔。
+- **新增 app（例如背景 worker）要設門檻並列進下表**：沒設、設成 0、或表與設定對不上，
+  `apps/api/tests/test_coverage_thresholds.py` 都會擋。用的是它認不得的工具時，在那支測試加上判斷方式。
+- CI 的 `api-integration` 與 `web-test` 把這次的實測值、門檻與結果寫進 job 的 Summary，
+  沒過時從那裡看差多少。
+
+| app | 指標 | 門檻 |
+|---|---|---|
+| api | statements | 94% |
+| web | lines | 92% |
+| web | branches | 88% |
 
 ## 改程式不改測試
 
@@ -194,5 +223,4 @@ AI agent 寫完驗收條件要**先列給使用者確認才寫測試**，方向�
 
 驗收條件只寫在 PR，不另寫 spec：合併後留下的是測試名稱，會跟著程式被執行，文件則會悄悄過時。
 
-覆蓋率門檻（`pyproject.toml` 的 `fail_under`、`vitest.config.ts` 的 `thresholds`）是**防退步的地板，不是目標**。
 

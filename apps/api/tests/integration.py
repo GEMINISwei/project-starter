@@ -6,8 +6,8 @@
 不變條件、密碼撤銷的併發與交易。而 skip 的 exit code 是 0: 資料庫沒起來、
 連線字串打錯、等待迴圈提早放行, 整批測試消失而所有燈都是綠的。
 
-覆蓋率也當不了代理指標 —— `pyproject.toml` 的 `fail_under` 刻意訂到「本機完全沒有
-PostgreSQL 也過得了」, 所以從 83.6% 掉到 72.1% 一樣綠燈。
+覆蓋率擋不住這件事: 門檻只在 `make check integration` 檢查, 而 skip 掉的測試沒有執行,
+覆蓋率只會往下掉一些, 不一定跌破門檻。
 
 所以 CI 設 `REQUIRE_INTEGRATION=1` (`make check integration` 也是),
 讓同一個情況變成 fail。

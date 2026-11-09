@@ -27,7 +27,8 @@ export default defineConfig({
       provider: "v8",
       // 終端只印摘要: 逐檔的表格連目錄小計一起印, 每跑一次 make check 就是一大段要讀進 AI 上下文的輸出。
       // 門檻沒過時照樣報錯; 要看哪幾行沒測到, 開 coverage/index.html。
-      reporter: ["text-summary", "html"],
+      // json-summary 給 scripts/check.sh 讀出實測值, 寫進 CI 的 Summary。
+      reporter: ["text-summary", "html", "json-summary"],
       // 只統計「有邏輯」的程式碼。兩類**刻意**不列進來 (是取捨, 不是遺漏):
       // - `modules/*/actions.ts`: 帶 `"use server"` 的薄包裝。會出錯的是 URL 與 payload 形狀,
       //   而那兩者由 OpenAPI 產生的型別在編譯期就擋掉了, 寫執行期測試只是在測 mock。
@@ -46,17 +47,15 @@ export default defineConfig({
         "**/*.d.ts",
         "shared/i18n/actions.ts",
       ],
-      // 防退步的地板, 不是目標。訂法: 量出現況 (納入 `.server` 檔之後: lines 91.4、statements 90.7、
-      // functions 87.6、branches 82.3), 再往下留約 3 個百分點 —— 那個餘裕是量出來的, 拿掉一支
-      // 測試檔就該讓它紅, 留太寬鬆的話那種退步照樣綠燈。
+      // 防退步的地板, 不是目標。訂法是當時的實測值往下留 5 個百分點, 之後由專案自行調整
+      // (見 docs/testing.md〈覆蓋率門檻〉)。
       //
-      // branches 明顯低於其他三項是正常的: coverage-v8 會數到 JSX 條件渲染的每一個 `&&` 與
-      // 三元, 而畫面分支刻意不寫執行期測試 (見上面的 include)。
+      // 只設兩項: lines 看「有沒有跑到」, branches 看「每條路有沒有走過」; statements 與 lines
+      // 幾乎重複, functions 被呼叫過的函式裡的行也會算進 lines。branches 比 lines 低是正常的:
+      // coverage-v8 會數到 JSX 條件渲染的每一個 `&&` 與三元, 而畫面分支刻意不寫執行期測試。
       thresholds: {
-        lines: 89,
-        statements: 88,
-        functions: 85,
-        branches: 79,
+        lines: 92,
+        branches: 88,
       },
     },
   },

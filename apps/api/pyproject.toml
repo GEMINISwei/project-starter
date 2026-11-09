@@ -52,10 +52,9 @@ markers = [
 source = ["app", "modules", "shared"]
 
 [tool.coverage.report]
-# 防退步的地板, 不是目標 (見 docs/testing.md)。要讓本機沒有 PostgreSQL 時
-# (integration 自動 skip, 約 77%) 也過得了, 再留餘裕。**不要推到貼齊**: 刪掉一段
-# 測得很好的程式碼也會讓比例下降, 那是正確的改動被誤報。
-fail_under = 74
+# 防退步的地板, 不是目標。量的是單元 + integration 合併後的比例 (`make check integration`),
+# 訂法是當時的實測值往下留 5 個百分點, 之後由專案自行調整 (見 docs/testing.md〈覆蓋率門檻〉)。
+fail_under = 94
 # 只列出有缺漏的檔案, 全綠的不用佔版面。
 skip_covered = true
 
