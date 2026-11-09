@@ -3,6 +3,17 @@
 本機環境、指令與程式碼風格。測試見 [`testing.md`](testing.md)，開發流程與提交見
 [`workflow.md`](workflow.md)，擴充功能見 [`extending/`](extending/README.md)，部署與維運見 [`operations.md`](operations.md)。
 
+## 為什麼這樣設計
+
+- **一個主題一個指令**（`make <主題> <動作>`）：開發機與部署主機用同一套指令，腳本跟著版本走
+  （[starter-decisions/0008](starter-decisions/0008-full-repo-checkout-on-hosts.md)）。
+- **`.env` 的 `MODE` 決定環境**：同一套指令依它疊 dev 或 prod 的 overlay；缺少或值不對時碰容器的指令一律停下，
+  不會用錯設定啟動（〈[指令](#指令)〉）。
+- **風格上限交給 lint**：上限是防退步的地板，不是重構目標；lint 擋不了的才靠 review（〈[程式碼風格](#程式碼風格)〉）。
+- **註解寫為什麼**：做了什麼看程式碼就知道，註解與文件只留讀程式碼推不出來的取捨（〈[註解與文件](#註解與文件)〉）。
+- **抑制註解要在同一行寫理由**：關掉檢查是讓 CI 變綠最快的捷徑，寫了理由，下一個人才判斷得了能不能拿掉
+  （〈[抑制註解](#抑制註解)〉）。
+
 ## 開發環境
 
 需要 Docker Desktop、`make`、`openssl`、`uv`、Node.js（版本見 [`apps/web/.nvmrc`](../apps/web/.nvmrc)；升 Node 時
