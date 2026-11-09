@@ -12,9 +12,10 @@ message="$1"
 
 # 對所有人都適用: 不可帶 GitHub 的 CI 略過標記。GitHub 在整份訊息裡找它, 而 squash 預設把分支上
 # 每個 commit 的訊息都併進 main, 一個 commit 帶著它, main 就不跑 CI (部署也找不到 main 的結果)。
+# 另一種寫法是訊息最後的 `skip-checks: true` trailer, 效果相同。
 # 只看會留在 commit 裡的部分: git 會拿掉 # 開頭的行與 `commit -v` 剪刀線之後的 diff。
 if sed '/^# -\{24\} >8 -\{24\}$/,$d' "${message}" | grep -v '^#' \
-    | grep -qiE '\[(skip ci|ci skip|no ci|skip actions|actions skip)\]'; then
+    | grep -qiE '\[(skip ci|ci skip|no ci|skip actions|actions skip)\]|^skip-checks: ?true'; then
     echo "commit 訊息不能有 CI 略過標記（標題或內文都算）：squash 會把它帶進 main，main 就不跑 CI。" >&2
     echo "要略過某些檢查時，寫成 workflow 的條件（說明見 docs/workflow.md〈提交與 CI〉）。" >&2
     exit 1

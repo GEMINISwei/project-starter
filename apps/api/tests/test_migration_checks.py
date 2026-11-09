@@ -12,7 +12,6 @@
 """
 
 import os
-import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -22,7 +21,6 @@ from alembic.script import ScriptDirectory
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 LIBRARY = REPO_ROOT / "scripts" / "lib" / "migrations.sh"
-CI_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 REAL_VERSIONS = REPO_ROOT / "apps" / "api" / "migrations" / "versions"
 VERSIONS = "apps/api/migrations/versions"
 BASH = shutil.which("bash") or "/bin/bash"
@@ -181,12 +179,7 @@ def test_check_migrate_treats_prerelease_tag_as_release(tmp_path: Path) -> None:
     assert "aaa.py" in result.stderr
 
 
-def test_ci_check_job_fetches_release_tags() -> None:
-    # actions/checkout 預設只抓一個 commit、不抓 tag: 找不到 tag 時檢查會當成「還沒發版」而略過。
-    workflow = CI_WORKFLOW.read_text(encoding="utf-8")
-    match = re.search(r"^  check:\n(.*?)(?=^  \S|\Z)", workflow, flags=re.MULTILINE | re.DOTALL)
-    assert match, "ci.yml 找不到 check job"
-    assert re.search(r"^\s+fetch-depth: 0$", match.group(1), flags=re.MULTILINE)
+# CI 的 migrate job 要抓完整歷史才找得到 tag, 由 test_ci_workflow.py 檢查。
 
 
 # ── 部署不可讓資料庫往回 ─────────────────────────────────────────────────────
