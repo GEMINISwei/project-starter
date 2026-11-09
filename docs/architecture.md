@@ -212,56 +212,41 @@ modules/products/
 
 ## 模組之間的資料關聯
 
-跨模組的設計取捨（為什麼保留外鍵、允許共用交易）見 [ADR 0013](decisions/0013-cross-module-references-by-id.md)。
+規則在這裡，**怎麼做**（範例、`ondelete` 的選法、前端怎麼用對方的東西、跨模組排序與彙總）在
+[`extending/cross-module.md`](extending/cross-module.md)。設計取捨（為什麼保留外鍵、允許共用交易）見
+[ADR 0013](decisions/0013-cross-module-references-by-id.md)。
 
 ### 先決定怎麼切模組
 
-**依關係緊密程度切，不是看有沒有外鍵**：幾乎所有業務資料都參照 users，有外鍵就合併的話最後只剩一個模組。
-
-| 這樣的關係 → 放同一個模組 | 這樣的關係 → 分開，以 ID 參照 |
-|---|---|
-| 經常 JOIN、要用對方的欄位排序或篩選 | 只需要顯示對方的名稱 |
-| 通常一起改 | 各自演進 |
-| 有共同的規則要同時成立（訂單與明細的金額） | 只要求「指到的東西存在」 |
-| 一方單獨存在沒有意義 | 各自都有獨立的意義 |
-
-分開之後如果對方的 public 多到像是把內部原封不動轉出去，就是邊界畫錯了，應該合併。模組內部可以自由使用
-ORM relationship、JOIN 與 `detail_loaders()`。
+**依關係緊密程度切，不是看有沒有外鍵**：經常 JOIN、通常一起改、有共同規則要同時成立的放同一個模組；只需要
+「指到的東西存在」的分開，以 ID 參照（[判斷表](extending/cross-module.md#1-先判斷該不該是兩個模組)）。
+分開之後對方的 public 多到像是把內部原封不動轉出去，就是邊界畫錯了。模組內部可以自由用 ORM relationship 與 JOIN。
 
 ### 資料表與外鍵
 
-| 關係 | 做法 | 放在哪個模組 |
-|---|---|---|
-| 多對一（訂單屬於使用者） | 外鍵欄位 `user_id` | 參照的一方 |
-| 多對多（使用者的角色） | 關聯表 | 這個關係有業務意義的一方（`user_roles` 在 users） |
-| 一對一擴充（替使用者加帳務資料） | 自己的表，`user_id` 加唯一約束 | 擴充的一方，**不在對方的表加欄位** |
-| 歷史、稽核紀錄 | 只存 ID 與當時的快照，**不加外鍵** | 紀錄的一方，原始資料刪掉後紀錄仍要留著 |
-
-- 外鍵用字串宣告（`ForeignKey("roles.id")`），不 import 對方的資料表。依賴方向跟外鍵方向一致，被參照的模組不知道誰在參照它。
-- `ondelete` 由持有外鍵的一方決定：關聯表與擴充表 `CASCADE`；業務資料預設 `RESTRICT`；選填的關聯 `SET NULL`。
-  `RESTRICT` 擋下的刪除，使用者會看到 409「仍有其他資料使用中」，不是 500。
+- 跨模組照樣建外鍵，用字串宣告（`ForeignKey("roles.id")`），不 import 對方的資料表。依賴方向跟外鍵方向一致，
+  被參照的模組不知道誰在參照它。
+- 一對一擴充別的模組的實體時，開自己的表，**不在對方的表加欄位**；歷史與稽核紀錄只存 ID 與快照，不加外鍵。
+- `ondelete` 由持有外鍵的一方決定，業務資料預設 `RESTRICT`。
 
 ### 讀對方的資料
 
-- 只呼叫對方 `public.py` 的函式，拿到的是 `RoleDetail` 這類回傳型別，不是資料表。
-- 一定要有**批次**版本（`find_role_details(ids)`），列表才不會每列查一次。補一整批資料時覆寫
-  `BaseTable.to_details()`，`find_detail_*`、`get_all`、`get_page` 都經過它（例：`UserTable` 補角色）。
-- 跨模組的函式不收 `session`，用目前的 session（`transaction()` 也會設定它），所以自然與呼叫端在同一個交易裡。
-- 屬於對方的規則放在對方的 public，不在呼叫端各寫一份（例：停用的角色不給權限是 roles 的 `expand_permissions`）。
-
-代價是比 JOIN 多一次查詢：身分來源每個請求固定三次（使用者、`user_roles`、roles），但不隨筆數增加
-（`tests/modules/users/test_model.py` 鎖住）。
+- 只呼叫對方 `public.py` 的函式，拿到的是函式的回傳型別，不是資料表（強制規則 10）。
+- 提供的一方一定要有**批次**版本；使用的一方要帶出對方的資料時覆寫 `BaseTable.to_details()`，一次補完整批，
+  並用測試鎖住查詢次數不隨筆數增加。
+- 跨模組的函式不收 `session`，用目前的 session，所以自然與呼叫端在同一個交易裡。
+- 屬於對方的規則放在對方的 public，不在呼叫端各寫一份。
+- 前端同樣只用對方的 `public.server.ts`（讀資料）與 `public.client.ts`（畫面規則、字典），型別在自己的 `types.ts` 命名。
 
 ### 反方向的需求
 
 被參照的一方需要知道誰在參照自己時（刪角色前檢查還有沒有人用、停用使用者時連動取消訂單），不可反過來 import：
 
-1. 先交給資料庫：`RESTRICT` 讓刪除失敗。平台會把外鍵違反統一轉成 409：刪除時是「仍有其他資料使用中」，
+1. 先交給資料庫：`RESTRICT` 讓刪除失敗。平台把外鍵違反統一轉成 409：刪除時是「仍有其他資料使用中」，
    新增或更新時是「參照的資料不存在」（`shared/platform.py`），模組不必自己攔 `IntegrityError`。
    兩種情況 PostgreSQL 只有會隨語系變的 detail 文字不同，所以依觸發錯誤的 SQL 種類區分（`foreign_key_error()`）。
-2. 需要業務上的連動或明確的否決時，用**模組事件**：被參照的模組在自己的 `public.py` 定義事件並 `publish()`，
-   參照它的模組在 manifest 的 `event_handlers` 訂閱。處理函式在發布者的交易裡同步執行，丟出錯誤就否決整個操作
-   （[做法](extending/module-events.md)）。
+2. 需要業務上的連動或明確的否決時，用**模組事件**：被參照的模組定義事件並 `publish()`，參照它的模組在 manifest 的
+   `event_handlers` 訂閱。處理函式在發布者的交易裡同步執行，丟出錯誤就否決整個操作（[做法](extending/module-events.md)）。
 
 ### 非 HTTP 的入口
 
@@ -269,13 +254,11 @@ CLI 與將來的背景工作一律經過 `shared/platform.py` 的 `platform_scop
 session 與事件訂閱表；不自己 `session_scope()` 或設定 session factory（`tests/scripts/test_db.py` 擋 `scripts/db.py`）。
 平台多一項「每個入口都要有」的東西時，只改 middleware 與 `platform_scope` 這兩處。
 
-### 報表與跨模組的排序
+### 跨模組的排序與彙總
 
-| 需求 | 做法 |
-|---|---|
-| 資料量小、只是拼起來 | 報表模組呼叫各模組的 public，在 Python 裡組 |
-| 加總、分組，只牽涉一個模組 | 由擁有資料的模組在 public 提供統計函式，計算在資料庫裡做 |
-| 一定要跨模組 JOIN（用對方欄位排序後分頁、大量報表） | 在自己的表存去正規化的副本；或報表模組擁有**唯讀的資料庫 view**，在它的 public 與 ADR 寫明是例外 |
+一定要跨模組計算時，計算儘量交給擁有資料的模組（public 的統計函式）；要用對方的欄位排序後分頁時存去正規化的副本，
+用事件同步；真的要跨模組 JOIN 時由一個模組擁有唯讀的資料庫 view，並寫明這是例外
+（[做法](extending/cross-module.md#6-跨模組的排序與彙總)）。
 
 ## 前後端契約
 

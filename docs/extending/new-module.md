@@ -3,8 +3,8 @@
 以 `products` 為例，照順序做。**前後端模組同名。**
 
 動手前先確定它該是新模組，還是併進既有的模組：關係緊密的資料表放在一起，只以 ID 參照的才分開
-（[判斷方式](../architecture.md#先決定怎麼切模組)）。要用別的模組的資料時只呼叫它 `public.py` 的函式，
-外鍵用字串宣告，`ondelete` 依[資料表與外鍵](../architecture.md#資料表與外鍵)選；`RESTRICT` 擋下的操作由平台轉成 409，
+（[判斷方式](cross-module.md#1-先判斷該不該是兩個模組)）。要用別的模組的資料時只呼叫它 `public.py` 的函式，
+外鍵用字串宣告，`ondelete` 依[資料表與外鍵](cross-module.md#2-資料表與外鍵)選；`RESTRICT` 擋下的操作由平台轉成 409，
 不必自己攔 `IntegrityError`（[說明](../architecture.md#模組之間的資料關聯)）。
 
 ## 1. 後端模組
