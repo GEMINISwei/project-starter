@@ -1,15 +1,32 @@
 name: CI
 
-# 每個 job 跑的就是本機的 make 指令, CI 不另寫一份流程 —— 本機綠, CI 就綠。
-#   check        make check (含契約比對: 重產之後不能跟 repo 裡的不一致)
-#   integration  make check integration (拋棄式 PostgreSQL + alembic check)
-#   e2e          make check e2e (拋棄式的正式環境 + Playwright), 且 web image 裡沒有真的 Server Action 金鑰
+# 每個檢查項目各自一個 job、平行跑, 跑的就是本機的 `make check <項目>`, CI 不另寫一份流程:
+#   lint             ruff + import-linter + eslint + dependency-cruiser + knip + shellcheck + compose 檔
+#   contract         重產契約與前端型別, 不能跟 repo 裡的不一致
+#   migrate          已發版的 migration 沒有被修改或刪除
+#   types            mypy + tsc
+#   web-test         vitest
+#   build            前端 production build, 並確認 Next 有認到 proxy.ts
+#   api-test         不需要資料庫的後端測試 (平行, 覆蓋率門檻在這裡)
+#   api-integration  拋棄式 PostgreSQL 跑 integration 測試 + alembic check
+#   e2e              拋棄式的正式環境 + Playwright, 且 web image 裡沒有真的 Server Action 金鑰
+#
+# ci-gate 等全部 job 跑完再判定 (.github/scripts/ci-gate.sh)。main 的 ruleset 只要求 ci-gate 與 pr.yml
+# 的 pr: 新增或改名 job 不必回頭改 ruleset, 但 ci-gate 的 needs 要涵蓋全部 job (測試擋),
+# 沒被它等到的 job 紅了照樣能合併。
+#
+# changes 判斷模式 (.github/scripts/ci-mode.sh): PR 只改了 Markdown 時是 docs, 只跑 api-test 與 web-test
+# (文件的連結與格式檢查在裡面), 其餘 job 只在 full 跑。push main、workflow_call、手動執行一律 full。
+# 不用 workflow 層級的 paths-ignore: 整份被跳過時 required check 不會回報, PR 會一直等。
 #
 # 例外是 e2e 的 image: 先用 gha 快取建好再交給 make check e2e, 不讓它在沒有快取的 runner 上重建。
 # 建法與 deploy.yml 的 build 相同 (target、快取 scope), 測的與部署的是同一份建置設定。
 #
 # deploy.yml 以 workflow_call 重用整份: 要部署的 commit 要先通過同一套檢查。它傳 `ref`
 # 指定那個 tag —— 手動觸發時 github.ref 是 main, 不傳的話測的會是 main 而不是要部署的版本。
+# 所以每個 checkout 都帶 `ref: ${{ inputs.ref }}` (測試擋)。
+#
+# timeout 訂得比平常的執行時間寬幾倍就好: 卡住的 job 越早失敗, 修正的人越早拿到結果。
 #
 # action 的版本: GitHub (actions/*) 與 Docker (docker/*) 官方的用 tag, 第三方的釘 commit SHA
 # —— tag 可以被改指向, 第三方的 tag 被改等於把任意程式碼放進 CI。有漏洞時由 Dependabot 開安全更新, 其餘在整批升級時手動升。
@@ -34,30 +51,55 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# 前端的 job 都快取 `apps/web/node_modules`: setup-node 的 npm 快取只存下載檔, npm ci 仍要整個重裝。
+# key 涵蓋 Node 版本與兩份清單: 少了 .nvmrc 會沿用另一版 Node 編的原生模組; 少了 package.json
+# 會在它與 lock 不一致時命中舊快取, 跳過 npm ci 本來會擋下的錯。
 jobs:
-  check:
+  changes:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 5
+    outputs:
+      mode: ${{ steps.mode.outputs.mode }}
+    steps:
+      # 完整歷史: 要和 PR 的 base 比對改了哪些檔案。
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+      - name: 判斷模式
+        id: mode
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          files=""
+          if [ "${EVENT}" = pull_request ]; then
+            files="$(git diff --name-only "${BASE_SHA}...${HEAD_SHA}")"
+          fi
+          mode="$(printf '%s\n' "${files}" | .github/scripts/ci-mode.sh "${EVENT}")"
+          echo "模式：${mode}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "mode=${mode}" >> "${GITHUB_OUTPUT}"
+
+  lint:
+    needs: [changes]
+    if: needs.changes.outputs.mode == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
-          # make check migrate 要和最近的 release tag 比對; 預設只抓一個 commit、不抓 tag,
-          # 找不到 tag 時檢查會當成「還沒發版」而略過。
-          fetch-depth: 0
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           enable-cache: true
           cache-dependency-glob: apps/api/uv.lock
+      - run: cd apps/api && uv sync --frozen
       - uses: actions/setup-node@v7
         with:
           node-version-file: apps/web/.nvmrc
           cache: npm
           cache-dependency-path: apps/web/package-lock.json
-      - run: cd apps/api && uv sync --frozen
-      # setup-node 的 npm 快取只存下載檔, npm ci 仍要整個重裝。key 涵蓋 Node 版本與兩份清單:
-      # 少了 .nvmrc 會沿用另一版 Node 編的原生模組; 少了 package.json 會在它與 lock 不一致時
-      # 命中舊快取, 跳過 npm ci 本來會擋下的錯。
       - uses: actions/cache@v6
         id: web-node-modules
         with:
@@ -80,11 +122,141 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/shellcheck"
           tar -xJf "${archive}" -C "${RUNNER_TEMP}/shellcheck" --strip-components=1
           echo "${RUNNER_TEMP}/shellcheck" >> "${GITHUB_PATH}"
-      - run: make check
+      - run: make check lint
 
-  integration:
+  contract:
+    needs: [changes]
+    if: needs.changes.outputs.mode == 'full'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - run: cd apps/api && uv sync --frozen
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/web/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - uses: actions/cache@v6
+        id: web-node-modules
+        with:
+          path: apps/web/node_modules
+          key: web-node-modules-${{ runner.os }}-${{ hashFiles('apps/web/.nvmrc', 'apps/web/package.json', 'apps/web/package-lock.json') }}
+      - if: steps.web-node-modules.outputs.cache-hit != 'true'
+        run: cd apps/web && npm ci
+      - run: make check contract
+
+  migrate:
+    needs: [changes]
+    if: needs.changes.outputs.mode == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      # 要和最近的 release tag 比對; 預設只抓一個 commit、不抓 tag,
+      # 找不到 tag 時檢查會當成「還沒發版」而略過。
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+      - run: make check migrate
+
+  types:
+    needs: [changes]
+    if: needs.changes.outputs.mode == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - run: cd apps/api && uv sync --frozen
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/web/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - uses: actions/cache@v6
+        id: web-node-modules
+        with:
+          path: apps/web/node_modules
+          key: web-node-modules-${{ runner.os }}-${{ hashFiles('apps/web/.nvmrc', 'apps/web/package.json', 'apps/web/package-lock.json') }}
+      - if: steps.web-node-modules.outputs.cache-hit != 'true'
+        run: cd apps/web && npm ci
+      - run: make check types
+
+  web-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/web/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - uses: actions/cache@v6
+        id: web-node-modules
+        with:
+          path: apps/web/node_modules
+          key: web-node-modules-${{ runner.os }}-${{ hashFiles('apps/web/.nvmrc', 'apps/web/package.json', 'apps/web/package-lock.json') }}
+      - if: steps.web-node-modules.outputs.cache-hit != 'true'
+        run: cd apps/web && npm ci
+      - run: make check web-test
+
+  build:
+    needs: [changes]
+    if: needs.changes.outputs.mode == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: apps/web/.nvmrc
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - uses: actions/cache@v6
+        id: web-node-modules
+        with:
+          path: apps/web/node_modules
+          key: web-node-modules-${{ runner.os }}-${{ hashFiles('apps/web/.nvmrc', 'apps/web/package.json', 'apps/web/package-lock.json') }}
+      - if: steps.web-node-modules.outputs.cache-hit != 'true'
+        run: cd apps/web && npm ci
+      - run: make check build
+
+  api-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/api/uv.lock
+      - run: cd apps/api && uv sync --frozen
+      - run: make check api-test
+
+  api-integration:
+    needs: [changes]
+    if: needs.changes.outputs.mode == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     # CI 沒有 `make init` 產生的 .env, 拋棄式容器的名稱前綴改用 repo 名稱。
     env:
       COMPOSE_PROJECT_NAME: ${{ github.event.repository.name }}
@@ -100,9 +272,11 @@ jobs:
       - run: make check integration
 
   e2e:
+    needs: [changes]
+    if: needs.changes.outputs.mode == 'full'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    # 同 integration: CI 沒有 .env, 拋棄式 stack 的名稱前綴改用 repo 名稱。
+    timeout-minutes: 15
+    # 同 api-integration: CI 沒有 .env, 拋棄式 stack 的名稱前綴改用 repo 名稱。
     env:
       COMPOSE_PROJECT_NAME: ${{ github.event.repository.name }}
     steps:
@@ -161,3 +335,20 @@ jobs:
             e2e/playwright-report/
             e2e/test-results/
           retention-days: 7
+
+  # 預設上游失敗時會跳過, 而被跳過的 required check 在 GitHub 上算通過, 所以一定要 always()。
+  ci-gate:
+    needs: [changes, lint, contract, migrate, types, web-test, build, api-test, api-integration, e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          sparse-checkout: .github/scripts
+      - name: 判定全部 job 的結果
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          MODE: ${{ needs.changes.outputs.mode }}
+        run: printf '%s' "${NEEDS}" | .github/scripts/ci-gate.sh "${MODE}"

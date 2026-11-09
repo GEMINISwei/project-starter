@@ -48,8 +48,9 @@ GitHub 端設定一次，流程才不靠自覺：
   - **Restrict deletions**、**Block force pushes**：預設勾起，保持
   - **Require linear history**：有 bypass 權限的人直接 push 也不會出現 merge commit
   - **Require a pull request before merging**，**Allowed merge methods** 只留 **Squash**
-  - **Require status checks to pass**：加入 `check`、`integration`、`e2e` 與 `pr`（`pr.yml`），勾
-    **Require branches to be up to date before merging**。CI 多了 job 要回來加，沒列的 job 紅了照樣能合併
+  - **Require status checks to pass**：只加入 `ci-gate`（`ci.yml` 的總閘）與 `pr`（`pr.yml`），勾
+    **Require branches to be up to date before merging**。`ci-gate` 等 `ci.yml` 的全部 job，新增或改名 job
+    不必回來改；不要另外加個別的 job，docs 模式下它們會被跳過
 - [ ] Settings → Advanced Security（或 Code security）：三項都開，少一項安全更新就不會來（見〈相依升級〉）：
   - **Dependency graph**：從 lock 檔解析相依清單，後兩項都靠它
   - **Dependabot alerts**：比對漏洞資料庫，在 Security 分頁發警示
@@ -61,19 +62,26 @@ GitHub 端設定一次，流程才不靠自覺：
   （`feat: add product list page`）。PR 標題是硬規定（squash 後留在 `main`），分支上的 commit 建議照寫。
   標題與描述三段由 `pr.yml` 檢查，在 GitHub 上改標題或描述也會重跑。
 - 送出前 `make check` 通過，實質改動在 [`CHANGELOG.md`](../CHANGELOG.md) 的 `## [Unreleased]` 留一筆。
-- commit 訊息不能有 GitHub 的 CI 略過標記（`.githooks/commit-msg` 擋）：squash 會把每個 commit 的訊息併進 `main`，
-  帶著它 `main` 就不跑 CI，部署也找不到 CI 結果。要略過檢查就寫成 workflow 的條件。
+- commit 訊息不能有 GitHub 的 CI 略過標記（`[skip ci]` 這類與 `skip-checks: true`，`.githooks/commit-msg` 擋）：
+  squash 會把每個 commit 的訊息併進 `main`，帶著它 `main` 就不跑 CI，部署也找不到 CI 結果。
+  要略過檢查就寫成 workflow 的條件。
 
-CI（`.github/workflows/ci.yml`）跑的就是本機指令：`check`（`make check`，含契約比對）、`integration`
-（`make check integration`）、`e2e`（`make check e2e`，並確認 web image 沒有真的 Server Action 金鑰）。
-**本機綠，CI 就綠。** 部署由 `deploy.yml` 在 Publish release 時執行（[說明](operations.md#自動部署)）。
+CI（`.github/workflows/ci.yml`）每個檢查項目各自一個 job、平行跑，跑的就是本機的 `make check <項目>`：
+`lint`、`contract`、`migrate`、`types`、`web-test`、`build`、`api-test`、`api-integration`（`make check integration`）、
+`e2e`（另外確認 web image 沒有真的 Server Action 金鑰）。最後由 `ci-gate` 等全部 job 跑完再判定，
+ruleset 只要求它（`.github/scripts/ci-gate.sh`）。**本機綠，CI 就綠。**
+部署由 `deploy.yml` 在 Publish release 時執行（[說明](operations.md#自動部署)）。
+
+**docs 模式**：PR 改的檔案全部是 Markdown 時，只跑 `api-test` 與 `web-test`（文件的連結與格式檢查在裡面），
+其餘 job 跳過，`ci-gate` 照樣通過。有任何一個非 `.md` 檔，或不是 PR（push `main`、部署、手動執行）就跑全部
+（`.github/scripts/ci-mode.sh`）。
 
 為了省時間，CI 有三處與本機不同，檢查內容不變：
 
 - `e2e` 用 Actions 快取先建好 api、web 的 image，以 `API_IMAGE`、`WEB_IMAGE` 交給 `make check e2e`；
   建法（target、快取 scope）與 `deploy.yml` 相同。
-- `check` 快取 `apps/web/node_modules`，`.nvmrc`、`package.json`、`package-lock.json` 都沒變就跳過 `npm ci`。
-- `check` 下載固定版本的 shellcheck（`scripts/lib/shellcheck.sh`，核對 sha256），不用 runner 內建的：
+- 前端的 job 快取 `apps/web/node_modules`，`.nvmrc`、`package.json`、`package-lock.json` 都沒變就跳過 `npm ci`。
+- `lint` 下載固定版本的 shellcheck（`scripts/lib/shellcheck.sh`，核對 sha256），不用 runner 內建的：
   版本不同時同一份腳本會一邊綠一邊紅。本機版本不同時 `make check lint` 提醒，CI 上不同則失敗。
 
 ### AI 協作的共同作者

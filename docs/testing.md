@@ -1,7 +1,7 @@
 # 測試
 
 ```bash
-make check test                             # 前後端全部（帶覆蓋率）
+make check test                             # 前後端單元測試（帶覆蓋率；後端平行跑，不含 integration）
 make check integration                      # 起拋棄式 PostgreSQL 跑 integration + alembic check
 make check e2e                              # 起拋棄式的正式環境，用 Playwright 從瀏覽器跑過整條路
 make e2e test <檔案...>                     # 開發中：在常駐的 dev 環境只跑指定的 spec（先 make e2e up）
@@ -80,8 +80,9 @@ nginx 模板**，以 CLI 建隨機密碼的超管，跑完 Playwright 連 volume
 
 - **後端單元**：`tests/modules/conftest.py` 的 `client` fixture 直接打 app，service 與資料表方法用 monkeypatch 換掉，
   不需要資料庫（`tests/modules/users/test_routes.py`）。
-- **後端 integration**：標 `@pytest.mark.integration`，用 `tests/integration.py` 的 `require_postgres`。本機沒資料庫時
-  skip（`make check test` 結尾提醒），CI 上 skip 視為失敗。
+- **後端 integration**：標 `@pytest.mark.integration`，用 `tests/integration.py` 的 `require_postgres`，
+  由 `make check integration` 跑。`make check test` 排除有標記的測試，而且帶 `REQUIRE_INTEGRATION=1`：
+  忘了標記、又去連資料庫的測試會失敗，不會被 skip 掉。直接跑 pytest 時本機沒資料庫就 skip。
 - **前端**：Vitest + Testing Library。`.server.ts` 也能測：`server-only` 換成空模組，`cookies`、`headers`、`redirect`
   用 `vi.mock` 換掉（`tests/shared/api/request.server.test.ts`）。
 

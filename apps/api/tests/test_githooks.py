@@ -103,6 +103,18 @@ def test_commit_msg_rejects_ci_skip_marker_in_body(agent: str | None, tmp_path: 
     assert run_hook(message, tmp_path, agent).returncode != 0
 
 
+# GitHub 另一種略過寫法: 訊息最後空兩行接這個 trailer, 一樣讓 push 與 PR 的 workflow 都不跑。
+@pytest.mark.parametrize("trailer", ["skip-checks: true", "skip-checks:true"])
+@pytest.mark.parametrize("agent", ["codex", None])
+def test_commit_msg_rejects_skip_checks_trailer(
+    trailer: str, agent: str | None, tmp_path: Path
+) -> None:
+    message = f"feat: add x\n\n說明。\n\n{TRAILER}\n\n\n{trailer}\n"
+    result = run_hook(message, tmp_path, agent)
+    assert result.returncode != 0
+    assert "main" in result.stderr
+
+
 def test_commit_msg_ignores_ci_skip_marker_in_comments_and_verbose_diff(tmp_path: Path) -> None:
     # git 會在送出前拿掉 # 開頭的行與 `commit -v` 剪刀線之後的 diff, 那些不會進 commit。
     message = (

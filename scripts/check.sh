@@ -1,15 +1,18 @@
 #!/usr/bin/env bash
 #
-# 檢查與測試: make check [lint|contract|migrate|types|test|build|integration|e2e] (不帶參數 = 前六項依序全跑)
+# 檢查與測試: make check [lint|contract|migrate|types|test|api-test|web-test|build|integration|e2e]
+# (不帶參數 = lint 到 build 依序全跑)
 #
 #   make check               lint → contract → migrate → types → test → build, 前後端都跑, 不需要 Docker (送出前跑這個)
 #   make check lint          ruff + import-linter + eslint + dependency-cruiser + knip + shellcheck + compose 檔
 #   make check contract      重產契約與前端型別到暫存目錄, 確認與 repo 裡的一致 (只讀, 不改檔)
 #   make check migrate       已發版的 migration 沒有被修改或刪除 (和最近的 release tag 比對)
 #   make check types         mypy + tsc
-#   make check test          pytest + vitest (帶覆蓋率), 沒有資料庫的 integration 測試會 skip
+#   make check test          api-test + web-test
+#   make check api-test      pytest (平行、帶覆蓋率), 不含需要資料庫的 integration 測試
+#   make check web-test      vitest (帶覆蓋率)
 #   make check build         前端 production build, 並確認 Next 有認到 proxy.ts
-#   make check integration   起拋棄式 PostgreSQL 跑完整後端測試, 再確認 model 與 migration 一致
+#   make check integration   起拋棄式 PostgreSQL 跑 integration 測試, 再確認 model 與 migration 一致
 #   make check e2e           起一套拋棄式的正式環境, 用 Playwright 從瀏覽器跑過整條路 (e2e/)
 #
 # 在主機上跑, 不是在容器裡 —— 那才是編輯器與 CI 看到的環境。首次執行前先跑 make init dev。
@@ -114,23 +117,24 @@ coverage_hint() {
     exit 1
 }
 
-run_test() {
-    step "test"
-    # 後端輸出同時留一份下來數 skip。用 tee: 測試跑的時候要看得到進度。
-    local log
-    log="$(mktemp)"
-    (cd apps/api && uv run pytest tests/ -q --cov --cov-report=) | tee "${log}" || coverage_hint
-    (cd apps/web && npm run --silent test:coverage)
+# 需要資料庫的測試 (`integration` 標記) 不在這裡跑, 由 run_integration 負責。
+# `REQUIRE_INTEGRATION=1`: 有標記的已經被 `-m` 排除, 還去連資料庫的就是忘了標記;
+# 讓它失敗而不是 skip, 否則那批測試會在 CI 上安靜地消失 (見 tests/integration.py)。
+# 平行跑 (`-n auto`): 大部分時間花在子行程 (hook 與 script 的測試), 不平行時 CPU 多半在等。
+run_api_test() {
+    step "api-test"
+    (cd apps/api && REQUIRE_INTEGRATION=1 uv run pytest tests/ -q -n auto -m "not integration" \
+        --cov --cov-report=) || coverage_hint
+}
 
-    # skip 的 exit code 是 0, 不講的話「資料庫沒起來」跟「全部通過」看起來一樣。
-    local skipped
-    skipped="$(sed -n 's/.*[^0-9]\([0-9][0-9]*\) skipped.*/\1/p' "${log}" | tail -1)"
-    rm -f "${log}"
-    if [ -n "${skipped}" ] && [ "${skipped}" -gt 0 ]; then
-        echo
-        echo "⚠️  後端有 ${skipped} 個 integration 測試被 skip（本機沒有資料庫）。"
-        echo "   動到資料庫相關的程式時，跑 make check integration。"
-    fi
+run_web_test() {
+    step "web-test"
+    (cd apps/web && npm run --silent test:coverage)
+}
+
+run_test() {
+    run_api_test
+    run_web_test
 }
 
 run_build() {
@@ -156,10 +160,12 @@ run_build() {
 
 # 兩段都需要真的資料庫, 用拋棄式容器而不是 `make start` 那個: 跑一次就會把開發資料洗掉。
 #
-# 1. `REQUIRE_INTEGRATION=1` 把「連不上就 skip」變成「連不上就 fail」。
+# 1. 只跑 `integration` 標記的測試, 其餘由 run_api_test 跑。依序跑: 這批測試共用同一個資料庫。
+#    不算覆蓋率: 門檻只在 run_api_test, 這裡只有一部分測試, 算出來的比例沒有意義。
+#    `REQUIRE_INTEGRATION=1` 把「連不上就 skip」變成「連不上就 fail」。
 # 2. `alembic check` 擋「改了 model 卻沒寫 migration」—— 測試資料庫是從 model 現建的,
 #    那種錯測試永遠抓不到, 只有部署之後第一次讀寫那個欄位才炸。
-# CI 的 integration job 跑的就是這一段 (見 .github/workflows/ci.yml)。
+# CI 的 api-integration job 跑的就是這一段 (見 .github/workflows/ci.yml)。
 run_integration() {
     require_env COMPOSE_PROJECT_NAME
     local container="${COMPOSE_PROJECT_NAME}-test-postgres"
@@ -170,8 +176,8 @@ run_integration() {
     export PROJECT_NAME=test MODE=development POSTGRES_URL="${THROWAWAY_PG_URL}"
     export JWT_SECRET_KEY=test_secret_key_that_is_at_least_32_characters
 
-    step "integration：完整後端測試"
-    (cd apps/api && REQUIRE_INTEGRATION=1 uv run pytest tests/ -q --cov --cov-report=) || coverage_hint
+    step "integration：需要資料庫的後端測試"
+    (cd apps/api && REQUIRE_INTEGRATION=1 uv run pytest tests/ -q -m integration)
 
     step "integration：model 與 migration 一致（alembic check）"
     # 先清掉測試留下的表, 讓結構完全由 migration 建出來。
@@ -272,6 +278,8 @@ case "${1:-all}" in
     lint)        run_lint ;;
     types)       run_types ;;
     test)        run_test ;;
+    api-test)    run_api_test ;;
+    web-test)    run_web_test ;;
     build)       run_build ;;
     integration) run_integration ;;
     e2e)         run_e2e ;;
