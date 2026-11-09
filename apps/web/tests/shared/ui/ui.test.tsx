@@ -131,6 +131,18 @@ describe("Modal", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 
+  it("開啟時掛在 body 底下，不受外層容器的 backdrop-filter 影響", () => {
+    render(
+      <div data-testid="host" style={{ backdropFilter: "blur(12px)" }}>
+        <Modal title="測試" open onOpenChange={() => {}}>內容</Modal>
+      </div>,
+    )
+
+    const overlay = screen.getByRole("dialog").parentElement
+    expect(overlay?.parentElement).toBe(document.body)
+    expect(screen.getByTestId("host")).not.toContainElement(screen.getByRole("dialog"))
+  })
+
   it("開啟時焦點會移進對話框", () => {
     render(<Modal title="測試" open onOpenChange={() => {}}>內容</Modal>)
 

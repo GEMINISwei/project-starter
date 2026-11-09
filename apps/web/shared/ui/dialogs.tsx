@@ -2,6 +2,7 @@
 
 import type { FormEvent, ReactNode } from "react"
 import { useEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 import { X } from "lucide-react"
 import { useT } from "@/shared/i18n/context"
 import { FOCUSABLE_SELECTOR, ICON_SIZE } from "./internals"
@@ -47,7 +48,10 @@ export function Modal({ title, open, children, width, onOpenChange }: ModalProps
   }, [open])
 
   if (!open) return null
-  return (
+  // 掛到 body: 外層只要有 `transform`／`filter`／`backdrop-filter` (例如手機版標題列的毛玻璃),
+  // 遮罩的 `position: fixed` 就會改以那一層為範圍, 只蓋住那一小塊而且點外面關不掉。
+  // 開著的 Modal 都是使用者操作後才出現, 不會在 server 端渲染, 所以可以直接用 document。
+  return createPortal(
     <div className={styles.overlay} role="presentation" onMouseDown={() => onOpenChange?.(false)}>
       <section
         ref={dialogRef}
@@ -67,7 +71,8 @@ export function Modal({ title, open, children, width, onOpenChange }: ModalProps
         </div>
         <div className={styles.modalBody}>{children}</div>
       </section>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
