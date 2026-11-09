@@ -12,6 +12,7 @@ Feature Branch → Draft PR → Incremental Commits → Code Review → Squash M
    一個分支只做一件事，途中發現別的問題另開分支。
 2. **Draft PR**：第一次 push 就開 Draft PR（`gh pr create --draft`），先寫「摘要」與
    [驗收條件](testing.md#驗收條件與測試名稱)，方向錯了在寫程式前就看得到。AI agent 的驗收條件**先給使用者確認才寫測試**。
+   只改 Markdown 的 PR 不寫測試，驗收條件的寫法見同一個連結。
    描述固定三段（[模板](../.github/PULL_REQUEST_TEMPLATE.md)；`gh pr create --body` 會跳過模板，自己照三段寫）：
    - **摘要**：改了什麼、為什麼。推新 commit 時回來補，對上最新的 diff。
    - **驗證**：做過的驗證與結果，**成功失敗都寫**，沒驗到的寫原因。
