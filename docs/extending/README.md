@@ -14,6 +14,7 @@ users：關聯表與篩選（`model.py`）、依授權模型拆檔（`service.py
 | [新增一個功能模組](new-module.md) | 要加一個有 API 與頁面的新功能 |
 | [權限](permissions.md) | 新模組要權限，或替既有模組多開一個動作 |
 | [Migration](migrations.md) | 改了 model 的欄位、索引、約束，或發版前要整理 migration |
+| [跨模組](cross-module.md) | 功能要用到別的模組的資料或能力：切不切模組、外鍵、讀對方的資料、前端用對方的東西、跨模組排序與報表 |
 | [模組事件](module-events.md) | 被別的模組參照的資料有變動時，要通知參照者連動或否決 |
 | [分頁、篩選與交易](list-queries.md) | 寫列表 API、補關聯資料、多個寫入要一起成功或失敗 |
 | [上傳檔案](uploads.md) | 功能要收圖片、影片或文件，或要決定上傳的大小上限 |
