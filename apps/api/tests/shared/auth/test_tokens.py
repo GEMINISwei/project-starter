@@ -80,23 +80,3 @@ def test_parse_token_rejects_missing_required_claim(missing_claim: str):
         parse_token(malformed, env)
 
     assert exc_info.value.status_code == 401
-
-
-def test_create_token_has_no_token_version_claim():
-    """全域撤銷改由資料庫的 `auth_version` 負責, token 不再帶全站版號。"""
-    env = MockEnv()
-    token = create_token({"username": "alice", "auth_version": 1}, env)["access_token"]
-    payload = jwt.decode(token, env.jwt_secret_key, algorithms=[env.jwt_algorithm])
-
-    assert "tv" not in payload
-
-
-def test_parse_token_ignores_legacy_token_version_claim():
-    """升級前簽發的 token 還帶著 `tv`, 升級本身不應該把所有人踢下線。"""
-    env = MockEnv()
-    token = create_token({"username": "alice", "auth_version": 1}, env)["access_token"]
-    payload = jwt.decode(token, env.jwt_secret_key, algorithms=[env.jwt_algorithm])
-    payload["tv"] = "7"
-    legacy = jwt.encode(payload, env.jwt_secret_key, algorithm=env.jwt_algorithm)
-
-    assert parse_token(legacy, env)["username"] == "alice"

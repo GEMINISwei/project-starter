@@ -1,6 +1,6 @@
 """`make check` 的子指令: 完整的檢查只在 CI 跑, 每個 job 跑其中一項。
 
-- 不帶參數時只印用法並失敗: 本機不再一次跑全部, 照舊習慣執行的人不會以為檢查都過了。
+- 不帶參數時只印用法並失敗: 本機不一次跑全部, 失敗才不會讓人以為檢查都過了。
 - 後端測試拆成 `make check api-test` 與 `make check integration`, 在 CI 上各是一個 job。
 
 - api-test: 不需要資料庫的測試, 平行跑 (`-n auto`), 覆蓋率門檻在這裡。帶 `REQUIRE_INTEGRATION=1`:

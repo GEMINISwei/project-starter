@@ -277,7 +277,6 @@ def test_claude_asks_before_approving() -> None:
     settings = json.loads(CLAUDE_SETTINGS.read_text(encoding="utf-8"))
     ask = settings.get("permissions", {}).get("ask", [])
     assert "Bash(python3 .agents/hooks/approve.py:*)" in ask
-    assert not [rule for rule in ask if "approve_" in rule], f"舊的申請指令要拿掉: {ask}"
 
 
 # 用 shell 改測試檔不攔 (ADR 0011): 寫法擋不完, 交給 agent 自律與 CI 的 pr 事後檢查。

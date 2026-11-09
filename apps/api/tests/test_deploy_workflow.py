@@ -47,7 +47,7 @@ def test_ci_passed_when_main_push_run_succeeded() -> None:
 
 
 def test_ci_not_passed_when_only_manual_run_succeeded() -> None:
-    # ci.yml 不再能手動執行; 只認 push 觸發的, 查不到就由部署自己跑一次 CI。
+    # 只認 push 觸發的 (ci.yml 不開放手動執行), 查不到就由部署自己跑一次 CI。
     assert answer(ci_passed(run(event="workflow_dispatch"))) == "false"
 
 

@@ -69,7 +69,7 @@ list_uploads_backups() {
 # 用法: backups_to_prune <保留組數>
 #
 # 印出最近 N 組以外的備份檔。以檔名主幹為一組 (`.dump` 與 `.tar` 一起算), 不分版號;
-# 依檔名的時間排序, 理由同 list_backups。不符合命名的檔案 (.partial、舊命名) 一律不碰。
+# 依檔名的時間排序, 理由同 list_backups。不符合命名的檔案 (例如 .partial) 一律不碰。
 # 組數必須是正整數: 0 會刪光全部備份。
 backups_to_prune() {
     if ! [[ "${1:-}" =~ ^[1-9][0-9]*$ ]]; then

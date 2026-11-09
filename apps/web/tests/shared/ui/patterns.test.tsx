@@ -168,8 +168,8 @@ describe("shared list patterns", () => {
         <TableRow><td>範例</td></TableRow>
       </ListTableCard>,
     )
-    // TableRow 存在的理由就是這個 class: 窄螢幕時把表格列轉成卡片。模組不再自己
-    // import UI kit 的樣式檔, 所以這裡是唯一還會發現「class 掉了」的地方。
+    // TableRow 存在的理由就是這個 class: 窄螢幕時把表格列轉成卡片。模組不自己
+    // import UI kit 的樣式檔, 所以這裡是唯一會發現「class 掉了」的地方。
     expect(screen.getByRole("row", { name: "範例" }).className).toBeTruthy()
     expect(screen.getByRole("columnheader", { name: "名稱" })).toBeInTheDocument()
     expect(screen.getByText("範例")).toBeInTheDocument()
