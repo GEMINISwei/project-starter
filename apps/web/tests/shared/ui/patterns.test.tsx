@@ -1,10 +1,11 @@
-import { render, screen, within } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { MessagePage, MessagePageButton, MessagePageLink } from "@/shared/ui/feedback/MessagePage"
 import RouteLoading from "@/shared/ui/feedback/RouteLoading"
 import ActionMenu from "@/shared/ui/patterns/ActionMenu"
 import FilterDialog, { useStatusFilterOptions } from "@/shared/ui/patterns/FilterDialog"
+import ListPageHeader from "@/shared/ui/patterns/ListPageHeader"
 import ListTableCard from "@/shared/ui/patterns/ListTableCard"
 import Menu from "@/shared/ui/patterns/Menu"
 import PageHeader from "@/shared/ui/patterns/PageHeader"
@@ -132,6 +133,108 @@ describe("shared list patterns", () => {
     await userEvent.click(screen.getByRole("button", { name: "關閉" }))
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+  })
+
+  it("Menu 點選單外面會關閉", async () => {
+    render(<Menu trigger="⋯" triggerLabel="操作" items={[{ label: "編輯", onClick: vi.fn() }]} />)
+
+    await userEvent.click(screen.getByRole("button", { name: "操作" }))
+    expect(screen.getByRole("menu")).toBeInTheDocument()
+    await userEvent.click(document.body)
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument()
+  })
+
+  it("Menu 捲動頁面時會關閉", async () => {
+    // 選單以 fixed 定位在觸發點旁邊, 捲動後位置就對不上了。
+    render(<Menu trigger="⋯" triggerLabel="操作" items={[{ label: "編輯", onClick: vi.fn() }]} />)
+
+    await userEvent.click(screen.getByRole("button", { name: "操作" }))
+    fireEvent.scroll(window)
+
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument()
+  })
+
+  it("Menu 沒有可見項目時不顯示", () => {
+    render(<Menu trigger="⋯" triggerLabel="操作" items={[null, false]} />)
+
+    expect(screen.queryByRole("button", { name: "操作" })).not.toBeInTheDocument()
+  })
+
+  it("FilterDialog 沒有任何條件時導向不帶問號的原網址", async () => {
+    const onClose = vi.fn()
+    render(
+      <FilterDialog
+        title="篩選"
+        open
+        onClose={onClose}
+        fields={[
+          { name: "name", label: "名稱", type: "text" },
+          { name: "is_disabled", label: "狀態", type: "select", options: [{ value: "", label: "全部" }] },
+        ]}
+        initialValues={{ name: "   ", is_disabled: "" }}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole("button", { name: "篩選" }))
+
+    expect(routerPush).toHaveBeenCalledWith("/records")
+  })
+
+  it("FilterDialog 按重置會清空所有欄位", async () => {
+    render(
+      <FilterDialog
+        title="篩選"
+        open
+        onClose={vi.fn()}
+        fields={[{ name: "name", label: "名稱", type: "text" }]}
+        initialValues={{ name: "demo" }}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole("button", { name: "重置" }))
+
+    expect(screen.getByLabelText("名稱")).toHaveValue("")
+  })
+
+  it("FilterDialog 關閉時呼叫 onClose", async () => {
+    const onClose = vi.fn()
+    render(
+      <FilterDialog
+        title="篩選"
+        open
+        onClose={onClose}
+        fields={[{ name: "name", label: "名稱", type: "text" }]}
+        initialValues={{ name: "" }}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole("button", { name: "關閉" }))
+
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(routerPush).not.toHaveBeenCalled()
+  })
+
+  it("ListPageHeader 按重整會導向清掉分頁游標的網址，有 createAction 時顯示新增按鈕", async () => {
+    const create = vi.fn()
+    const { rerender } = render(
+      <ListPageHeader
+        title="項目"
+        subtitle="管理項目"
+        showReset
+        onFilter={vi.fn()}
+        createAction={{ label: "新增項目", onClick: create }}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole("button", { name: "重整" }))
+    expect(routerPush).toHaveBeenCalledWith("/records")
+    await userEvent.click(screen.getByRole("button", { name: "新增項目" }))
+    expect(create).toHaveBeenCalledOnce()
+
+    rerender(<ListPageHeader title="項目" subtitle="管理項目" showReset={false} onFilter={vi.fn()} />)
+    expect(screen.queryByRole("button", { name: "重整" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "新增項目" })).not.toBeInTheDocument()
   })
 
   it("FilterDialog 正規化輸入並導向篩選網址", async () => {

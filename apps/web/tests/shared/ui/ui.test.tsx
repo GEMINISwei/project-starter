@@ -58,6 +58,14 @@ describe("Flex 的版面契約", () => {
 
     expect(screen.getByText("內容").getAttribute("style")).toContain("var(--space-4)")
   })
+
+  it("gap 可以直接給 CSS 字串，沒帶 gap 時不寫進 style", () => {
+    const { rerender } = render(<Flex gap="1.5rem">內容</Flex>)
+    expect(screen.getByText("內容").getAttribute("style")).toContain("--flex-gap: 1.5rem")
+
+    rerender(<Flex>內容</Flex>)
+    expect(screen.getByText("內容").getAttribute("style") ?? "").not.toContain("--flex-gap")
+  })
 })
 
 describe("Container", () => {
@@ -184,6 +192,22 @@ describe("Modal", () => {
 
     expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true)
     expect(screen.getByRole("button", { name: "背景" })).not.toHaveFocus()
+  })
+
+  it("在第一個可聚焦元素按 Shift+Tab 會跳到最後一個，不會跑到背景", async () => {
+    render(
+      <>
+        <Button>背景</Button>
+        <Modal title="測試" open onOpenChange={() => {}}>
+          <Button>確定</Button>
+        </Modal>
+      </>,
+    )
+
+    screen.getByRole("button", { name: "關閉" }).focus()
+    await userEvent.tab({ shift: true })
+
+    expect(screen.getByRole("button", { name: "確定" })).toHaveFocus()
   })
 })
 
