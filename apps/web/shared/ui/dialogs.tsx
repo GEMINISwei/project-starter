@@ -79,9 +79,9 @@ export function Modal({ title, open, children, width, onOpenChange }: ModalProps
 /** `aria-modal` 的對話框: Tab 在最後一個 (Shift+Tab 在第一個) 可聚焦元素時繞回另一端, 不跑到背景。 */
 function keepTabInside(container: HTMLElement, event: KeyboardEvent) {
   const focusable = [...container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)]
+  // 標題列的關閉按鈕一定在, 所以至少有一個可聚焦元素。
   const first = focusable[0]
-  const last = focusable.at(-1)
-  if (!first || !last) return
+  const last = focusable[focusable.length - 1]
   const active = document.activeElement
   if (event.shiftKey && (active === first || active === container)) {
     event.preventDefault()

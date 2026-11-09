@@ -31,17 +31,13 @@ export function Pagination({ meta, seq, limit, summary }: PaginationProps) {
   const searchParams = useSearchParams()
   const totalPages =
     meta.totalCount != null ? Math.max(1, Math.ceil(meta.totalCount / limit)) : null
-  function buildHref(overrides: Record<string, string | null>) {
-    const params = new URLSearchParams(searchParams.toString())
-    for (const [key, value] of Object.entries(overrides)) {
-      if (value === null) params.delete(key)
-      else params.set(key, value)
-    }
-    const query = params.toString()
-    return query ? `${pathname}?${query}` : pathname
-  }
+  // 保留現有的篩選條件, 只換掉游標三件組; 一定帶 cursor, 所以網址一定有 `?`。
   function hrefFor(direction: "next" | "prev", cursor: string) {
-    return buildHref({ cursor, direction, seq: String(direction === "next" ? seq + 1 : seq - 1) })
+    const params = new URLSearchParams(searchParams.toString())
+    params.set("cursor", cursor)
+    params.set("direction", direction)
+    params.set("seq", String(direction === "next" ? seq + 1 : seq - 1))
+    return `${pathname}?${params.toString()}`
   }
   return (
     <div className={styles.paginationBar}>

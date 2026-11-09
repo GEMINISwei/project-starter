@@ -139,3 +139,31 @@ async def test_requires_a_session_factory_when_there_is_no_active_session():
                 pass
     finally:
         session_module._session_factory = original
+
+
+@pytest.mark.asyncio
+async def test_without_request_session_opens_its_own_and_commits(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    """CLI 與背景工作沒有 middleware 開的 session: 自己開一段, 離開區塊時 commit。
+
+    少了這次 commit, 背景工作的寫入全部消失, 而且沒有任何錯誤。
+    """
+    import shared.db.session as session_module
+
+    class _OwnSession(_FakeSession):
+        async def __aenter__(self) -> _OwnSession:
+            return self
+
+        async def __aexit__(self, *_exc_info: object) -> None:
+            return None
+
+    own = _OwnSession()
+    monkeypatch.setattr(session_module, "_session_factory", lambda: own)
+
+    async with transaction() as active:
+        assert active is own
+        assert own.calls == []
+
+    assert own.calls == ["commit"]
+    assert _current_session.get() is None
