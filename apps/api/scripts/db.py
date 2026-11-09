@@ -20,12 +20,15 @@ def _async_url() -> str:
     return os.environ["POSTGRES_URL"]
 
 
-def _engine():
-    from shared.db.session import configure_session_factory, create_engine
+def _platform_scope():
+    """呼叫模組 service 的指令一律從這裡進去, 與 HTTP 請求拿到相同的 session 與事件訂閱表。
 
-    engine = create_engine(_async_url())
-    configure_session_factory(engine)
-    return engine
+    不在這裡自己設定 session (`tests/scripts/test_db.py` 擋): 理由見 `platform_scope()`。
+    """
+    from app.registry import ENABLED_MODULES
+    from shared.platform import platform_scope
+
+    return platform_scope(ENABLED_MODULES, _async_url())
 
 
 # ── seed ──────────────────────────────────────────────────────────────────────
@@ -34,15 +37,10 @@ def _engine():
 async def _seed():
     """補齊各資料表的初始資料。只由 `cmd_migrate` 呼叫, 不單獨開放: 沒有結構就沒有地方寫。"""
     from app.registry import TABLE_MODELS
-    from shared.db.session import session_scope
     from shared.db.table import seed_tables
 
-    engine = _engine()
-    try:
-        async with session_scope() as session:
-            await seed_tables(TABLE_MODELS, session)
-    finally:
-        await engine.dispose()
+    async with _platform_scope() as session:
+        await seed_tables(TABLE_MODELS, session)
 
 
 # ── reset ─────────────────────────────────────────────────────────────────────
@@ -55,7 +53,10 @@ async def cmd_reset():
 
     from sqlalchemy import text
 
-    engine = _engine()
+    from shared.db.session import create_engine
+
+    # 只砍 schema, 不經過任何模組, 所以直接用引擎而不是 `_platform_scope()`。
+    engine = create_engine(_async_url())
     try:
         async with engine.begin() as connection:
             # 整個 schema 砍掉重建, 而不是逐張 DROP TABLE: 外鍵讓刪除有順序,
@@ -141,7 +142,6 @@ async def cmd_create_superuser():
 
     from modules.users.public import create_super_admin
     from modules.users.schema import SuperAdminCreate
-    from shared.db.session import session_scope
     from shared.http.errors import LangException
 
     print("建立超級管理者（此帳號擁有全部權限）")
@@ -157,15 +157,12 @@ async def cmd_create_superuser():
             print(f"錯誤：{'.'.join(str(loc) for loc in error['loc'])} {error['msg']}")
         sys.exit(1)
 
-    engine = _engine()
     try:
-        async with session_scope():
+        async with _platform_scope():
             user = await create_super_admin(form_data=form_data)
     except LangException as exc:
         print(f"錯誤：{exc.detail}")
         sys.exit(1)
-    finally:
-        await engine.dispose()
 
     print(f"已建立超級管理者：{username}（id: {user.id}）")
 
@@ -173,14 +170,9 @@ async def cmd_create_superuser():
 async def cmd_revoke_sessions():
     """讓所有使用者既有的 session 立刻失效。確認由 `make db revoke-sessions` 負責。"""
     from modules.users.public import revoke_all_sessions
-    from shared.db.session import session_scope
 
-    engine = _engine()
-    try:
-        async with session_scope():
-            result = await revoke_all_sessions()
-    finally:
-        await engine.dispose()
+    async with _platform_scope():
+        result = await revoke_all_sessions()
 
     print(f"已讓 {result.affected} 位使用者的登入失效，所有人都要重新登入")
 

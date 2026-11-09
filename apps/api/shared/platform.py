@@ -23,6 +23,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from shared.auth.catalog import build_permission_catalog
 from shared.auth.contracts import AppEnvProtocol, CurrentUser
@@ -30,9 +31,15 @@ from shared.auth.dependency import check_user_permission
 from shared.auth.permissions import BasePermission
 from shared.db.session import configure_session_factory, create_engine, session_scope
 from shared.db.table import foreign_key_error, is_foreign_key_violation
+from shared.events import EventBus, use_event_bus
 from shared.http.context import current_request_id, resolve_request_id
 from shared.http.errors import LangException, NoChangeError, current_language, resolve_language
-from shared.module import ModuleManifest, resolve_current_user_resolver, table_models
+from shared.module import (
+    ModuleManifest,
+    event_handlers,
+    resolve_current_user_resolver,
+    table_models,
+)
 
 #: 所有 module 的 router 都掛在這個前綴底下。前端 `shared/api/request.server.ts` 組網址時
 #: 會在路徑前補上同一段, 改這裡要一起改那裡。
@@ -88,7 +95,7 @@ async def _call_within_session(
     request: Request,
     call_next: Callable[[Request], Awaitable[Response]],
 ) -> Response:
-    """在一個資料庫 session 裡處理這次請求 (見 shared/db/session.py)。
+    """在一個資料庫 session 裡處理這次請求 (見 shared/db/session.py), 事件訂閱表也在這裡設定。
 
     **要包住 `call_next`**: response_model 驗證與相依項也會讀資料庫。
 
@@ -97,11 +104,12 @@ async def _call_within_session(
     commit 進去; 撞唯一約束時則會變成 `PendingRollbackError` 的 500 而不是 409
     (`tests/shared/test_platform.py` 守)。
     """
-    async with session_scope() as session:
-        response = await call_next(request)
-        if response.status_code >= 400:
-            await session.rollback()
-        return response
+    with use_event_bus(request.app.state.event_bus):
+        async with session_scope() as session:
+            response = await call_next(request)
+            if response.status_code >= 400:
+                await session.rollback()
+            return response
 
 
 def _log_request(request: Request, request_id: str, status_code: int, started: float) -> None:
@@ -193,6 +201,25 @@ def _install_version_route(application: FastAPI, app_version: str) -> None:
     application.include_router(router, prefix=API_PREFIX)
 
 
+@asynccontextmanager
+async def platform_scope(
+    modules: Iterable[ModuleManifest], postgres_url: str
+) -> AsyncIterator[AsyncSession]:
+    """非 HTTP 入口 (CLI、背景工作) **唯一**的進入點: 與 HTTP 請求相同的 session 與事件訂閱表。
+
+    每個入口自己設定的話, 平台每多一項「每個入口都要有」的東西就要逐一補上, 漏掉的那個
+    要到執行期才出錯。正常結束時 commit, 例外時 rollback (同 `session_scope()`)。
+    """
+    engine = create_engine(postgres_url)
+    configure_session_factory(engine)
+    try:
+        with use_event_bus(EventBus(event_handlers(modules))):
+            async with session_scope() as session:
+                yield session
+    finally:
+        await engine.dispose()
+
+
 def create_platform_app(
     *,
     env: PlatformEnv,
@@ -224,6 +251,7 @@ def create_platform_app(
     application.state.permission_catalog = catalog
     application.state.permission_resolver = catalog.resolver
     application.state.current_user_resolver = resolve_current_user_resolver(resolved)
+    application.state.event_bus = EventBus(event_handlers(resolved))
 
     application.middleware("http")(_handle_request)
     application.add_exception_handler(NoChangeError, _no_change_handler)  # type: ignore[arg-type]

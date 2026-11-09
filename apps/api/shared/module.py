@@ -18,6 +18,7 @@ from fastapi import APIRouter
 from shared.auth.contracts import CurrentUserResolver
 from shared.auth.permissions import BasePermission
 from shared.db.table import BaseTable
+from shared.events import Event, EventHandler
 from shared.http.errors import LangText
 
 
@@ -51,6 +52,9 @@ class ModuleManifest:
     #: 後者會讓組裝層認識一個具名模組, users 也就事實上不可替換、不可停用。
     #: 整個 app 至多一個 module 提供 (`resolve_current_user_resolver()` 會擋掉第二個)。
     current_user_resolver: CurrentUserResolver | None = None
+    #: 這個 module 訂閱的事件 (別的 module 在自己的 `public.py` 定義的 `Event`)。
+    #: 處理函式在發布者的交易裡同步執行, 見 `shared/events.py`。
+    event_handlers: tuple[EventHandler, ...] = ()
 
 
 def validate_modules(modules: Iterable[ModuleManifest]) -> tuple[ModuleManifest, ...]:
@@ -67,7 +71,18 @@ def validate_modules(modules: Iterable[ModuleManifest]) -> tuple[ModuleManifest,
                 raise RuntimeError(f"duplicate router prefix: {router.prefix}")
             router_prefixes.add(router.prefix)
     _validate_tables(resolved)
+    _validate_event_handlers(resolved)
     return resolved
+
+
+def _validate_event_handlers(modules: tuple[ModuleManifest, ...]) -> None:
+    # 註冊錯型別的話 `isinstance` 永遠不成立, 處理函式就靜靜地從來不會被呼叫。
+    for module in modules:
+        for handler in module.event_handlers:
+            if not (isinstance(handler.event, type) and issubclass(handler.event, Event)):
+                raise RuntimeError(
+                    f"module {module.name} subscribed to a non-event: {handler.event!r}"
+                )
 
 
 def _validate_tables(modules: tuple[ModuleManifest, ...]) -> None:
@@ -99,6 +114,11 @@ def resolve_current_user_resolver(
         names = ", ".join(module.name for module in providers)
         raise RuntimeError(f"multiple modules provide current_user_resolver: {names}")
     return providers[0].current_user_resolver if providers else None
+
+
+def event_handlers(modules: Iterable[ModuleManifest]) -> list[EventHandler]:
+    """啟用中 module 的所有訂閱, 依啟用清單的順序 (同一個 module 內依註冊順序)。"""
+    return [handler for module in validate_modules(modules) for handler in module.event_handlers]
 
 
 def table_models(modules: Iterable[ModuleManifest]) -> list[type[BaseTable]]:

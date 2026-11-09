@@ -37,7 +37,8 @@
 - **任務由模組在 `manifest.py` 宣告**，worker 從 `ENABLED_MODULES` 收集（比照 router），
   模組整包刪掉時任務才會跟著消失。
 - **每個任務要自己開 session**：HTTP 請求的 session 由 middleware 開，worker 沒有這一層，
-  由 worker 的框架統一包 `session_scope()`，不要讓每個任務自己記（見 `shared/db/session.py`）。
+  由 worker 的框架統一包 `platform_scope()`，不要讓每個任務自己記。它同時設定 session 與模組事件的訂閱表，
+  任務呼叫的 service 發布事件時才有人接（見〈[非 HTTP 的入口](../architecture.md#非-http-的入口)〉）。
 - **worker 不跑 seed**：seed 屬於 migrate 服務，只在部署時跑一次（見〈[初始資料](seed.md)〉）。
 
 ## 任務的狀態

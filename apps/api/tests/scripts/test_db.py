@@ -9,6 +9,7 @@
 
 import os
 from collections.abc import AsyncIterator
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 import pytest
@@ -66,3 +67,15 @@ async def test_migrate_writes_seed_data(migrate_url: str, monkeypatch: pytest.Mo
         await engine.dispose()
 
     assert "super_admin" in codes
+
+
+def test_db_cli_enters_through_platform_scope():
+    """CLI 不自己設定 session: 一律經過 `platform_scope`, 拿到的執行環境 (session、事件訂閱)
+    才與 HTTP 請求相同。各自設定的話, 平台每多一項「每個入口都要有」的東西就要逐一補上,
+    漏掉的那個指令會在執行期才出錯 (例: 呼叫的 service 發布了事件, 卻沒有訂閱表)。
+    """
+    source = (Path(__file__).parents[2] / "scripts" / "db.py").read_text(encoding="utf-8")
+
+    assert "platform_scope(" in source
+    assert "session_scope(" not in source
+    assert "configure_session_factory(" not in source
