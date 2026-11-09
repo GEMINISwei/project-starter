@@ -5,10 +5,10 @@ name: CI
 #   contract         重產契約與前端型別, 不能跟 repo 裡的不一致
 #   migrate          已發版的 migration 沒有被修改或刪除
 #   types            mypy + tsc
-#   web-test         vitest
+#   web-test         vitest (前端的覆蓋率門檻在這裡)
 #   build            前端 production build, 並確認 Next 有認到 proxy.ts
-#   api-test         不需要資料庫的後端測試 (平行, 覆蓋率門檻在這裡)
-#   api-integration  拋棄式 PostgreSQL 跑 integration 測試 + alembic check
+#   api-test         不需要資料庫的後端測試 (平行, 不算覆蓋率)
+#   api-integration  拋棄式 PostgreSQL 跑全部後端測試, 合併覆蓋率檢查門檻, 再跑 alembic check
 #   e2e              拋棄式的正式環境 + Playwright (依 matrix 分份), 且 web image 裡沒有真的 Server Action 金鑰
 #
 # ci-gate 等全部 job 跑完再判定 (.github/scripts/ci-gate.sh)。main 的 ruleset 只要求 ci-gate 與 pr.yml
