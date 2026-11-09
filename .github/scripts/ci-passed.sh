@@ -4,8 +4,8 @@
 #
 #   gh api ".../actions/workflows/ci.yml/runs?head_sha=<sha>&status=success" | ci-passed.sh <sha>
 #
-# 印出 true 或 false。只認 main 上的 push 與手動補跑 (workflow_dispatch): PR 的 run 測的是
-# PR 的 head, 不是 squash 之後 main 上的那個 commit。API 已經依 head_sha 與 status 篩過,
+# 印出 true 或 false。只認 main 上 push 觸發的 run: PR 的 run 測的是 PR 的 head, 不是 squash 之後
+# main 上的那個 commit (ci.yml 也不能手動執行)。API 已經依 head_sha 與 status 篩過,
 # 這裡再比一次, 查詢參數寫錯時才不會把別的 commit 當成通過。
 # 回應讀不懂就以非 0 結束: 不能當成「沒跑過」, 也不能當成通過。
 set -euo pipefail
@@ -15,5 +15,5 @@ set -euo pipefail
 jq -e --arg sha "$1" '
     [.workflow_runs[]
         | select(.head_sha == $sha and .head_branch == "main" and .conclusion == "success")
-        | select(.event == "push" or .event == "workflow_dispatch")]
+        | select(.event == "push")]
     | length > 0' || [ "$?" -eq 1 ]

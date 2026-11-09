@@ -1,6 +1,6 @@
 ---
 name: watch-pr
-description: 開好或更新 PR 之後使用：在背景等 CI 跑完並回報；使用者合併（或關閉）PR 後把本機同步回 main 並清掉分支。
+description: 開好或更新 PR 之後使用：在背景等 CI，失敗就直接修正再 push；使用者合併（或關閉）PR 後把本機同步回 main 並清掉分支。
 ---
 
 # 等 CI、合併後同步本機
@@ -9,8 +9,14 @@ description: 開好或更新 PR 之後使用：在背景等 CI 跑完並回報�
 
 ## 1. 等 CI（每次 push 後）
 
-`gh pr checks <PR 號碼> --watch --fail-fast`，跑完回報每個 job。失敗時 `gh run view <run id> --log-failed` 讀失敗段落，
-說明原因；要不要修、怎麼修先問使用者。
+`gh pr checks <PR 號碼> --watch --fail-fast`：任何一個 job 失敗就結束，不必等其他 job 跑完。
+失敗時 `gh run view <run id> --log-failed` 只讀失敗段落，**直接修正、commit、push**（新的 commit 會取消還在跑的舊 run），
+再回到這一步等。例外：
+
+- 要改測試檔照 `feature-workflow` 第 5 步，先向使用者說明、同意才改。
+- 同一個 job 連續失敗 3 次就停下來，向使用者說明三次的原因與試過的修法。
+
+全部通過時回報每個 job 的結果。
 
 `e2e` 失敗自己讀，不交給子代理（修的人要讀過原因，子代理也得重讀程式碼）：
 `gh run download <run id> -n playwright-report -D <暫存目錄>`，先讀失敗測試的 `error-context.md`，看不出來才開

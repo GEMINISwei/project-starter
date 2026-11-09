@@ -12,5 +12,5 @@ description: 正式環境出問題、但還有 PR 開著等合併時使用：向
 2. **開分支**：從最新的 `main` 開，不從進行中的分支開。hook 會要求確認，照它的說明做。
 3. **修正**：照 `feature-workflow` 第 2～8 步，驗收條件只寫這個問題，先寫能重現的測試。不順手整理，也不搬進行中 PR 的內容。
 4. **合併與發版**：合併由使用者做；要立刻上線照 `release`，發布前一樣要使用者同意。
-5. **回到原本的 PR**：切回去 `git merge origin/main`（不 rebase 審過的 commit）、`make check`、push，照 `watch-pr` 等 CI，
+5. **回到原本的 PR**：切回去 `git merge origin/main`（不 rebase 審過的 commit）、push，照 `watch-pr` 等 CI，
    告訴使用者原本的 PR 已跟上。

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 #
-# 檢查與測試: make check [lint|contract|migrate|types|test|api-test|web-test|build|integration|e2e]
-# (不帶參數 = lint 到 build 依序全跑)
+# 檢查與測試: make check <lint|contract|migrate|types|test|api-test|web-test|build|integration|e2e>
 #
-#   make check               lint → contract → migrate → types → test → build, 前後端都跑, 不需要 Docker (送出前跑這個)
+# 完整的檢查在 CI 跑 (每個 job 跑其中一項, 見 .github/workflows/ci.yml), 本機只在需要時跑單項。
+# 不帶參數時只印用法並失敗: 不再有「本機一次全跑」, 照舊習慣執行的人不會以為檢查都過了。
+#
 #   make check lint          ruff + import-linter + eslint + dependency-cruiser + knip + shellcheck + compose 檔
 #   make check contract      重產契約與前端型別到暫存目錄, 確認與 repo 裡的一致 (只讀, 不改檔)
 #   make check migrate       已發版的 migration 沒有被修改或刪除 (和最近的 release tag 比對)
@@ -13,6 +14,8 @@
 #   make check web-test      vitest (帶覆蓋率)
 #   make check build         前端 production build, 並確認 Next 有認到 proxy.ts
 #   make check integration   起拋棄式 PostgreSQL 跑 integration 測試, 再確認 model 與 migration 一致
+#   make check integration <檔案…>   只跑指定的 integration 測試, 不跑 alembic check
+#                                    (要用 -k 時直接執行 scripts/check.sh integration -k 名稱)
 #   make check e2e           起一套拋棄式的正式環境, 用 Playwright 從瀏覽器跑過整條路 (e2e/)
 #
 # 在主機上跑, 不是在容器裡 —— 那才是編輯器與 CI 看到的環境。首次執行前先跑 make init dev。
@@ -36,7 +39,7 @@ deny_on_production "make check"
 step() { printf '\n── %s ──────────────────────────────────────────\n' "$1"; }
 
 # npm 一律 `--silent`: 不回顯 `> web@0.0.1 lint` 這類指令列 (巢狀的 npm run 也跟著安靜)。
-# 通過時的輸出越短越好, AI agent 一次任務會跑好幾次, 每次都要整段讀進上下文; 錯誤訊息不受影響。
+# 通過時的輸出越短越好: CI 失敗時 agent 要把 log 讀進上下文, 雜訊越少越好找; 錯誤訊息不受影響。
 
 run_lint() {
     step "lint"
@@ -47,30 +50,17 @@ run_lint() {
     (cd apps/web && npm run --silent lint)
     lint_shell
     lint_compose
-    warn_git_hooks
 }
 
-# .githooks/ 要 core.hooksPath 指過去才會生效, 沒設時 commit 照樣成功、不會有任何提示。
-# 只提醒不擋: 這是本機設定, CI 上本來就沒有。
-warn_git_hooks() {
-    [ -n "${CI:-}" ] && return
-    [ "$(git config --get core.hooksPath || true)" = ".githooks" ] && return
-    echo "⚠️  git hook 沒有啟用（.githooks/ 的 commit-msg 不會檢查）：重跑 make init dev，"
-    echo "   或 git config core.hooksPath .githooks。"
-}
-
-# 本機沒裝工具時只提醒、不擋 (`make check` 的承諾是不需要額外安裝); CI 上 (GitHub 會設
-# CI=true) 一律當成失敗, 否則整項檢查會在沒人發現的情況下消失。
-missing_tool() {
-    if [ -n "${CI:-}" ]; then
-        echo "CI 上缺少 $1" >&2
-        exit 1
-    fi
-    echo "⚠️  沒有安裝 $1，略過這一項（CI 會跑）。"
+# 缺工具就失敗, 不略過: 略過的話整項檢查會在沒人發現的情況下消失。
+require_tool() {
+    command -v "$1" > /dev/null 2>&1 && return
+    echo "缺少 $1，這一項檢查跑不了" >&2
+    exit 1
 }
 
 lint_shell() {
-    command -v shellcheck > /dev/null 2>&1 || { missing_tool shellcheck; return; }
+    require_tool shellcheck
     check_shellcheck_version
     # -x: 跟著 `source` 進 lib/, 被引用的函式與變數才不會被當成未定義。
     shellcheck -x scripts/*.sh scripts/lib/*.sh .github/scripts/*.sh .agents/skills/*/scripts/*.sh \
@@ -82,7 +72,7 @@ lint_shell() {
 # 必填項在範本裡是空的, 填個佔位值讓 `:?` 放行; `env -i` 隔開本機 .env 已經載入的變數,
 # 不然本機有值就把範本的缺漏蓋過去了。
 lint_compose() {
-    command -v docker > /dev/null 2>&1 || { missing_tool docker; return; }
+    require_tool docker
     local env_file mode
     env_file="$(mktemp)"
     sed 's/^\([A-Za-z_][A-Za-z0-9_]*\)=$/\1=placeholder/' .env.example > "${env_file}"
@@ -166,6 +156,9 @@ run_build() {
 # 2. `alembic check` 擋「改了 model 卻沒寫 migration」—— 測試資料庫是從 model 現建的,
 #    那種錯測試永遠抓不到, 只有部署之後第一次讀寫那個欄位才炸。
 # CI 的 api-integration job 跑的就是這一段 (見 .github/workflows/ci.yml)。
+#
+# 帶參數時只跑那幾個測試 (寫測試時確認紅燈), 不跑 alembic check: 改了 model 還沒寫 migration 時
+# 它一定失敗, 那不是這次要看的; CI 跑完整版本時照樣檢查。
 run_integration() {
     require_env COMPOSE_PROJECT_NAME
     local container="${COMPOSE_PROJECT_NAME}-test-postgres"
@@ -175,6 +168,12 @@ run_integration() {
 
     export PROJECT_NAME=test MODE=development POSTGRES_URL="${THROWAWAY_PG_URL}"
     export JWT_SECRET_KEY=test_secret_key_that_is_at_least_32_characters
+
+    if [ "$#" -gt 0 ]; then
+        step "integration：指定的測試"
+        (cd apps/api && REQUIRE_INTEGRATION=1 uv run pytest -q -m integration "$@")
+        return
+    fi
 
     step "integration：需要資料庫的後端測試"
     (cd apps/api && REQUIRE_INTEGRATION=1 uv run pytest tests/ -q -m integration)
@@ -267,21 +266,14 @@ run_contract() {
     echo "契約與前端型別是最新的"
 }
 
-# 全部通過時記下工作目錄的指紋: agent 收尾前的 Stop hook 用它判斷改過的程式有沒有跑過檢查
-# (.agents/hooks/require_check.py)。只跑其中一項不算; set -e 讓任何一步失敗就走不到這裡。
-record_check_pass() {
-    python3 .agents/hooks/check_stamp.py record || echo "⚠️  沒有記下這次的檢查結果（agent 收尾時會再要求跑一次）"
-}
-
-case "${1:-all}" in
-    all)         run_lint; run_contract; run_migrate; run_types; run_test; run_build; record_check_pass ;;
+case "${1:-}" in
     lint)        run_lint ;;
     types)       run_types ;;
     test)        run_test ;;
     api-test)    run_api_test ;;
     web-test)    run_web_test ;;
     build)       run_build ;;
-    integration) run_integration ;;
+    integration) shift; run_integration "$@" ;;
     e2e)         run_e2e ;;
     contract)    run_contract ;;
     migrate)     run_migrate ;;

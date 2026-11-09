@@ -19,7 +19,7 @@ PROTECTED_DIRS = (
     ".github/workflows/",
     ".github/scripts/",
 )
-# lint、型別、架構邊界、未使用匯出與覆蓋率門檻的設定, 以及 `make check` 的入口。
+# lint、型別、架構邊界、未使用匯出與覆蓋率門檻的設定, 以及檢查的入口 (scripts/check.sh)。
 PROTECTED_FILES = (
     "apps/api/pyproject.toml",
     "apps/web/package.json",

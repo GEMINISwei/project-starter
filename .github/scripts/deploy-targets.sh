@@ -12,7 +12,7 @@
 # select 時任何一組找不到 environment 就整個失敗、一套都不部署: 組名打錯不能變成「其他組照常
 # 部署, 結果是綠的」, 漏掉的那組要等到有人發現版本不對才知道。
 #
-# 要能在 macOS 內建的 bash 3.2 跑 (make check 的測試在本機執行), 所以不用 ${var,,}、mapfile
+# 要能在 macOS 內建的 bash 3.2 跑 (它的測試也會在本機執行), 所以不用 ${var,,}、mapfile
 # 與關聯陣列。
 set -euo pipefail
 

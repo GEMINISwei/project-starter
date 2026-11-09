@@ -16,7 +16,9 @@ name: CI
 # 沒被它等到的 job 紅了照樣能合併。
 #
 # changes 判斷模式 (.github/scripts/ci-mode.sh): PR 只改了 Markdown 時是 docs, 只跑 api-test 與 web-test
-# (文件的連結與格式檢查在裡面), 其餘 job 只在 full 跑。push main、workflow_call、手動執行一律 full。
+# (文件的連結與格式檢查在裡面), 其餘 job 只在 full 跑。push main 與 workflow_call 一律 full。
+#
+# 不能手動執行: main 上的 run 失敗用 rerun 重跑; main 的 commit 沒有 CI 結果時, 部署會自己跑一次。
 # 不用 workflow 層級的 paths-ignore: 整份被跳過時 required check 不會回報, PR 會一直等。
 #
 # 例外是 e2e 的 image: 先用 gha 快取建好再交給 make check e2e, 不讓它在沒有快取的 runner 上重建。
@@ -34,7 +36,6 @@ on:
   push:
     branches: [main]
   pull_request:
-  workflow_dispatch:
   workflow_call:
     inputs:
       ref:
@@ -109,7 +110,7 @@ jobs:
         run: cd apps/web && npm ci
       # runner 內建的 shellcheck 跟本機的版本不同, 同一份腳本會一邊綠一邊紅。版本取自
       # scripts/lib/shellcheck.sh (唯一來源), sha256 是 GitHub release 頁面上該檔案的 digest。
-      # 放在 PATH 最前面蓋過內建的那一版; make check 會再確認版本, 沒生效就失敗。
+      # 放在 PATH 最前面蓋過內建的那一版; make check lint 會再確認版本, 沒生效就失敗。
       - name: 安裝指定版本的 shellcheck
         env:
           SHELLCHECK_SHA256: 8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198

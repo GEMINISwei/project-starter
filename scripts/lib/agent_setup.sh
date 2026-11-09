@@ -25,7 +25,7 @@ require_python3() {
 }
 
 # Windows 沒開 core.symlinks 時, git 把 symlink 寫成內容是目標路徑的一般檔案, Claude 讀不到任何 skill。
-# make check 也會擋 (tests/test_agent_skills.py), 但等到那時已經裝完一輪相依。
+# CI 也會擋 (tests/test_agent_skills.py), 但等到那時已經裝完一輪相依。
 # 完全不存在時不擋: 不用 Claude 的專案可能刻意刪掉 .claude/, 不該因此永遠 init 不了。
 require_skills_symlink() {
     [ -e .claude/skills ] || [ -L .claude/skills ] || return 0
