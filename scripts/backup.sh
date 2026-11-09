@@ -2,7 +2,7 @@
 #
 # 備份資料庫與上傳檔案: make backup (備份期間對外服務會暫停)
 #
-#   make backup                          同一個時間點產出 <名稱>.dump 與 <名稱>.tar (沒有 uploads volume 時只有 .dump)
+#   make backup                          同一個時間點產出 <名稱>.dump 與 <名稱>.tar
 #   [內部] make backup allow-fresh       同上, 但全新主機 (還沒有資料 volume) 時略過 (部署用)
 #   [內部] make backup prune <組數>      只留最近幾組備份, 同名的 .dump 與 .tar 一起刪 (部署用)
 #
@@ -34,13 +34,6 @@ is_fresh_host() {
     ! grep -qx "${COMPOSE_PROJECT_NAME}_${MODE}_postgres_data" <<< "${volumes}"
 }
 
-# volume 名稱是 compose 檔裡的 `<專案>_<MODE>_uploads`。先存清單再比對, 理由同 is_fresh_host。
-has_uploads_volume() {
-    local volumes
-    volumes="$(docker volume ls -q)" || { echo "無法列出 docker volume" >&2; exit 1; }
-    grep -qx "${COMPOSE_PROJECT_NAME}_${MODE}_uploads" <<< "${volumes}"
-}
-
 # 碰運行中容器之前先確認, 否則 docker 的錯誤訊息看不出原因。
 require_container() {
     if ! container_running "$1"; then
@@ -60,13 +53,8 @@ backup_database() {
 
 # 從 api 容器裡打包, 不另起容器: 主機上不必多拉一個 image。所以停服務只停 nginx, api 要留著。
 # 不壓縮: 圖片、影片本身已經壓過, 再 gzip 省不到空間只花 CPU。
-# volume 不存在時 (還沒部署過有 uploads 的版本) 沒有東西可備份, 略過。
 backup_uploads() {
     local dest="$1.tar"
-    if ! has_uploads_volume; then
-        echo "沒有 uploads volume，略過上傳檔案的備份"
-        return 0
-    fi
     require_container "${COMPOSE_PROJECT_NAME}-api"
     docker exec "${COMPOSE_PROJECT_NAME}-api" tar -C "${UPLOADS_DIR}" -cf - . > "${dest}.partial"
     mv "${dest}.partial" "${dest}"
