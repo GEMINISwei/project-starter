@@ -69,17 +69,17 @@ def test_shellcheck_version_check_fails_in_ci_on_other_version(tmp_path: Path) -
     assert pinned_version() in result.stderr
 
 
-def _check_job_steps() -> list[str]:
+def _lint_job_steps() -> list[str]:
     workflow = CI_WORKFLOW.read_text(encoding="utf-8")
-    match = re.search(r"^  check:\n(.*?)(?=^  \S|\Z)", workflow, flags=re.MULTILINE | re.DOTALL)
-    assert match, "ci.yml 找不到 check job"
+    match = re.search(r"^  lint:\n(.*?)(?=^  \S|\Z)", workflow, flags=re.MULTILINE | re.DOTALL)
+    assert match, "ci.yml 找不到 lint job"
     return re.split(r"^      - ", match.group(1), flags=re.MULTILINE)[1:]
 
 
-def test_ci_installs_pinned_shellcheck_before_make_check() -> None:
-    steps = _check_job_steps()
+def test_ci_installs_pinned_shellcheck_before_lint() -> None:
+    steps = _lint_job_steps()
     installs = [i for i, step in enumerate(steps) if "koalaman/shellcheck/releases" in step]
-    assert len(installs) == 1, "check job 要有一個安裝指定版本 shellcheck 的步驟"
+    assert len(installs) == 1, "lint job 要有一個安裝指定版本 shellcheck 的步驟"
     install = steps[installs[0]]
     # 版本從 lib 讀, 不在 workflow 另抄一份; 下載的檔案核對 sha256;
     # 放在 PATH 最前面, 蓋過 runner 內建的那一版。
@@ -87,6 +87,6 @@ def test_ci_installs_pinned_shellcheck_before_make_check() -> None:
     assert re.search(r"sha256sum (-c|--check)", install)
     assert "GITHUB_PATH" in install
     make_check = next(
-        i for i, step in enumerate(steps) if re.match(r"run: make check$", step, re.MULTILINE)
+        i for i, step in enumerate(steps) if re.match(r"run: make check lint$", step, re.MULTILINE)
     )
     assert installs[0] < make_check
