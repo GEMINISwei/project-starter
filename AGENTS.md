@@ -7,9 +7,9 @@
 [`features/`](docs/features/README.md)（帳號、角色、Session、限流等內建功能）、
 [`extending/`](docs/extending/README.md)（新增模組／權限／migration／i18n）、
 [`operations.md`](docs/operations.md)（部署、備份、主機設定）、
-[`starter-decisions/`](docs/starter-decisions/README.md)（模板刻意不採用主流做法的設計決策，不改）、
+[`starter/`](docs/starter/README.md)（模板刻意不採用主流做法的設計決策，不改）、
 [`decisions/`](docs/decisions/README.md)（這個專案自己的決策，含推翻了模板的哪幾份）。
-提議改掉某個做法之前，先讀 `starter-decisions/` 的那一份，再看 `decisions/` 有沒有推翻它。
+提議改掉某個做法之前，先讀 `starter/` 的那一份，再看 `decisions/` 有沒有推翻它。
 
 ## 硬規則（CI 會擋）
 
@@ -54,7 +54,7 @@
 
 ## 高風險先問
 
-檢查擋不完所有寫法，hook 只擋常見的那幾種（[starter-decisions/0011](docs/starter-decisions/0011-agent-guardrails-by-judgment.md)）。
+檢查擋不完所有寫法，hook 只擋常見的那幾種（[starter/0011](docs/starter/0011-agent-guardrails-by-judgment.md)）。
 下列情況先停下來說明要做什麼、為什麼，等使用者同意；沒列到但你判斷同樣危險的，也照辦：
 
 - 不可逆或影響 repo 以外的動作：部署、發布、合併、刪資料或分支、動主機、改別的 repo、送出外部服務

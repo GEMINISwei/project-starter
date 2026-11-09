@@ -1,6 +1,6 @@
 # 設計決策（ADR）
 
-這個專案自己的設計決定。模板帶來的決定在 [`starter-decisions/`](../starter-decisions/README.md)，那一區不改；
+這個專案自己的設計決定。模板帶來的決定在 [`starter/`](../starter/README.md)，那一區不改；
 這裡記專案在那之上做的決定，包括推翻模板的哪一份。
 
 每份記錄一個「看起來可以換成更常見的做法、但刻意不換」的決定：當時的情境、選了什麼、代價是什麼。
@@ -14,8 +14,8 @@
 - 寫好不改內容，只改狀態與錯字。決定被推翻時另寫一份，三處一起改（測試會擋）：
   新的寫「取代：`[NNNN](NNNN-xxx.md)`」；舊的狀態改成「被 `[NNNN](NNNN-xxx.md)` 取代（YYYY-MM-DD）」；
   索引狀態欄同步（去掉日期）。部分推翻也整份取代，並更新指向舊 ADR 的文件連結。
-- **推翻模板的決定**：寫「取代：`[starter-decisions/NNNN](../starter-decisions/NNNN-xxx.md)`」，
-  `starter-decisions/` 那一份不動，改在下面的〈推翻的模板決定〉加一列（測試會擋），並更新指向它的文件連結。
+- **推翻模板的決定**：寫「取代：`[starter/NNNN](../starter/NNNN-xxx.md)`」，
+  `starter/` 那一份不動，改在下面的〈推翻的模板決定〉加一列（測試會擋），並更新指向它的文件連結。
 - 例外是討論後**維持原決定**的紀錄（例如 `project-review` skill 的反對結論），讓下次審視知道討論過什麼。
   以最近的 `v*` tag 為界，和 [migration](../extending/migrations.md#發版之前可以整理) 一樣：
   - **還沒有任何 tag**：直接改寫那份的「背景」或「後果」，把結論併進去，不留討論紀錄。
@@ -30,7 +30,7 @@
   - 理由：<兩三句>
   ```
 
-  討論的是模板的決定時，`starter-decisions/` 那一份一樣不動，在這裡另寫一份「維持 `starter-decisions/NNNN`」的 ADR。
+  討論的是模板的決定時，`starter/` 那一份一樣不動，在這裡另寫一份「維持 `starter/NNNN`」的 ADR。
 
 ## 索引
 

@@ -10,7 +10,7 @@
 ## 先讀
 
 - `AGENTS.md`
-- `docs/starter-decisions/README.md`（模板的決定）與 `docs/decisions/README.md`（專案的決定，含〈推翻的模板決定〉）的索引，
+- `docs/starter/README.md`（模板的決定）與 `docs/decisions/README.md`（專案的決定，含〈推翻的模板決定〉）的索引，
   需要時讀單份 ADR，包括它的「後續討論」。
 
 ## 每一項

@@ -5,7 +5,7 @@ AI agent) 只會找不到內容。錨點用 GitHub 的規則從標題產生, 改
 `docs/….md` 的路徑, 搬檔時一樣沒有任何東西會報錯; 段落名稱不檢查, 註解不必跟著寫錨點。
 
 `docs/extending/` 會隨擴充項目增加, AI 靠索引那一行判斷要不要讀哪一份, 沒列進索引的文件等於不存在。
-`docs/features/`、`docs/decisions/` 與 `docs/starter-decisions/` 的同一條規則
+`docs/features/`、`docs/decisions/` 與 `docs/starter/` 的同一條規則
 跟它們自己的規則放在一起。
 
 住在 api 底下的理由同 `test_nginx_templates.py`: `make check` 一定會跑到這裡。

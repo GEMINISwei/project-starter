@@ -214,7 +214,7 @@
 }
 
 /* 觸控裝置上輸入框至少 16px: iOS Safari 會在字級小於 16px 的輸入框取得焦點時放大畫面。
-   viewport 已經鎖住縮放, 這裡是保底: Safari 分頁會忽略 `user-scalable` (見 starter-decisions/0012)。 */
+   viewport 已經鎖住縮放, 這裡是保底: Safari 分頁會忽略 `user-scalable` (見 starter/0012)。 */
 @media (pointer: coarse) {
   .input,
   .inputLg,

@@ -2,7 +2,7 @@
 
 Hook 在 agent 呼叫工具前後執行，可以擋下這次呼叫。這裡只擋**確認點**：不可逆、碰到 `main` 或正式環境的動作，
 而且只認常見寫法。其餘交給 agent 依 `AGENTS.md`〈高風險先問〉判斷，換寫法擋不住是已知的取捨，
-由 CI 與審查補（[starter-decisions/0011](../starter-decisions/0011-agent-guardrails-by-judgment.md)）。
+由 CI 與審查補（[starter/0011](../starter/0011-agent-guardrails-by-judgment.md)）。
 
 ## 結構
 
@@ -43,7 +43,7 @@ Hook 在 agent 呼叫工具前後執行，可以擋下這次呼叫。這裡只�
 - **測試檔**：`apps/*/tests/**`、`e2e/tests/**`，輔助檔與資料也算（`test_lock.py`）。
 - **實作開始了**：分支相對 `origin/main`（含未 commit 與未追蹤）改了 `apps/`、`e2e/`、`.agents/hooks/`、
   `.github/scripts/`、`scripts/` 底下的非測試、非 Markdown 檔案。
-- 只攔改檔工具。用 shell 改測試檔不攔，由審查時看 diff 裡的測試檔補（[starter-decisions/0011](../starter-decisions/0011-agent-guardrails-by-judgment.md)）。
+- 只攔改檔工具。用 shell 改測試檔不攔，由審查時看 diff 裡的測試檔補（[starter/0011](../starter/0011-agent-guardrails-by-judgment.md)）。
 
 ## 防線檔案
 
@@ -80,7 +80,7 @@ Hook 在 agent 呼叫工具前後執行，可以擋下這次呼叫。這裡只�
 
 發布會直接部署，只能用固定寫法 `.agents/skills/release/scripts/publish.sh`，兩家都一定跳確認
 （Claude 的 `permissions.ask` 與 hook、Codex 的 `.codex/rules/publish-release.rules`）。GitHub 端刻意不設
-environment reviewer，這裡是部署前唯一的確認（[starter-decisions/0010](../starter-decisions/0010-no-environment-reviewer-for-deploys.md)）。
+environment reviewer，這裡是部署前唯一的確認（[starter/0010](../starter/0010-no-environment-reviewer-for-deploys.md)）。
 
 ## 新增一個 hook
 

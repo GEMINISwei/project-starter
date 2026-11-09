@@ -6,7 +6,7 @@
 
 <!-- 狀態可以是：提議中、採用、被 `[NNNN](NNNN-xxx.md)` 取代。索引的狀態欄寫一樣的內容，去掉日期。
      「取代：」只在推翻既有決定時保留，寫成真的連結；沒有就整行刪掉。一份大約一個畫面。
-     推翻的是模板的決定時寫 `[starter-decisions/NNNN](../starter-decisions/NNNN-xxx.md)`，
+     推翻的是模板的決定時寫 `[starter/NNNN](../starter/NNNN-xxx.md)`，
      並列進 README.md〈推翻的模板決定〉。
      之後討論過、維持原決定時怎麼記（有沒有 `v*` tag 做法不同），見 README.md〈寫法〉。 -->
 
