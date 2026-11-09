@@ -20,7 +20,7 @@ app（組裝層） → modules（垂直功能） → shared（平台能力）
   累積起來模組就糾纏在一起。所以依賴規則都寫成 lint 與架構測試，違反就紅燈（〈[強制依賴規則](#強制依賴規則)〉）。
 - **跨模組只走 public entry、只以 ID 參照**：模組內部怎麼改，只要 public 不變就不影響別人；審查時看 public 的 diff
   就知道有沒有新的耦合。資料庫層刻意保留外鍵與共用交易
-  （[starter-decisions/0013](starter-decisions/0013-cross-module-references-by-id.md)）。
+  （[starter/0013](starter/0013-cross-module-references-by-id.md)）。
 - **組裝層沒有特權**：它只認 manifest，不 import 模組的實作，模組才可替換。
 - **只有兩份清單集中定義**：`Permission` 與 `Language` 要進 OpenAPI 成為字串聯集，前端才有編譯期保護
   （〈[兩份刻意中央化的清單](#兩份刻意中央化的清單)〉）。
@@ -222,13 +222,13 @@ modules/products/
 `app/permissions.py` 的 `Permission` 與 `shared/http/errors.py` 的 `Language` 是**僅有的兩處**
 「新增功能要改共用檔案」的地方。它們要進 OpenAPI 成為字串聯集，前端才拿得到編譯期保護
 （權限打錯字是 `tsc` 失敗，而不是執行期靜默失效），所以不要改成由模組動態貢獻
-（[starter-decisions/0003](starter-decisions/0003-centralized-permission-and-language.md)）。
+（[starter/0003](starter/0003-centralized-permission-and-language.md)）。
 
 ## 模組之間的資料關聯
 
 規則在這裡，**怎麼做**（範例、`ondelete` 的選法、前端怎麼用對方的東西、跨模組排序與彙總）在
 [`extending/cross-module.md`](extending/cross-module.md)。設計取捨（為什麼保留外鍵、允許共用交易）見
-[starter-decisions/0013](starter-decisions/0013-cross-module-references-by-id.md)。
+[starter/0013](starter/0013-cross-module-references-by-id.md)。
 
 ### 先決定怎麼切模組
 

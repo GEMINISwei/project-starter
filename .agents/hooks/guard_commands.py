@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""指令守衛: Claude 與 Codex 的 PreToolUse hook, 只擋確認點 (starter-decisions/0011)。
+"""指令守衛: Claude 與 Codex 的 PreToolUse hook, 只擋確認點 (starter/0011)。
 
 用法 (由 .claude/settings.json 與 .codex/hooks.json 呼叫): guard_commands.py <claude|codex>
 

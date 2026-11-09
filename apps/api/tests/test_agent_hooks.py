@@ -169,7 +169,7 @@ ALLOWED = [
     "gh api repos/o/r/releases/latest --jq .tag_name",
     "gh api -X GET repos/o/r/releases -f per_page=5",
     "gh api graphql -f query='query { viewer { login } }'",
-    # 交給 AGENTS.md 的規則, hook 不擋 (starter-decisions/0011)。
+    # 交給 AGENTS.md 的規則, hook 不擋 (starter/0011)。
     "npm install --force",
     "cd apps/web && npm i foo --legacy-peer-deps",
     "docker compose up -d",
@@ -287,7 +287,7 @@ def test_hook_scripts_run_on_oldest_supported_python(script: Path) -> None:
 
 
 # 會改 GitHub 上狀態的 API 與重跑 run: 可能合併、發布或重新部署, 一律先確認。
-# 不逐一判斷端點 (starter-decisions/0011): Claude 跳確認; Codex 不支援 ask, 擋下請使用者自己執行。
+# 不逐一判斷端點 (starter/0011): Claude 跳確認; Codex 不支援 ask, 擋下請使用者自己執行。
 CONFIRMED = {"claude": "ask", "codex": "deny"}
 
 GH_API_WRITES = [

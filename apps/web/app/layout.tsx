@@ -11,7 +11,7 @@ import "./theme.css"
 import "@/shared/ui/styles/base.css"
 import "@/shared/ui/styles/message-page.css"
 
-// 手機上畫面不能縮放, 手感才像原生 App; 代價與擋不到的情況見 docs/starter-decisions/0012-lock-mobile-zoom.md。
+// 手機上畫面不能縮放, 手感才像原生 App; 代價與擋不到的情況見 docs/starter/0012-lock-mobile-zoom.md。
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,

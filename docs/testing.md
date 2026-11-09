@@ -19,7 +19,7 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
   所以由架構測試擋（〈[測試放哪裡](#測試放哪裡)〉）。
 - **只寫守得住行為的測試**：重寫常數、驗框架行為、寫死專案目前內容的測試只增加維護成本，帶到新專案就是技術債。
 - **每個 PR 都跑正式環境的 E2E**：導向、cookie、Server Action 這類行為只有整套跑起來才看得到，壞了也不會報錯；
-  開發中改用常駐的 dev 環境只跑相關的 spec（[starter-decisions/0009](starter-decisions/0009-e2e-strategy.md)）。
+  開發中改用常駐的 dev 環境只跑相關的 spec（[starter/0009](starter/0009-e2e-strategy.md)）。
 - **規則能寫成檢查就寫成檢查**：架構與流程的規則多半由測試守住，文件只留檢查不了的（〈[架構本身也有測試](#架構本身也有測試)〉）。
 
 ## 測試放哪裡
@@ -61,10 +61,10 @@ Playwright 的 `--shard`），每份各起一套環境；每份在 Summary 記�
 份數這樣調：每份約 75 秒的固定成本（裝瀏覽器、建 image、起環境）一定要付，總時間約是「固定成本 ＋ 測試時間 ÷ 份數」，
 所以一份的 Playwright 秒數接近固定成本時在 matrix 加一份。份數再多也降不到固定成本以下，那時改壓固定成本
 （快取瀏覽器、image 只建一次再傳給各份），不加份數（為什麼分份而不加 worker 見
-[starter-decisions/0009](starter-decisions/0009-e2e-strategy.md)）。失敗時到 Artifacts 下載 `playwright-report-<份號>`，
+[starter/0009](starter/0009-e2e-strategy.md)）。失敗時到 Artifacts 下載 `playwright-report-<份號>`，
 trace 用 `npx playwright show-trace <zip>` 打開。
 
-**開發中用 `make e2e`，不必每次跑 `make check e2e`**（[理由](starter-decisions/0009-e2e-strategy.md)）：
+**開發中用 `make e2e`，不必每次跑 `make check e2e`**（[理由](starter/0009-e2e-strategy.md)）：
 
 | 指令 | 做什麼 |
 |---|---|
@@ -145,7 +145,7 @@ trace 用 `npx playwright show-trace <zip>` 打開。
 | api 開機時不寫資料，初始資料由 migrate 寫入 | `apps/api/tests/shared/test_platform.py`、`apps/api/tests/scripts/test_db.py` |
 | `shared/` 用到的 CSS 變數都定義在 shared 裡 | `apps/web/tests/shared/ui/tokens.test.ts` |
 | `APP_VERSION` 與 CHANGELOG 的版號一致 | `apps/api/tests/test_version.py` |
-| 文件的相對連結與錨點有效、原始碼寫的 `docs/….md` 路徑存在、`extending/`、`features/` 與 ADR 都列在索引、`features/` 的開頭與結尾段落、ADR 的取代關係兩邊一致、`starter-decisions/` 的段落固定且只寫現況、推翻的模板決定列在索引 | `apps/api/tests/test_docs.py`、`test_doc_features.py`、`test_doc_decisions.py`、`test_doc_decision_supersession.py`、`test_doc_starter_decisions.py` |
+| 文件的相對連結與錨點有效、原始碼寫的 `docs/….md` 路徑存在、`extending/`、`features/` 與 ADR 都列在索引、`features/` 的開頭與結尾段落、ADR 的取代關係兩邊一致、`starter/` 的段落固定且只寫現況、推翻的模板決定列在索引 | `apps/api/tests/test_docs.py`、`test_doc_features.py`、`test_doc_decisions.py`、`test_doc_decision_supersession.py`、`test_doc_starter.py` |
 | skills 只有 `.agents/skills/` 一份、`.claude/skills` 是指向它的 symlink、內文不用某一家專屬的工具、只能手動呼叫的兩家設定一致 | `apps/api/tests/test_agent_skills.py` |
 | hook 擋下確認點、不誤擋一般指令、`.claude/settings.json` 與 `.codex/hooks.json` 呼叫同樣的腳本 | `apps/api/tests/test_agent_hooks.py` |
 | 實作開始後用改檔工具改測試檔要使用者同意、放行只對列出的檔案且有新 commit 就失效、不能自己寫放行 | `apps/api/tests/test_agent_test_guard.py` |

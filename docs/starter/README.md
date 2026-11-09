@@ -10,10 +10,10 @@
 這一區跟著模板走，專案裡**不改、不新增**，才能直接跟模板比對，看出模板的決定有沒有變：
 
 ```bash
-git diff --no-index docs/starter-decisions <模板的 checkout>/docs/starter-decisions
+git diff --no-index docs/starter <模板的 checkout>/docs/starter
 ```
 
-專案要推翻其中一份時，到 [`decisions/`](../decisions/README.md) 另寫一份，寫「取代：`starter-decisions/NNNN`」，
+專案要推翻其中一份時，到 [`decisions/`](../decisions/README.md) 另寫一份，寫「取代：`starter/NNNN`」，
 並列進那邊的〈推翻的模板決定〉。讀這一區之前，先看那張表有沒有列到你要讀的那一份。
 
 在模板 repo 本身，決定變了就直接改寫那一份：這一區永遠只寫現況，不寫狀態、日期與演進過程（測試會擋）。

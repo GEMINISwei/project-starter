@@ -11,7 +11,7 @@
 ## 先讀
 
 - `AGENTS.md`
-- `docs/starter-decisions/README.md`（模板的決定）與 `docs/decisions/README.md`（專案的決定）的索引；
+- `docs/starter/README.md`（模板的決定）與 `docs/decisions/README.md`（專案的決定）的索引；
   項目碰到哪一份 ADR，就讀那一份的決定、理由與「後續討論」。
 
 ## 規則
