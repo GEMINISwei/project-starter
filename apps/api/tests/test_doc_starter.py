@@ -1,4 +1,4 @@
-"""`docs/starter-decisions/`: 模板的設計決定。
+"""`docs/starter/`: 模板的設計決定。
 
 子專案不改這一區, 要推翻其中一份時在 `docs/decisions/` 另寫一份並連回來
 (見 `test_doc_decision_supersession.py`)。這一區因此只寫現在的決定與理由: 狀態、取代、
@@ -17,7 +17,7 @@ import pytest
 from tests.test_doc_decisions import FILENAME
 from tests.test_docs import REPO_ROOT, links, split
 
-STARTER_DIR = REPO_ROOT / "docs" / "starter-decisions"
+STARTER_DIR = REPO_ROOT / "docs" / "starter"
 INDEX = STARTER_DIR / "README.md"
 STARTER_DECISIONS = sorted(path for path in STARTER_DIR.glob("*.md") if FILENAME.match(path.name))
 SECTIONS = ("## 決定", "## 為什麼", "## 代價", "## 什麼時候重新檢討")
@@ -40,14 +40,14 @@ def test_starter_decision_filenames_follow_the_numbering_format() -> None:
 
 def test_starter_decision_numbers_are_sequential() -> None:
     numbers = [int(path.name[:4]) for path in STARTER_DECISIONS]
-    assert numbers, "docs/starter-decisions/ 沒有任何一份決定"
+    assert numbers, "docs/starter/ 沒有任何一份決定"
     assert numbers == list(range(1, len(numbers) + 1)), f"編號要從 0001 連續: {numbers}"
 
 
 def test_starter_decisions_are_listed_in_index() -> None:
     listed = {split(INDEX, target)[0] for target in links(INDEX)}
     unlisted = [path.name for path in STARTER_DECISIONS if path not in listed]
-    assert not unlisted, f"docs/starter-decisions/README.md 沒有列到: {unlisted}"
+    assert not unlisted, f"docs/starter/README.md 沒有列到: {unlisted}"
 
 
 @pytest.mark.parametrize("decision", STARTER_DECISIONS, ids=lambda path: path.name)
