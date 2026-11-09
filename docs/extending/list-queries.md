@@ -8,8 +8,9 @@
 | `get_all()` | `SimpleListResponse[T]` | 天然有限的清單，例如下拉選單（範例：`GET /roles/options`） |
 
 - 篩選條件放 `where`，它會同時套用在資料與 `total_count` 上。
-- 補關聯資料覆寫 model 的 `detail_loaders()`（回傳 `selectinload(...)`）與 `to_detail()`，
-  範例見 `modules/users/model.py` 的 `find_list()`。
+- 補**模組內**的關聯資料覆寫 model 的 `detail_loaders()`（回傳 `selectinload(...)`）與 `to_detail()`。
+  補**別的模組**的資料覆寫 `to_details()`，一次呼叫對方 public 的批次函式補完整頁，範例見
+  `modules/users/model.py`（[規則](../architecture.md#讀對方的資料)）。
 - 多個寫入要一起成功或失敗時，用 `shared/db/transaction.py` 的 `transaction()` 包住，並把
   `session` 傳給各 model 方法。交易**防不了**兩個請求各自新增重複資料，那要靠唯一約束。
   在請求裡它是一個 SAVEPOINT：區塊失敗只撤銷區塊內的寫入，成功也**不會提前 commit**，

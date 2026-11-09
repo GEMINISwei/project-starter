@@ -77,6 +77,8 @@ app（組裝層） → modules（垂直功能） → shared（平台能力）
    `tokens.css` 由 `app/theme.css` 以 `@import` 帶入，文件根只 import `theme.css`，順序才有保證
    （`tests/app/theme.test.ts` 擋）。
 9. 後端不得有 `api`／`core`／`services`／`repositories` 這類**水平分層**的頂層套件。
+10. 後端 `public.py` 只轉出能力（函式與它的回傳型別），**不轉出 ORM 類別或 `Table`**
+    （見〈[模組之間的資料關聯](#模組之間的資料關聯)〉）。
 
 違反就紅燈（CI 的 `lint`，本機可跑 `make check lint`），各條由現成工具執行，都涵蓋 re-export、動態 `import()` 與相對 import：
 
@@ -87,6 +89,7 @@ app（組裝層） → modules（垂直功能） → shared（平台能力）
 | 6 client 不引 server | — | Next.js build（`.server` 檔一律 `import "server-only"`） |
 | 7 模組內部相對路徑 | — | ESLint |
 | 9 不准水平分層 | `tests/test_architecture.py` | — |
+| 10 public 不轉出資料表 | `tests/test_architecture.py` | — |
 
 ## 程式放在哪
 
@@ -177,7 +180,7 @@ manifest 的 `group: "user" | "admin"` 決定區域，頁面檔放在對應的�
 ```text
 modules/products/
 ├── manifest.py          # 必備。routers、tables、permissions
-├── public.py            # 其他 module 唯一可引用的介面
+├── public.py            # 其他 module 唯一可引用的介面：函式與回傳型別，不放資料表
 ├── router.py
 ├── schema.py
 ├── service.py
@@ -206,6 +209,63 @@ modules/products/
 「新增功能要改共用檔案」的地方。它們要進 OpenAPI 成為字串聯集，前端才拿得到編譯期保護
 （權限打錯字是 `tsc` 失敗，而不是執行期靜默失效），所以不要改成由模組動態貢獻
 （[ADR 0003](decisions/0003-centralized-permission-and-language.md)）。
+
+## 模組之間的資料關聯
+
+跨模組的設計取捨（為什麼保留外鍵、允許共用交易）見 [ADR 0013](decisions/0013-cross-module-references-by-id.md)。
+
+### 先決定怎麼切模組
+
+**依關係緊密程度切，不是看有沒有外鍵**：幾乎所有業務資料都參照 users，有外鍵就合併的話最後只剩一個模組。
+
+| 這樣的關係 → 放同一個模組 | 這樣的關係 → 分開，以 ID 參照 |
+|---|---|
+| 經常 JOIN、要用對方的欄位排序或篩選 | 只需要顯示對方的名稱 |
+| 通常一起改 | 各自演進 |
+| 有共同的規則要同時成立（訂單與明細的金額） | 只要求「指到的東西存在」 |
+| 一方單獨存在沒有意義 | 各自都有獨立的意義 |
+
+分開之後如果對方的 public 多到像是把內部原封不動轉出去，就是邊界畫錯了，應該合併。模組內部可以自由使用
+ORM relationship、JOIN 與 `detail_loaders()`。
+
+### 資料表與外鍵
+
+| 關係 | 做法 | 放在哪個模組 |
+|---|---|---|
+| 多對一（訂單屬於使用者） | 外鍵欄位 `user_id` | 參照的一方 |
+| 多對多（使用者的角色） | 關聯表 | 這個關係有業務意義的一方（`user_roles` 在 users） |
+| 一對一擴充（替使用者加帳務資料） | 自己的表，`user_id` 加唯一約束 | 擴充的一方，**不在對方的表加欄位** |
+| 歷史、稽核紀錄 | 只存 ID 與當時的快照，**不加外鍵** | 紀錄的一方，原始資料刪掉後紀錄仍要留著 |
+
+- 外鍵用字串宣告（`ForeignKey("roles.id")`），不 import 對方的資料表。依賴方向跟外鍵方向一致，被參照的模組不知道誰在參照它。
+- `ondelete` 由持有外鍵的一方決定：關聯表與擴充表 `CASCADE`；業務資料預設 `RESTRICT`；選填的關聯 `SET NULL`。
+
+### 讀對方的資料
+
+- 只呼叫對方 `public.py` 的函式，拿到的是 `RoleDetail` 這類回傳型別，不是資料表。
+- 一定要有**批次**版本（`find_role_details(ids)`），列表才不會每列查一次。補一整批資料時覆寫
+  `BaseTable.to_details()`，`find_detail_*`、`get_all`、`get_page` 都經過它（例：`UserTable` 補角色）。
+- 跨模組的函式不收 `session`，用目前的 session（`transaction()` 也會設定它），所以自然與呼叫端在同一個交易裡。
+- 屬於對方的規則放在對方的 public，不在呼叫端各寫一份（例：停用的角色不給權限是 roles 的 `expand_permissions`）。
+
+代價是比 JOIN 多一次查詢：身分來源每個請求固定三次（使用者、`user_roles`、roles），但不隨筆數增加
+（`tests/modules/users/test_model.py` 鎖住）。
+
+### 反方向的需求
+
+被參照的一方需要知道誰在參照自己時（刪角色前檢查還有沒有人用、停用使用者時連動取消訂單），不可反過來 import：
+
+1. 先交給資料庫：`RESTRICT` 讓刪除失敗。
+2. 需要明確的訊息或業務上的連動時，由持有外鍵的模組透過 manifest 提供，組裝層接上（同 `current_user_resolver`）。
+   通用的 hook／事件機制**還沒有實作**，第一個真正需要的功能出現時再設計。
+
+### 報表與跨模組的排序
+
+| 需求 | 做法 |
+|---|---|
+| 資料量小、只是拼起來 | 報表模組呼叫各模組的 public，在 Python 裡組 |
+| 加總、分組，只牽涉一個模組 | 由擁有資料的模組在 public 提供統計函式，計算在資料庫裡做 |
+| 一定要跨模組 JOIN（用對方欄位排序後分頁、大量報表） | 在自己的表存去正規化的副本；或報表模組擁有**唯讀的資料庫 view**，在它的 public 與 ADR 寫明是例外 |
 
 ## 前後端契約
 
