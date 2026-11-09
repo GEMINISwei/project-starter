@@ -155,7 +155,7 @@ manifest 的 `group: "user" | "admin"` 決定區域，頁面檔放在對應的�
 | `error`／`global-error`／`not-found`／`loading` | 用 `shared/ui` 的 `MessagePage`／`RouteLoading` 填文案。`global-error` 取代整個 root layout，要自己再載入 layout 的那組樣式表 |
 | `route.ts` | 不依賴模組、session 或後端的常數回應（目前只有 `healthz`） |
 
-**`<main>` 由外框提供**：`(protected)` 兩區由外殼（`config/shell/AreaLayout.tsx`）提供，頁面與模組不再渲染
+**`<main>` 由外框提供**：`(protected)` 兩區由外殼（`config/shell/AreaLayout.tsx`）提供，頁面與模組不自己渲染
 （`tests/architecture.test.ts` 擋）；公開頁與整頁的 `MessagePage` 沒有外殼，自己提供。
 
 **Next 只讀 route 檔自己的 export，模組裡的不會跟過來**，Next 本身漏掉不會報錯。要逐一接上的：

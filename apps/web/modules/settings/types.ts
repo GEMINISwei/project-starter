@@ -1,5 +1,5 @@
 // 設定頁的表單型別收在這裡 (同 modules/auth/types.ts: 模組的公開形狀由 public.server.ts
-// 決定, 內部不再分層)。
+// 決定, 內部不分層)。
 
 export type PasswordFormValues = {
   current_password: string

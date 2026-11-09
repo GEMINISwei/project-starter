@@ -40,7 +40,7 @@ nginx 模板（`infra/nginx/`）有變時 `make start` 才重建 nginx（compose
 `make start`。nginx 模板改了也用 `make start`：restart 雖然會重新展開模板，但**不先跑 `nginx -t`**，寫錯時整個站就停了。
 
 `make services` 列出這個專案的 volume（依 compose 專案標籤），名稱不是 `<專案>_<MODE>_` 開頭的標 `← Not Matched`
-（另一種模式或舊命名留下的，目前用不到也不會自己消失）。只標註不刪，確定不要再 `docker volume rm`。容量看
+（例如另一種模式留下的，目前用不到也不會自己消失）。只標註不刪，確定不要再 `docker volume rm`。容量看
 `make services volumes`（要掃整台主機，所以不放在 `make services`）。
 
 同一台主機要跑多套，就各用一個目錄，`.env` 的 `COMPOSE_PROJECT_NAME` 與 `SYSTEM_PORT` 不重複
@@ -205,20 +205,6 @@ GitHub 同一個排隊群組最多「一個在跑、一個在等」，再排進�
 
 第一次部署完成後，在主機上用 `make db superuser` 建立超級管理者（見〈[建立超級管理者](#建立超級管理者)〉）。
 這是系統初始化的一環，部署流程刻意不代建。
-
-主機以前手動 `make start` 建過 image 的話，那些 image 與建置快取 CD 用不到，
-部署成功後可以清掉（`<專案名>` 是 `.env` 的 `COMPOSE_PROJECT_NAME`）：
-
-```bash
-docker image rm <專案名>-api:latest <專案名>-web:latest
-```
-
-```bash
-docker builder prune
-```
-
-從只標 `latest` 的版本升上來時，主機上舊的 `ghcr.io/<帳號>/<repo>-api:latest` 與 `-web:latest`
-還帶著標籤，不會被自動清掉；第一次部署成功後手動 `docker image rm` 掉即可。
 
 主機拉 image 用那次 job 的 `GITHUB_TOKEN`（job 結束就失效，主機不存長期憑證），登入資訊寫在每次部署的暫存
 `DOCKER_CONFIG`，結束就刪，**不碰部署帳號的 `~/.docker`**：同帳號多套系統不會互相登出。
@@ -480,7 +466,7 @@ api、web 不停（上傳檔案從 api 容器打包）。
 
 **資料庫**用 `pg_dump`，清單只列出與這個目錄版本一致的備份，新到舊，例如 `1) v0.0.2 2026-10-17 08:35:53`。
 **還原只接受目前版本的備份**：別版的資料表結構可能跟目前的程式對不上，要還原別版的備份就先部署回那一版。
-檔名沒有版號的舊備份不會列出，真的要用時自己改名成上面的格式。
+檔名不符合這個格式的備份不會列出，要用時先改名成上面的格式。
 還原會**取代備份裡有的資料表**（`pg_restore --clean`）；備份之後才新建的表不會被刪掉。
 
 **上傳檔案**是 uploads volume（api 的 `/app/uploads`）整包打成 `.tar`，不壓縮（圖片、影片本身已經壓過）。
