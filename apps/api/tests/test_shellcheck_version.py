@@ -53,7 +53,7 @@ def test_shellcheck_version_check_passes_on_pinned_version(tmp_path: Path) -> No
 
 
 def test_shellcheck_version_check_fails_on_other_version(tmp_path: Path) -> None:
-    # CI 環境變數有沒有設都一樣: 本機不再只提醒。
+    # CI 環境變數有沒有設都一樣: 本機也是失敗, 不只是提醒。
     result = check_version(tmp_path, "0.1.0")
     assert result.returncode != 0
     assert "0.1.0" in result.stderr

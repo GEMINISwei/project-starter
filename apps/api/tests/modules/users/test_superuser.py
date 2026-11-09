@@ -52,7 +52,7 @@ def test_create_super_admin_is_not_exposed_over_http():
 
 
 def test_signup_routes_are_not_registered():
-    """以註冊代碼建立第一個超管的網頁路徑已經移除, 不能被重新接回來。
+    """網頁不開註冊: 超管只能用指令建立, 註冊與首次設定的路徑都不能出現。
 
     比對路徑而不是打一次請求: `GET /users/bootstrap-status` 會落進 `/users/{user_id}`
     而回 401, 看起來像「有擋住」, 其實什麼都沒驗證到。

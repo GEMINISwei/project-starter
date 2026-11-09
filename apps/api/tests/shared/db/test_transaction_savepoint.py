@@ -2,7 +2,7 @@
 
 `test_transaction.py` 用假 session 驗呼叫順序; 這裡驗的是那個順序在資料庫裡的**結果** ——
 區塊失敗只撤銷區塊內的寫入, 區塊成功也不會提前 commit, 請求最後回滾時一起消失。
-後者是改成 savepoint 的理由: 以前區塊會直接 commit, middleware 的「回應是錯誤就回滾」
+後者是用 savepoint 的理由: 區塊若直接 commit, middleware 的「回應是錯誤就回滾」
 對區塊裡的寫入就悄悄失效了。
 """
 

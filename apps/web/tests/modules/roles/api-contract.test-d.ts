@@ -43,10 +43,9 @@ export async function rejectsUnknownBodyField() {
   await apiPost({ url: "/roles/", data: { name: "x", permissions: [], bogus: 1 } })
 }
 
-// 這裡原本還有一條 `rejectsBodyOnBodilessEndpoint`, 守 `BodyField` 對「沒有 body 的
-// POST/PATCH」的處理 (見 shared/api/contract.ts 的 `RequestBody`)。**目前的端點集合裡
-// 一條都沒有**, 所以那條測試沒有題材可寫, 只能連同它守的保護一起先放著 ——
-// 新增這種端點時 (`POST /xxx/action` 這類「動詞端點」很常見) 請把它加回來:
+// `BodyField` 對「沒有 body 的 POST/PATCH」的處理 (見 shared/api/contract.ts 的 `RequestBody`)
+// 在這裡沒有測試: 模板的端點裡沒有這種端點, 沒有題材可寫。新增這種端點時
+// (`POST /xxx/action` 這類「動詞端點」很常見) 補上一條 `rejectsBodyOnBodilessEndpoint`:
 //
 //     // @ts-expect-error POST /xxx/action 沒有 request body
 //     await apiPost({ url: "/xxx/action", data: { anything: 1 } })

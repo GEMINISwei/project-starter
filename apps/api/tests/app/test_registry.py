@@ -95,8 +95,8 @@ def test_create_app_can_disable_any_module_without_touching_the_others(target):
 def test_enabled_modules_provide_exactly_one_current_user_resolver():
     """身分來源只能有一個, 而且必須真的有人提供。
 
-    這條守的是「組裝層不認識具名 module」那個設計: `app/server.py` 不再 import
-    `modules.users`, 改由 manifest 提供。少了這個測試, 把 users 的
+    這條守的是「組裝層不認識具名 module」那個設計: `app/server.py` 不 import
+    `modules.users`, 身分來源由 manifest 提供。少了這個測試, 把 users 的
     `current_user_resolver=` 刪掉不會有任何靜態錯誤, 服務照常啟動,
     直到第一個帶 token 的請求進來才炸。
     """
