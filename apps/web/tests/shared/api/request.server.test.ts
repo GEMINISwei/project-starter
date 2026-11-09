@@ -19,6 +19,7 @@ const redirect = vi.fn((url: string) => {
   throw Object.assign(new Error("redirect"), { digest: `NEXT_REDIRECT;replace;${url}` })
 })
 const revalidatePath = vi.fn()
+const revalidateTag = vi.fn()
 const clearAccessTokenCookie = vi.fn(async () => cookieJar.delete("access_token"))
 const fetchMock = vi.fn()
 
@@ -31,7 +32,7 @@ vi.mock("next/headers", () => ({
   headers: async () => ({ get: (key: string) => requestHeaders.get(key) ?? null }),
 }))
 vi.mock("next/navigation", () => ({ redirect }))
-vi.mock("next/cache", () => ({ revalidatePath, revalidateTag: vi.fn() }))
+vi.mock("next/cache", () => ({ revalidatePath, revalidateTag }))
 vi.mock("@/shared/i18n/locale.server", () => ({ getLocale: async () => "en" }))
 vi.mock("@/shared/session/access-token.server", () => ({ clearAccessTokenCookie }))
 vi.stubGlobal("fetch", fetchMock)
@@ -45,13 +46,16 @@ type LooseRequest = {
   params?: Record<string, string>
   auth?: "none" | "required"
   contentType?: "json" | "form-data"
+  query?: Record<string, unknown>
   data?: Record<string, unknown>
-  refresh?: { path?: string }
+  revalidate?: { time?: number; tags?: string[] }
+  refresh?: { path?: string; tag?: string }
 }
 type LooseCall = (request: LooseRequest) => Promise<ApiResponse<Record<string, unknown>>>
 const apiGet = api.apiGet as unknown as LooseCall
 const apiPost = api.apiPost as unknown as LooseCall
 const apiPatch = api.apiPatch as unknown as LooseCall
+const apiDelete = api.apiDelete as unknown as LooseCall
 
 function respond(status: number, body?: unknown) {
   fetchMock.mockResolvedValueOnce(
@@ -72,7 +76,7 @@ beforeEach(() => {
 })
 
 describe("組出請求", () => {
-  it("路徑參數會編碼、陣列 query 展開成重複的 key，並帶上 token 與語系", async () => {
+  it("路徑參數會編碼，並帶上 token 與語系", async () => {
     respond(200, { list_data: [], count: 0 })
     requestHeaders.set("x-request-id", "req-1")
 
@@ -101,6 +105,57 @@ describe("組出請求", () => {
     respond(200, { id: "r1" })
     await apiPost({ url: "/things/", data: { name: "x", permissions: [] } })
     expect(sentRequest().init.body).toBe(JSON.stringify({ name: "x", permissions: [] }))
+  })
+
+  it("query 的陣列值展開成重複的 key，一般值轉成字串，網址以問號接上", async () => {
+    respond(200, { list_data: [], count: 0 })
+
+    await apiGet({ url: "/things/", query: { ids: ["a", "b"], limit: 20, is_disabled: false } })
+
+    expect(sentRequest().url).toBe(
+      "http://api:8000/api/things/?ids=a&ids=b&limit=20&is_disabled=false",
+    )
+  })
+
+  it("GET 帶了 revalidate 時依設定的秒數與 tag 快取", async () => {
+    respond(200, { list_data: [], count: 0 })
+
+    await apiGet({ url: "/things/", revalidate: { time: 60, tags: ["things"] } })
+
+    expect((sentRequest().init as { next?: unknown }).next).toEqual({
+      revalidate: 60,
+      tags: ["things"],
+    })
+  })
+
+  it("GET 的 revalidate 是空物件時當成不快取", async () => {
+    respond(200, { list_data: [], count: 0 })
+
+    await apiGet({ url: "/things/", revalidate: {} })
+
+    expect((sentRequest().init as { next?: unknown }).next).toEqual({ revalidate: 0 })
+  })
+
+  it("POST 與 PATCH 沒帶 data 時送出空物件", async () => {
+    respond(200, { id: "r1" })
+    await apiPost({ url: "/things/" })
+    expect(sentRequest().init.body).toBe("{}")
+
+    fetchMock.mockClear()
+    respond(200, { id: "r1" })
+    await apiPatch({ url: "/things/{id}", params: { id: "r1" } })
+    expect(sentRequest().init.body).toBe("{}")
+  })
+
+  it("DELETE 請求以 DELETE 送出並帶上 query，不帶 body", async () => {
+    respond(200, { id: "r1" })
+
+    await apiDelete({ url: "/things/{id}", params: { id: "r1" }, query: { force: true } })
+
+    const { url, init } = sentRequest()
+    expect(url).toBe("http://api:8000/api/things/r1?force=true")
+    expect(init.method).toBe("DELETE")
+    expect(init.body).toBeUndefined()
   })
 
   it("缺少路徑參數時直接丟錯，不送出一個帶著 {id} 的網址", async () => {
@@ -185,6 +240,15 @@ describe("判讀回應", () => {
       data: { name: "x", permissions: [], is_disabled: false },
       refresh: { path: "/things" },
     })
+    expect(revalidatePath).not.toHaveBeenCalled()
+  })
+
+  it("寫入成功後依 refresh.tag 更新那個 tag 的快取", async () => {
+    respond(200, { id: "r1" })
+
+    await apiPost({ url: "/things/", data: { name: "x" }, refresh: { tag: "things" } })
+
+    expect(revalidateTag).toHaveBeenCalledWith("things", "max")
     expect(revalidatePath).not.toHaveBeenCalled()
   })
 

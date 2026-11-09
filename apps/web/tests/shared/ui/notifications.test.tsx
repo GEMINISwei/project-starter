@@ -68,6 +68,29 @@ describe("通知登記簿", () => {
     expect(screen.getAllByRole("alert")).toHaveLength(2)
   })
 
+  it("兩則通知時改其中一則的訊息，另一則不受影響", () => {
+    const { rerender } = render(
+      <>
+        <Notify open message="第一則" />
+        <Notify open message="第二則" />
+        <NotifyViewport />
+      </>,
+    )
+
+    rerender(
+      <>
+        <Notify open message="第一則" />
+        <Notify open message="第二則已更新" />
+        <NotifyViewport />
+      </>,
+    )
+
+    const alerts = screen.getAllByRole("alert")
+    expect(alerts).toHaveLength(2)
+    expect(alerts[0]).toHaveTextContent("第一則")
+    expect(alerts[1]).toHaveTextContent("第二則已更新")
+  })
+
   it("open 轉 false 會把它從登記簿移除", () => {
     const { rerender } = render(<Subject open message="已儲存" />)
 

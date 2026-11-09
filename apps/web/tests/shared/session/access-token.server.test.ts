@@ -15,7 +15,9 @@ vi.mock("next/headers", () => ({
 }))
 vi.mock("@/shared/session/cookies.server", () => ({ createCookies, deleteCookies }))
 
-const { setAccessTokenCookie } = await import("@/shared/session/access-token.server")
+const { clearAccessTokenCookie, setAccessTokenCookie } = await import(
+  "@/shared/session/access-token.server"
+)
 
 function writtenOptions() {
   const [name, value, options] = createCookies.mock.calls[0]
@@ -59,3 +61,14 @@ describe("setAccessTokenCookie", () => {
   })
 })
 
+
+describe("clearAccessTokenCookie", () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it("清除 access token 時刪掉 access token 的 cookie", async () => {
+    await clearAccessTokenCookie()
+
+    expect(deleteCookies).toHaveBeenCalledWith("access_token")
+    expect(createCookies).not.toHaveBeenCalled()
+  })
+})

@@ -61,6 +61,23 @@ describe("parseErrorDetail", () => {
     expect(result.fieldErrors).toEqual({ x: "壞了" })
   })
 
+  it("loc 不是陣列或 msg 不是字串的項目會被略過", () => {
+    const result = parseErrorDetail([
+      { loc: "body.x", msg: "loc 不是陣列" },
+      { loc: [], msg: "loc 是空的" },
+      { loc: ["body", "y"], msg: 42 },
+      { loc: ["body", "z"], msg: "正常" },
+    ])
+
+    expect(result.fieldErrors).toEqual({ z: "正常" })
+  })
+
+  it("422 陣列裡沒有一筆認得的項目時退回通用訊息", () => {
+    const result = parseErrorDetail([{ loc: "body.x", msg: 42 }])
+
+    expect(result).toEqual({ message: "Server Unknown Error" })
+  })
+
   it("無法解析時退回通用訊息", () => {
     expect(parseErrorDetail(undefined).message).toBe("Server Unknown Error")
     expect(parseErrorDetail([]).message).toBe("Server Unknown Error")

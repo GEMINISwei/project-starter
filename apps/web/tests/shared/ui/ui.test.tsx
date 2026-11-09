@@ -58,6 +58,14 @@ describe("Flex 的版面契約", () => {
 
     expect(screen.getByText("內容").getAttribute("style")).toContain("var(--space-4)")
   })
+
+  it("gap 可以直接給 CSS 字串，沒帶 gap 時不寫進 style", () => {
+    const { rerender } = render(<Flex gap="1.5rem">內容</Flex>)
+    expect(screen.getByText("內容").getAttribute("style")).toContain("--flex-gap: 1.5rem")
+
+    rerender(<Flex>內容</Flex>)
+    expect(screen.getByText("內容").getAttribute("style") ?? "").not.toContain("--flex-gap")
+  })
 })
 
 describe("Container", () => {
@@ -71,6 +79,13 @@ describe("Container", () => {
 })
 
 describe("TextInput", () => {
+  it("只給 ariaLabel 時不顯示可見標籤，輸入框仍然有名稱", () => {
+    render(<TextInput ariaLabel="帳號" />)
+
+    expect(screen.getByRole("textbox", { name: "帳號" })).toBeInTheDocument()
+    expect(screen.queryByText("帳號")).not.toBeInTheDocument()
+  })
+
   it("label 會和輸入框關聯，讀螢幕與測試都能靠標籤找到它", () => {
     render(<TextInput label="暱稱" />)
 
@@ -112,6 +127,22 @@ describe("欄位標籤", () => {
 
     expect(screen.getByText("帳號").textContent).toBe("帳號*")
     expect(screen.getByText("語系").textContent).toBe("語系")
+  })
+})
+
+describe("SelectInput", () => {
+  it("欄位錯誤會顯示並標記選單，讀螢幕念得到錯誤訊息", () => {
+    render(<SelectInput label="狀態" options={[{ value: "a", label: "A" }]} error="請選擇狀態" />)
+
+    const select = screen.getByRole("combobox", { name: /狀態/ })
+    expect(select).toHaveAttribute("aria-invalid", "true")
+    expect(select).toHaveAccessibleDescription("請選擇狀態")
+  })
+
+  it("選項只給 text 時用它當顯示文字", () => {
+    render(<SelectInput label="語系" options={[{ value: "zh", text: "中文" }]} />)
+
+    expect(screen.getByRole("option", { name: "中文" })).toBeInTheDocument()
   })
 })
 
@@ -185,9 +216,78 @@ describe("Modal", () => {
     expect(screen.getByRole("dialog").contains(document.activeElement)).toBe(true)
     expect(screen.getByRole("button", { name: "背景" })).not.toHaveFocus()
   })
+
+  it("在第一個可聚焦元素按 Shift+Tab 會跳到最後一個，不會跑到背景", async () => {
+    render(
+      <>
+        <Button>背景</Button>
+        <Modal title="測試" open onOpenChange={() => {}}>
+          <Button>確定</Button>
+        </Modal>
+      </>,
+    )
+
+    screen.getByRole("button", { name: "關閉" }).focus()
+    await userEvent.tab({ shift: true })
+
+    expect(screen.getByRole("button", { name: "確定" })).toHaveFocus()
+  })
+
+  it("剛開啟、焦點還在對話框本身時按 Shift+Tab 會跳到最後一個", async () => {
+    render(
+      <Modal title="測試" open onOpenChange={() => {}}>
+        <Button>確定</Button>
+      </Modal>,
+    )
+    expect(screen.getByRole("dialog")).toHaveFocus()
+
+    await userEvent.tab({ shift: true })
+
+    expect(screen.getByRole("button", { name: "確定" })).toHaveFocus()
+  })
+
+  it("焦點不在最後一個元素時按 Tab 照常移到下一個", async () => {
+    render(
+      <Modal title="測試" open onOpenChange={() => {}}>
+        <Button>確定</Button>
+      </Modal>,
+    )
+
+    screen.getByRole("button", { name: "關閉" }).focus()
+    await userEvent.tab()
+
+    expect(screen.getByRole("button", { name: "確定" })).toHaveFocus()
+  })
 })
 
 describe("FormDialog", () => {
+  it("送出中時按鈕停用並顯示 pendingText，沒給時顯示預設的處理中", () => {
+    const props = { title: "新增", open: true, submitText: "送出", onClose: () => {}, onSubmit: () => {} }
+    const { rerender } = render(
+      <FormDialog {...props} isPending pendingText="建立中"><TextInput label="名稱" /></FormDialog>,
+    )
+    expect(screen.getByRole("button", { name: "建立中" })).toBeDisabled()
+
+    rerender(<FormDialog {...props} isPending><TextInput label="名稱" /></FormDialog>)
+    expect(screen.getByRole("button", { name: "處理中" })).toBeDisabled()
+
+    rerender(<FormDialog {...props} isPending={false}><TextInput label="名稱" /></FormDialog>)
+    expect(screen.getByRole("button", { name: "送出" })).toBeEnabled()
+  })
+
+  it("按右上角的關閉鈕會呼叫 onClose", async () => {
+    const onClose = vi.fn()
+    render(
+      <FormDialog title="新增" open isPending={false} submitText="送出" onClose={onClose} onSubmit={() => {}}>
+        <TextInput label="名稱" />
+      </FormDialog>,
+    )
+
+    await userEvent.click(screen.getByRole("button", { name: "關閉" }))
+
+    expect(onClose).toHaveBeenCalledOnce()
+  })
+
   it("送出時不跑瀏覽器的原生驗證", () => {
     // 原生驗證的提示跟著瀏覽器語系, 不跟應用語系; 錯誤一律由各對話框標在欄位上。
     render(
