@@ -144,13 +144,15 @@ async def _no_change_handler(_request: Request, _exc: NoChangeError) -> Response
     return Response(status_code=204)
 
 
-async def _integrity_handler(request: Request, exc: IntegrityError) -> Response:
+async def _integrity_handler(request: Request, exc: Exception) -> Response:
     """外鍵違反統一轉成 409, 模組只要在資料庫宣告 `RESTRICT`, 不必各自攔。
 
     其他完整性錯誤 (唯一約束等) 原樣拋出: 那要由模組依業務判斷 (例: users 的帳號重複),
     平台猜不出該回什麼。回應交給 FastAPI 處理 `LangException` 的那一份, 形狀才與其他錯誤一致。
     """
-    if not is_foreign_key_violation(exc):
+    # 參數型別寫 `Exception` 而不是 `IntegrityError`: 那才是 Starlette 宣告的 handler 型別,
+    # 不必在掛載處加 type: ignore。
+    if not isinstance(exc, IntegrityError) or not is_foreign_key_violation(exc):
         raise exc
     return await http_exception_handler(request, LangException(409, foreign_key_error(exc)))
 
@@ -225,7 +227,7 @@ def create_platform_app(
 
     application.middleware("http")(_handle_request)
     application.add_exception_handler(NoChangeError, _no_change_handler)  # type: ignore[arg-type]
-    application.add_exception_handler(IntegrityError, _integrity_handler)  # type: ignore[arg-type]
+    application.add_exception_handler(IntegrityError, _integrity_handler)
     application.add_exception_handler(
         RequestValidationError,
         _validation_handler,  # type: ignore[arg-type]
