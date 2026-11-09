@@ -259,8 +259,15 @@ ORM relationship、JOIN 與 `detail_loaders()`。
 1. 先交給資料庫：`RESTRICT` 讓刪除失敗。平台會把外鍵違反統一轉成 409：刪除時是「仍有其他資料使用中」，
    新增或更新時是「參照的資料不存在」（`shared/platform.py`），模組不必自己攔 `IntegrityError`。
    兩種情況 PostgreSQL 只有會隨語系變的 detail 文字不同，所以依觸發錯誤的 SQL 種類區分（`foreign_key_error()`）。
-2. 需要明確的訊息或業務上的連動時，由持有外鍵的模組透過 manifest 提供，組裝層接上（同 `current_user_resolver`）。
-   通用的 hook／事件機制**還沒有實作**，第一個真正需要的功能出現時再設計。
+2. 需要業務上的連動或明確的否決時，用**模組事件**：被參照的模組在自己的 `public.py` 定義事件並 `publish()`，
+   參照它的模組在 manifest 的 `event_handlers` 訂閱。處理函式在發布者的交易裡同步執行，丟出錯誤就否決整個操作
+   （[做法](extending/module-events.md)）。
+
+### 非 HTTP 的入口
+
+CLI 與將來的背景工作一律經過 `shared/platform.py` 的 `platform_scope(modules, postgres_url)`，拿到與 HTTP 請求相同的
+session 與事件訂閱表；不自己 `session_scope()` 或設定 session factory（`tests/scripts/test_db.py` 擋 `scripts/db.py`）。
+平台多一項「每個入口都要有」的東西時，只改 middleware 與 `platform_scope` 這兩處。
 
 ### 報表與跨模組的排序
 
