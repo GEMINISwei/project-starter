@@ -43,8 +43,10 @@ cd apps/web && npm run test:watch           # 前端 watch 模式
 
 `make check e2e` 另起一套 compose 專案（`<專案>-e2e`，port 預設 3900，`E2E_PORT` 可換），用**正式環境的 image 與
 nginx 模板**，以 CLI 建隨機密碼的超管，跑完 Playwright 連 volume 一起刪，不動開發中的那套。第一次會下載 Chromium
-（幾百 MB）。CI 是獨立平行的 `e2e` job；失敗時到 Artifacts 下載 `playwright-report`，trace 用
-`npx playwright show-trace <zip>` 打開。
+（幾百 MB）。CI 是獨立平行的 `e2e` job，依檔案分份（matrix 的 `shard`，`E2E_SHARD=<份號>/<總份數>` 轉成
+Playwright 的 `--shard`），每份各起一套環境；每份在 Summary 記下 Playwright 本身的秒數，接近每份約 75 秒的固定成本時
+在 matrix 加一份（[準則](decisions/0009-e2e-strategy.md)）。失敗時到 Artifacts 下載 `playwright-report-<份號>`，
+trace 用 `npx playwright show-trace <zip>` 打開。
 
 **開發中用 `make e2e`，不必每次跑 `make check e2e`**（[理由](decisions/0009-e2e-strategy.md)）：
 

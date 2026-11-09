@@ -256,7 +256,17 @@ run_e2e() (
 
     step "e2e：Playwright"
     # 已經下載過時不會重抓。CI 另外用 --with-deps 裝系統套件 (見 .github/workflows/ci.yml)。
-    (cd e2e && npx playwright install chromium && npm test)
+    # CI 依 matrix 分份, 以 E2E_SHARD=<份號>/<總份數> 只跑那一份; 本機沒設時跑全部。
+    local shard_args=() started
+    [ -z "${E2E_SHARD:-}" ] || shard_args=("--shard=${E2E_SHARD}")
+    (cd e2e && npx playwright install chromium)
+    started="${SECONDS}"
+    (cd e2e && npm test -- ${shard_args[@]+"${shard_args[@]}"})
+    # 只記 Playwright 本身: job 的總時間減掉它就是每份都要付的固定成本, 份數照這兩個數字調
+    # (docs/decisions/0009-e2e-strategy.md)。
+    if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+        echo "e2e shard ${E2E_SHARD:-1/1}：Playwright $((SECONDS - started)) 秒" >> "${GITHUB_STEP_SUMMARY}"
+    fi
 )
 
 # 排在 types 前面: 型別檔過期時 tsc 的錯誤看不出原因, 這裡先講清楚是契約沒更新。
