@@ -10,10 +10,12 @@ type MessagePageProps = {
   description: string
   /** 巢狀在 AppShell 內時用 true: 外層已經撐滿視窗, 這裡只要填滿容器。 */
   inline?: boolean
+  /** 給使用者回報用的代碼 (例: 錯誤代碼), 顯示在按鈕下方。 */
+  reference?: string
   children?: ReactNode
 }
 
-export function MessagePage({ title, description, inline, children }: MessagePageProps) {
+export function MessagePage({ title, description, inline, reference, children }: MessagePageProps) {
   // 整頁時它自己就是頁面主體 (main 地標); inline 時畫在外殼的 <main> 裡, 再出一個就是兩個主要地標。
   const Root = inline ? "div" : "main"
 
@@ -23,6 +25,7 @@ export function MessagePage({ title, description, inline, children }: MessagePag
         <h2 className="message-page__title">{title}</h2>
         <p className="message-page__description">{description}</p>
         <div className="message-page__actions">{children}</div>
+        {reference && <p className="message-page__reference">{reference}</p>}
       </section>
     </Root>
   )

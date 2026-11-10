@@ -17,15 +17,17 @@ type GlobalErrorProps = {
   reset: () => void
 }
 
-export default function GlobalError({ reset }: GlobalErrorProps) {
+export default function GlobalError({ error, reset }: GlobalErrorProps) {
   // 這一頁在 root layout 之外渲染, 拿不到 LocaleProvider, 所以直接讀 cookie。
   const locale = useLocaleFromCookie()
   const t = translate(appMessages, locale)
+  // 同 error.tsx: 只有伺服器端的錯誤有 digest。
+  const reference = error.digest ? t("errorReference", { digest: error.digest }) : undefined
 
   return (
     <html lang={HTML_LANG[locale]}>
       <body>
-        <MessagePage title={t("errorTitle")} description={t("errorDescription")}>
+        <MessagePage title={t("errorTitle")} description={t("errorDescription")} reference={reference}>
           <MessagePageButton onClick={reset}>{t("retry")}</MessagePageButton>
         </MessagePage>
       </body>

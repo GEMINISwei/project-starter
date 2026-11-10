@@ -1,4 +1,5 @@
 include /etc/nginx/snippets/trusted-proxy.conf;
+include /etc/nginx/snippets/access-log-format.conf;
 
 # 給下面的 Next.js HMR 用。不要因為「後端沒有 WebSocket」就刪掉, 熱更新會安靜地停掉。
 map $http_upgrade $connection_upgrade {
@@ -8,6 +9,7 @@ map $http_upgrade $connection_upgrade {
 
 server {
     listen 80;
+    access_log /var/log/nginx/access.log request_id;
     absolute_redirect off;
 
     resolver 127.0.0.11 valid=10s;

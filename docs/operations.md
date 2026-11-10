@@ -308,15 +308,24 @@ gh workflow run deploy.yml --ref main -f tag=v0.1.0 -f target="production stagin
 
 ### 可觀測性只到 stdout
 
-- **有**：後端寫到 stdout 的請求紀錄（方法、路徑、狀態碼、耗時，**不含 query string**），以及
-  web、api、postgres 的 Docker healthcheck。
+- **有**：寫到 stdout 的請求紀錄，以及 web、api、postgres 的 Docker healthcheck。
+  - nginx：時間、request id、用戶端 IP、方法、路徑、狀態碼、`rt`（整個請求的耗時）與 `upstream`（web 花的時間）。
+    兩者差很多代表慢在 nginx 或網路這一段。
+  - api：時間（UTC）、request id、方法、路徑、狀態碼、耗時。超過 1 秒的記成 `WARNING`，`grep WARNING` 就挑得出慢請求；
+    未處理的例外由平台印出 traceback，同樣帶 request id。啟動時印一行版號、mode 與啟用的模組。
+  - web：伺服器端的錯誤（Server Component、Server Action）印一行，帶 request id 與 digest。
+  - 三層的路徑都**不含 query string**：它可能帶著敏感內容，不長期留在 log 裡。
 - **healthcheck 只管啟動**：決定啟動順序、是接回流量前的閘門；執行期 unhealthy **不會重啟容器**（單機 compose 沒有
   這機制），只顯示在 `docker ps`。啟動期每秒、之後每 30 秒探測一次，用 bash 不用 python／node（每次探測都起一個行程，
   直譯器會造成週期性 CPU 尖峰，`tests/test_compose_healthchecks.py` 擋）。執行期可用性要從外部定期打 `https://<網域>/healthz`。
-- **有** request id：每行紀錄開頭的 `[xxxxxxxx]` 由 nginx 產生，經 Next 傳到後端並回寫到回應標頭，
-  同一次操作在三個服務的 log 裡是同一個 id。
+- **有** request id：紀錄裡的 `[xxxxxxxx]` 由 nginx 產生，經 Next 傳到後端並回寫到回應標頭，
+  同一次操作在三個服務的 log 裡是同一個 id。`make services logs | grep <id>` 撈出同一次請求的所有紀錄，
+  看它停在哪一層：例如 nginx 是 500、web 有錯誤而 api 沒有紀錄，就是 web 自己出錯。
+- **錯誤代碼**：伺服器端出錯時，錯誤畫面顯示「錯誤代碼」（Next 的 digest）。使用者回報時附上它，
+  `grep` 它找到 web 的那一行，再用同一行的 request id 往下查。瀏覽器端的錯誤沒有錯誤代碼（見下面的盲點）。
 - **看 log** 用 `make services logs [服務]`。正式環境每個容器只留 10MB × 5 份（prod overlay），
-  **重建容器時舊的 log 會一起消失**，要長期保存就自己轉送到別處。
+  **重建容器時舊的 log 會一起消失**；`make backup`（部署前會自動跑）會順便存一份，見〈[備份與還原](#備份與還原)〉。
+  要長期保存就自己轉送到別處。
 - **沒有**：結構化 log、錯誤追蹤、指標與告警（[starter/0007](starter/0007-no-built-in-error-tracking.md)）。出錯沒人收到通知，
   要等使用者回報再上主機查。
 - **最大的盲點是瀏覽器端的錯誤**（按了沒反應、畫面白掉），主機 log 一行都沒有。需要時先補錯誤追蹤（Sentry 或相容的
@@ -461,11 +470,11 @@ API 是**單一 Python 行程**（沒有 workers，compose 也沒有 replica）�
 
 ## 備份與還原
 
-`make backup` 是唯一的備份入口，資料庫與上傳檔案一起備份，兩份共用同一個檔名，只差副檔名；
-還原則分開：
+`make backup` 是唯一的備份入口，資料庫與上傳檔案一起備份，順便留一份各容器的 log，
+幾份共用同一個檔名，只差副檔名；還原則分開：
 
 ```bash
-make backup                          # backups/<專案>_v<版號>_<日期>_<時間>.dump 與 .tar
+make backup                          # backups/<專案>_v<版號>_<日期>_<時間>.dump、.tar 與 .logs.tar.gz
 make db restore                      # 列出這個目錄版本的資料庫備份，選一個並確認後還原
 make db restore backups/x.dump       # 直接指定檔案（版本必須與 make services 上方的版本一致）
 make uploads restore                 # 列出所有上傳檔案的備份，選一個並確認後還原
@@ -488,6 +497,10 @@ api、web 不停（上傳檔案從 api 容器打包）。
 檔案沒有結構，**任何版本的備份都能還原**。還原會先清空 volume 再解開，備份之後才上傳的檔案會消失。
 兩邊分開還原時，自己確認選的是同一組（同樣的日期與時間），否則資料庫裡的紀錄可能指到不存在的檔案。
 
+**log** 是 api、web、nginx、postgres 當下留著的 log（`docker logs --timestamps`），一個容器一個檔，
+打包成 `.logs.tar.gz`。它只給人看，不是還原的對象；部署前會先備份，所以部署重建容器之後，
+部署前的 log 還找得到。存 log 失敗只會警告，不影響資料庫與上傳檔案的備份。
+
 **清理**以組為單位、依檔名的時間、不分版號，只刪符合上面命名的檔案。部署時會自動清
 （`BACKUP_KEEP`，見〈[自動部署](#自動部署)〉），手動 `make backup` 不會。
 
@@ -497,7 +510,7 @@ api、web 不停（上傳檔案從 api 容器打包）。
 
 ```bash
 make backup allow-fresh              # 同 make backup，但全新主機（還沒有資料 volume）時略過（部署用）
-make backup prune 10                 # 只留最近 10 組，同名的 .dump 與 .tar 一起刪（部署後自動跑）
+make backup prune 10                 # 只留最近 10 組，同名的 .dump、.tar 與 .logs.tar.gz 一起刪（部署後自動跑）
 make version                         # 這個目錄的版本（APP_VERSION），例如 v0.0.2
 make db revision                     # 資料庫目前的 migration revision，全新主機什麼都不印（部署前的檢查用）
 ```

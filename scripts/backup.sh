@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# 備份資料庫與上傳檔案: make backup (備份期間對外服務會暫停)
+# 備份資料庫與上傳檔案, 順便留一份各容器的 log: make backup (備份期間對外服務會暫停)
 #
-#   make backup                          同一個時間點產出 <名稱>.dump 與 <名稱>.tar
+#   make backup                          同一個時間點產出 <名稱>.dump 與 <名稱>.tar, 另附 <名稱>.logs.tar.gz
 #   [內部] make backup allow-fresh       同上, 但全新主機 (還沒有資料 volume) 時略過 (部署用)
-#   [內部] make backup prune <組數>      只留最近幾組備份, 同名的 .dump 與 .tar 一起刪 (部署用)
+#   [內部] make backup prune <組數>      只留最近幾組備份, 同名的檔案一起刪 (部署用)
 #
 # 這是唯一的備份入口, 沒有只備份一邊的指令: 單邊的備份配不成一組, 還原時容易選錯。
 # 還原一律分開 (make db restore／make uploads restore), 兩者都會先跑一次這支。
@@ -69,6 +69,9 @@ backup_both() {
     stem="${stem%.dump}"
     backup_database "${stem}"
     backup_uploads "${stem}"
+    local project="${COMPOSE_PROJECT_NAME}"
+    local containers=("${project}-api" "${project}-web" "${project}-nginx" "${project}-postgres")
+    save_logs "${stem}" "${containers[@]}" || echo "警告：log 沒有備份成功（資料庫與上傳檔案已備份）" >&2
 }
 
 # allow-fresh 給 deploy.yml 用, 讓第一次部署不必先在主機上把服務跑起來。只放行「資料 volume

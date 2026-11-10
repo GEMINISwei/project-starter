@@ -78,3 +78,11 @@
   background: transparent;
   color: var(--color-primary);
 }
+
+/* 使用者回報問題時抄給管理者的代碼: 不搶畫面, 但要能整段選取複製。 */
+.message-page__reference {
+  margin: var(--space-6) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--fs-xs);
+  user-select: all;
+}

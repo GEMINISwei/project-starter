@@ -35,6 +35,8 @@ export const appMessages = defineMessages({
     errorTitle: "系統發生錯誤",
     errorDescription: "請重新整理頁面，或聯絡系統管理員。",
     retry: "重新整理",
+    // 錯誤畫面的錯誤代碼 (Next 的 digest), 使用者回報時用它查伺服器 log
+    errorReference: "錯誤代碼：{digest}",
     // 頁面層的 error boundary (錯誤範圍比 global-error 小, 文案也比較輕)
     pageErrorTitle: "發生錯誤",
     pageErrorDescription: "頁面載入時發生預期外的錯誤，請嘗試重新載入。",
@@ -63,6 +65,7 @@ export const appMessages = defineMessages({
     errorTitle: "Something went wrong",
     errorDescription: "Please refresh the page, or contact your administrator.",
     retry: "Refresh",
+    errorReference: "Error code: {digest}",
     pageErrorTitle: "Something went wrong",
     pageErrorDescription: "An unexpected error occurred while loading this page. Please try again.",
     reload: "Reload",
