@@ -41,7 +41,9 @@ class RoleTable(BaseTable):
     # UNIQUE 但可以是 NULL: PostgreSQL 的唯一約束不把多個 NULL 視為重複, 所以一般角色
     # (`code = NULL`) 要幾個有幾個, 只有系統角色的 code 不能撞號。
     code: Mapped[str | None] = mapped_column(String, unique=True, default=None)
-    name: Mapped[str]
+    # 指派角色時畫面上只看得到名稱, 同名的兩個角色會讓管理者分不清。停用的與系統角色也占用名稱,
+    # 重新啟用時才不會撞名。
+    name: Mapped[str] = mapped_column(String, unique=True)
     # 用 `text[]` 而不是 JSONB: 權限是一維字串集合, 陣列型別能保留順序 (roles service
     # 會直接比對 `role["permissions"] != form_data.permissions`), 也留著日後加 GIN 索引
     # 做「哪些角色有這個權限」查詢的路。
@@ -122,6 +124,15 @@ class RoleTable(BaseTable):
         session: AsyncSession | None = None,
     ) -> RoleDetail | None:
         result = await cls.find_detail_one(cls.code == code, session=session)
+        return cast(RoleDetail | None, result)
+
+    @classmethod
+    async def find_detail_by_name(
+        cls,
+        name: str,
+        session: AsyncSession | None = None,
+    ) -> RoleDetail | None:
+        result = await cls.find_detail_one(cls.name == name, session=session)
         return cast(RoleDetail | None, result)
 
     # 覆寫只為了收窄回傳型別 —— 基底的 `find_detail_by_id` 回傳裸 dict, 呼叫端讀欄位

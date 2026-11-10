@@ -13,4 +13,5 @@ api 開機時**不寫任何資料**（[starter/0006](../starter/0006-seed-in-mig
 | `prepare_seed_item()` | 選用，寫入前轉換資料（例如雜湊密碼） |
 
 `RoleTable` 設了 `seed_match_key = "code"`，所以系統角色的權限與名稱在每次部署時都會同步回模板的定義。
+角色名稱不可重複，新增系統角色時名稱若與既有的一般角色相同，部署時 seed 會因唯一約束失敗，要先改掉那個一般角色的名稱。
 改了 `seed_data` 之後，開發機跑 `make db migrate` 就會套用。

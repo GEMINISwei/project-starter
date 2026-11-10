@@ -40,7 +40,8 @@ def upgrade() -> None:
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.PrimaryKeyConstraint('id', name=op.f('pk_roles')),
-    sa.UniqueConstraint('code', name=op.f('uq_roles_code'))
+    sa.UniqueConstraint('code', name=op.f('uq_roles_code')),
+    sa.UniqueConstraint('name', name=op.f('uq_roles_name'))
     )
     op.create_index('ix_roles_created_at_id', 'roles', [sa.literal_column('created_at DESC'), sa.literal_column('id DESC')], unique=False)
     op.create_index('ix_roles_is_disabled_created_at', 'roles', ['is_disabled', sa.literal_column('created_at DESC')], unique=False)
