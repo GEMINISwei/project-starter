@@ -15,7 +15,7 @@ class _LineFormatter(logging.Formatter):
 
     converter = staticmethod(time.gmtime)
 
-    def formatMessage(self, record: logging.LogRecord) -> str:  # noqa: N802
+    def formatMessage(self, record: logging.LogRecord) -> str:  # noqa: N802 - 覆寫標準庫的方法名
         separator = " " * (8 - len(record.levelname))
         levelprefix = f"{record.levelname}:{separator}"
         timestamp = self.formatTime(record, self.datefmt)
