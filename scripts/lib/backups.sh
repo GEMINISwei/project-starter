@@ -116,6 +116,7 @@ save_logs() {
         return 1
     fi
     rm -rf "${dir}"
-    mv "${stem}.logs.tar.gz.partial" "${stem}.logs.tar.gz"
+    # 呼叫端以 `||` 接住失敗, 這裡面 `set -e` 不生效, 每一步都要自己回報。
+    mv "${stem}.logs.tar.gz.partial" "${stem}.logs.tar.gz" || return 1
     echo "已備份：${stem}.logs.tar.gz"
 }
