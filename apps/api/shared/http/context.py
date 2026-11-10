@@ -50,3 +50,13 @@ def resolve_request_id(header_value: str | None) -> str:
         return new_request_id()
 
     return candidate
+
+
+#: 這次請求的登入者 id。由權限檢查的 dependency (`shared/auth/dependency.py`) 設定, 給 AUDIT 用;
+#: 預設 "-" 代表未登入或不在請求脈絡裡。請求紀錄讀的是 `request.state.user_id`
+#: (middleware 讀不到路由 task 裡設的 ContextVar)。
+current_user_id: ContextVar[str] = ContextVar("current_user_id", default="-")
+
+#: 這次請求的用戶端 IP (已檢查過形狀, 可以直接寫進 log)。
+#: 由 `shared/platform.py` 的 middleware 設定。
+current_client_ip: ContextVar[str] = ContextVar("current_client_ip", default="-")

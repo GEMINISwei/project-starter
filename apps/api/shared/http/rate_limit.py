@@ -12,6 +12,8 @@ from collections import deque
 
 from fastapi import Request
 
+from shared.audit import audit
+
 from .errors import BaseError, LangException, LangText
 
 # 全域清理的最小間隔 (window_seconds 的倍數)。每次都掃會讓被攻擊時最慢的是防護程式碼自己。
@@ -29,9 +31,12 @@ class RateLimiter:
     """對同一個 key 在 `window_seconds` 內最多允許 `max_attempts` 次。
 
     `max_keys` 是**記憶體上限**: 攻擊者可以持續變換 key (例如帳號名), 限流器不能因此吃光記憶體。
+    `name` 只用在 AUDIT 紀錄, 看得出是哪一條規則擋下的 (key 可能含帳號名, 不記)。
     """
 
-    def __init__(self, max_attempts: int, window_seconds: float, max_keys: int = 50_000) -> None:
+    def __init__(
+        self, max_attempts: int, window_seconds: float, max_keys: int = 50_000, *, name: str = "-"
+    ) -> None:
         if max_attempts < 1:
             raise ValueError("max_attempts 必須至少為 1")
         if window_seconds <= 0:
@@ -42,6 +47,7 @@ class RateLimiter:
         self.max_attempts = max_attempts
         self.window_seconds = window_seconds
         self.max_keys = max_keys
+        self.name = name
         # 刻意用普通 dict 而不是 defaultdict: 讀取不該產生條目。
         self._hits: dict[str, deque[float]] = {}
         self._last_sweep = time.monotonic()
@@ -96,6 +102,7 @@ class RateLimiter:
         if len(hits) >= self.max_attempts:
             # 最舊的那一筆掉出視窗時就有額度。
             retry_after = max(1, math.ceil(hits[0] + self.window_seconds - now))
+            audit("rate_limited", limiter=self.name)
             raise LangException(
                 429,
                 RateLimitError.TOO_MANY_REQUESTS,

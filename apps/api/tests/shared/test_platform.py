@@ -391,6 +391,54 @@ async def test_version_route_returns_the_app_version(version_client: AsyncClient
 
 
 @pytest.mark.asyncio
+async def test_request_log_includes_user_id_when_logged_in(
+    version_client: AsyncClient, calls: list[str], records: list[logging.LogRecord]
+):
+    """使用者來問「我剛剛操作失敗」時, 第一個要過濾的欄位。只放 id, 不放帳號或暱稱 (個資)。"""
+    token = create_token({"username": "member", "auth_version": 1}, MinimalEnv())
+    version_client.cookies.set("access_token", token["access_token"])
+
+    await version_client.get("/api/system/version")
+
+    assert " user_id=member " in records[0].getMessage()
+
+
+@pytest.mark.asyncio
+async def test_request_log_shows_dash_for_anonymous(
+    client: AsyncClient, records: list[logging.LogRecord]
+):
+    await client.get("/definitely-not-a-route")
+
+    assert " user_id=- " in records[0].getMessage()
+
+
+@pytest.mark.asyncio
+async def test_request_log_uses_real_client_ip(
+    client: AsyncClient, records: list[logging.LogRecord]
+):
+    """`request.client` 永遠是 web 容器; 真正的用戶端 IP 由 nginx 以 `X-Real-IP` 帶進來。"""
+    await client.get("/definitely-not-a-route", headers={"X-Real-IP": "203.0.113.7"})
+
+    message = records[0].getMessage()
+    assert " 203.0.113.7 " in message
+    assert "127.0.0.1" not in message
+
+
+@pytest.mark.asyncio
+async def test_request_log_replaces_malformed_client_ip(
+    client: AsyncClient, records: list[logging.LogRecord]
+):
+    """繞過 nginx 直接打 api 時, 這個標頭由對方說了算: 帶換行就能偽造出一行假的紀錄。"""
+    await client.get(
+        "/definitely-not-a-route", headers={"X-Real-IP": "1.2.3.4 INFO: fake"}
+    )
+
+    message = records[0].getMessage()
+    assert "fake" not in message
+    assert "1.2.3.4" not in message
+
+
+@pytest.mark.asyncio
 async def test_version_route_requires_authentication(
     version_client: AsyncClient, calls: list[str]
 ):

@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.permissions import Permission
 from modules.roles.public import find_role_details
+from shared.audit import audit
 from shared.auth import passwords
 from shared.auth.contracts import CurrentUser
 from shared.db.session import release_connection
@@ -63,7 +64,7 @@ async def create_user(form_data: UserCreate) -> UserOperate:
     await validate_role_ids(role_ids)
 
     try:
-        return UserOperate.model_validate(
+        result = UserOperate.model_validate(
             await UserTable.create(
                 data={
                     "username": form_data.username,
@@ -79,6 +80,8 @@ async def create_user(form_data: UserCreate) -> UserOperate:
         if not is_unique_violation(exc):
             raise
         raise LangException(409, UserError.USERNAME_EXISTS) from exc
+    audit("user_created", user_id=result.id, role_ids=role_ids)
+    return result
 
 
 async def get_user(id: str) -> UserInfo:
@@ -142,6 +145,9 @@ async def update_user(
     )
     if newly_disabled:
         await UserTable.revoke_sessions(id)
+        audit("user_disabled", user_id=id)
+    if form_data.role_ids is not None and set(form_data.role_ids) != set(target["role_ids"]):
+        audit("user_roles_changed", user_id=id, role_ids=form_data.role_ids)
     return result
 
 
@@ -157,12 +163,14 @@ async def reset_user_password(id: str, form_data: UserResetPassword) -> UserOper
     password_hash = await passwords.hash_password_async(form_data.password)
 
     # 同時把 auth_version +1, 這個人所有既有的 session 立刻失效。
-    return UserOperate.model_validate(
+    result = UserOperate.model_validate(
         ensure_found(
             await UserTable.set_password_and_revoke_sessions(id=id, password_hash=password_hash),
             UserError.NOT_FOUND,
         )
     )
+    audit("user_password_reset", user_id=id)
+    return result
 
 
 async def disable_user(current_user: CurrentUser, target_id: str) -> UserOperate:
@@ -177,6 +185,7 @@ async def disable_user(current_user: CurrentUser, target_id: str) -> UserOperate
     # 停用期間每個請求都會被擋, 但重新啟用之後只剩世代號在比對: 不 +1 的話,
     # 停用前簽發的 token 會在啟用的那一刻復活 (例如帳號疑似被盜、停用查完再交還本人)。
     await UserTable.revoke_sessions(target_id)
+    audit("user_disabled", user_id=target_id)
     return result
 
 

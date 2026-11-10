@@ -13,6 +13,7 @@
 from sqlalchemy.exc import IntegrityError
 
 from modules.roles.public import get_super_admin_role_id
+from shared.audit import audit
 from shared.auth import passwords
 from shared.db.table import is_unique_violation
 from shared.http.errors import LangException
@@ -48,7 +49,9 @@ async def create_super_admin(form_data: SuperAdminCreate) -> UserOperate:
             raise
         # 上面查過一次, 這裡只會是查完之後才被別人搶走的 username。
         raise LangException(409, UserError.USERNAME_EXISTS) from exc
-    return UserOperate.model_validate(created)
+    result = UserOperate.model_validate(created)
+    audit("superuser_created", user_id=result.id)
+    return result
 
 
 async def revoke_all_sessions() -> SessionRevocation:
@@ -56,4 +59,6 @@ async def revoke_all_sessions() -> SessionRevocation:
 
     `JWT_SECRET_KEY` 本身外洩時這不夠: 拿到金鑰的人能自己簽新世代的 token, 那時要換金鑰。
     """
-    return SessionRevocation(affected=await UserTable.revoke_all_sessions())
+    affected = await UserTable.revoke_all_sessions()
+    audit("sessions_revoked_all", affected=affected)
+    return SessionRevocation(affected=affected)

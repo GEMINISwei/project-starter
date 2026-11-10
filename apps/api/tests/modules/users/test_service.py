@@ -21,6 +21,7 @@ from modules.users.schema import UserCreate, UserResetPassword, UserUpdate
 from shared.auth import passwords
 from shared.auth.contracts import CurrentUser
 from shared.http.errors import LangException
+from tests.audit import acting_as, events
 
 ROLE_ID = "00000000-0000-0000-0000-0000000000a1"
 
@@ -509,3 +510,108 @@ async def test_reset_regular_user_password(users, password_writes):
     )
 
     assert password_writes == ["user-2"]
+
+
+# ── AUDIT 紀錄 ───────────────────────────────────────────────────────────────
+#
+# 只記改到權限或登入能力的操作; 被規則擋下的操作沒有寫入, 不記成成功事件。
+
+
+def _audited(records) -> list[tuple[str, str, str]]:
+    return [(event, fields["actor"], fields["user_id"]) for event, fields in events(records)]
+
+
+@pytest.mark.asyncio
+async def test_create_user_is_audited_with_actor_and_role_ids(
+    created, assignable_role, audit_records
+):
+    with acting_as("root"):
+        await user_service.create_user(
+            UserCreate(
+                username="new", password="password-123", nickname="新人", role_ids=[ROLE_ID]
+            ),
+        )
+
+    [(event, fields)] = events(audit_records)
+    assert (event, fields["actor"], fields["user_id"]) == ("user_created", "root", "new-user")
+    assert fields["role_ids"] == ROLE_ID
+
+
+@pytest.mark.asyncio
+async def test_update_user_roles_is_audited_with_actor_and_role_ids(
+    users, assignable_role, audit_records
+):
+    users(_target("user-2"))
+
+    with acting_as("root"):
+        await user_service.update_user(
+            current_user=SUPER,
+            id="user-2",
+            form_data=UserUpdate(nickname="n", is_disabled=False, role_ids=[ROLE_ID]),
+        )
+
+    [(event, fields)] = events(audit_records)
+    assert (event, fields["actor"], fields["user_id"]) == ("user_roles_changed", "root", "user-2")
+    assert fields["role_ids"] == ROLE_ID
+
+
+@pytest.mark.asyncio
+async def test_update_user_nickname_only_is_not_audited(users, audit_records):
+    users(_target("user-2"))
+
+    with acting_as("root"):
+        await user_service.update_user(
+            current_user=SUPER, id="user-2", form_data=UserUpdate(nickname="n", is_disabled=False)
+        )
+
+    assert audit_records == []
+
+
+@pytest.mark.asyncio
+async def test_disable_user_is_audited_with_actor(users, audit_records):
+    users(_target("victim"))
+
+    with acting_as("root"):
+        await user_service.disable_user(current_user=SUPER, target_id="victim")
+
+    assert _audited(audit_records) == [("user_disabled", "root", "victim")]
+
+
+@pytest.mark.asyncio
+async def test_patch_disable_is_audited_with_actor(users, audit_records):
+    users(_target("victim"))
+
+    with acting_as("root"):
+        await user_service.update_user(
+            current_user=SUPER,
+            id="victim",
+            form_data=UserUpdate(nickname="n", is_disabled=True),
+        )
+
+    assert _audited(audit_records) == [("user_disabled", "root", "victim")]
+
+
+@pytest.mark.asyncio
+async def test_reset_user_password_is_audited_with_actor(users, password_writes, audit_records):
+    users(_target("user-2"))
+
+    with acting_as("root"):
+        await user_service.reset_user_password(
+            id="user-2", form_data=UserResetPassword(password="new-password-123")
+        )
+
+    assert _audited(audit_records) == [("user_password_reset", "root", "user-2")]
+
+
+@pytest.mark.asyncio
+async def test_rejected_operation_is_not_audited(users, audit_records):
+    users(_target("root", [Permission.ALL]))
+
+    with acting_as("root"):
+        await _expect_error(
+            user_service.disable_user(current_user=SUPER, target_id="root"),
+            403,
+            UserError.CANNOT_DISABLE_SELF,
+        )
+
+    assert audit_records == []

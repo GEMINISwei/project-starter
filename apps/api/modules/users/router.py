@@ -28,14 +28,14 @@ from .schema import (
 router = APIRouter(prefix="/users", tags=["users"])
 
 # 以 IP + 帳號為 key: 只用 IP 會讓同一間辦公室互相影響, 只用帳號則可被拿來鎖定他人。
-login_limiter = RateLimiter(max_attempts=10, window_seconds=300)
+login_limiter = RateLimiter(max_attempts=10, window_seconds=300, name="login")
 # 上面那層換個帳號名就是新的 key, 擋不住「同一個來源對整份帳號清單各試幾次」。
 # 這一層只看 IP, 上限訂寬 (同一個 NAT 後面的整間辦公室要能正常登入),
 # 而且成功**不 reset**: 否則攻擊者用自己的帳號登入一次就能把額度洗回來。
-login_ip_limiter = RateLimiter(max_attempts=50, window_seconds=300)
+login_ip_limiter = RateLimiter(max_attempts=50, window_seconds=300, name="login_ip")
 # 以使用者 id 為 key。擋的主要是 bcrypt 的 CPU 消耗 (一個被盜的 session 不該變成 CPU
 # 消耗器), 順帶讓偷到 cookie 的人無法慢慢試舊密碼。
-password_change_limiter = RateLimiter(max_attempts=10, window_seconds=300)
+password_change_limiter = RateLimiter(max_attempts=10, window_seconds=300, name="password_change")
 
 
 @router.post("/")

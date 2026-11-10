@@ -15,8 +15,10 @@ from sqlalchemy import delete, func, select
 
 from modules.users import superuser
 from modules.users.errors import UserError
+from shared.auth import passwords
 from shared.db.session import configure_session_factory, create_engine, session_scope
 from shared.http.errors import LangException
+from tests.audit import events
 from tests.integration import require_postgres, restore_session_factory
 
 # --- 不需要資料庫 ---------------------------------------------------------
@@ -61,6 +63,56 @@ def test_signup_routes_are_not_registered():
 
     assert "/api/users/signup" not in paths
     assert "/api/users/bootstrap-status" not in paths
+
+
+@pytest.mark.asyncio
+async def test_create_super_admin_is_audited(monkeypatch: pytest.MonkeyPatch, audit_records):
+    """高權限操作走 CLI, 一般請求紀錄完全看不到它, 只有這一筆。"""
+    from modules.users.model import UserTable
+    from modules.users.schema import SuperAdminCreate
+
+    async def no_user(username, include_password=False, session=None):
+        return None
+
+    async def role_id():
+        return "role-super"
+
+    async def fake_hash(raw_password):
+        return f"hashed:{raw_password}"
+
+    async def fake_create(data, session=None):
+        return {"id": "new-root"}
+
+    monkeypatch.setattr(UserTable, "find_detail_by_username", no_user)
+    monkeypatch.setattr(superuser, "get_super_admin_role_id", role_id)
+    monkeypatch.setattr(passwords, "hash_password_async", fake_hash)
+    monkeypatch.setattr(UserTable, "create", fake_create)
+
+    await superuser.create_super_admin(
+        SuperAdminCreate(username="root2", nickname="root2", password="password-123")
+    )
+
+    assert [(event, fields["user_id"]) for event, fields in events(audit_records)] == [
+        ("superuser_created", "new-root")
+    ]
+
+
+@pytest.mark.asyncio
+async def test_revoke_all_sessions_is_audited_with_count(
+    monkeypatch: pytest.MonkeyPatch, audit_records
+):
+    from modules.users.model import UserTable
+
+    async def fake_revoke_all(session=None):
+        return 3
+
+    monkeypatch.setattr(UserTable, "revoke_all_sessions", fake_revoke_all)
+
+    await superuser.revoke_all_sessions()
+
+    assert [(event, fields["affected"]) for event, fields in events(audit_records)] == [
+        ("sessions_revoked_all", "3")
+    ]
 
 
 # --- 需要真的資料庫 (PostgreSQL) -------------------------------------------

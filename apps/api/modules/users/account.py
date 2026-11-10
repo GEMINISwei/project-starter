@@ -4,6 +4,7 @@
 不看 permission。
 """
 
+from shared.audit import audit
 from shared.auth import passwords
 from shared.auth.contracts import AppEnvProtocol, CurrentUser
 from shared.auth.tokens import create_token
@@ -28,8 +29,16 @@ async def login_user(form_data: UserLogin, env: AppEnvProtocol) -> UserToken:
         form_data.password, None if user_data is None else user_data["password"]
     )
     if user_data is None or user_data["is_disabled"] or not password_matched:
+        # 回應不分原因 (分開說就能拿來窮舉帳號), 紀錄要分: 事後才看得出是哪一種。
+        # **不記輸入的帳號**: 使用者偶爾會把密碼打進帳號欄。
+        if user_data is None:
+            audit("login_failed", reason="unknown_account")
+        else:
+            reason = "disabled" if user_data["is_disabled"] else "bad_password"
+            audit("login_failed", reason=reason, user_id=user_data["id"])
         raise LangException(401, UserError.INVALID_CREDENTIALS)
 
+    audit("login_succeeded", user_id=user_data["id"])
     return UserToken.model_validate(create_token(user_data, env))
 
 
@@ -62,6 +71,11 @@ async def change_own_password(
         plain_password=form_data.current_password,
         hashed_password=user_data["password"],
     ):
+        audit(
+            "password_change_failed",
+            reason="current_password_mismatch",
+            user_id=current_user["id"],
+        )
         raise LangException(403, UserError.CURRENT_PASSWORD_MISMATCH)
 
     password_hash = await passwords.hash_password_async(form_data.new_password)
@@ -73,6 +87,7 @@ async def change_own_password(
     )
     if updated is None:
         raise LangException(409, UserError.PASSWORD_CHANGED_CONCURRENTLY)
+    audit("password_changed", user_id=current_user["id"])
 
     return UserToken.model_validate(
         create_token(

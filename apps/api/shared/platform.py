@@ -10,6 +10,7 @@
 """
 
 import logging
+import re
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from contextlib import asynccontextmanager
@@ -32,7 +33,11 @@ from shared.auth.permissions import BasePermission
 from shared.db.session import configure_session_factory, create_engine, session_scope
 from shared.db.table import foreign_key_error, is_foreign_key_violation
 from shared.events import EventBus, use_event_bus
-from shared.http.context import current_request_id, resolve_request_id
+from shared.http.context import (
+    current_client_ip,
+    current_request_id,
+    resolve_request_id,
+)
 from shared.http.errors import (
     BaseError,
     LangException,
@@ -41,6 +46,8 @@ from shared.http.errors import (
     current_language,
     resolve_language,
 )
+from shared.http.rate_limit import client_ip
+from shared.logs import stream_logger
 from shared.module import (
     ModuleManifest,
     event_handlers,
@@ -77,29 +84,7 @@ class PlatformEnv(AppEnvProtocol, Protocol):
     def mode(self) -> str: ...
 
 
-class _TimingFormatter(logging.Formatter):
-    """跟 uvicorn 預設 log 一樣的 `LEVEL:` 對齊寫法, 時間改用 [] 包住。
-
-    時間一律 UTC 並標出 `Z`: 容器、主機與看 log 的人時區可能都不同, 沒標時區的時間很容易差 8 小時
-    而不自知。
-    """
-
-    converter = staticmethod(time.gmtime)
-
-    def formatMessage(self, record: logging.LogRecord) -> str:  # noqa: N802
-        separator = " " * (8 - len(record.levelname))
-        levelprefix = f"{record.levelname}:{separator}"
-        timestamp = self.formatTime(record, self.datefmt)
-        return f"{levelprefix}[{timestamp}] {record.message}"
-
-
-request_logger = logging.getLogger("api.timing")
-request_logger.setLevel(logging.INFO)
-if not request_logger.handlers:
-    _handler = logging.StreamHandler()
-    _handler.setFormatter(_TimingFormatter(datefmt="%Y-%m-%dT%H:%M:%SZ"))
-    request_logger.addHandler(_handler)
-    request_logger.propagate = False
+request_logger = stream_logger("api.timing")
 
 
 @asynccontextmanager
@@ -144,11 +129,24 @@ async def _call_within_session(
             return response
 
 
+# IPv4 與 IPv6 會用到的字元。值來自標頭: 繞過 nginx 直接打 api 時由對方說了算 (compose 內網做得到),
+# 不檢查的話可以塞進假的欄位或一整行假的紀錄。
+_LOGGABLE_IP = re.compile(r"^[0-9A-Fa-f:.]{1,45}$")
+
+
+def _loggable_ip(request: Request) -> str:
+    ip = client_ip(request)
+    return ip if _LOGGABLE_IP.match(ip) else "invalid"
+
+
 def _log_request(request: Request, request_id: str, status_code: int, started: float) -> None:
     if request.url.path in UNLOGGED_PATHS:
         return
     duration_ms = (time.perf_counter() - started) * 1000
-    client = f"{request.client.host}:{request.client.port}" if request.client else "-"
+    # 權限檢查的 dependency 寫進 `request.state`: 路由跑在另一個 task,
+    # 它設的 ContextVar 這裡讀不到。
+    user_id = getattr(request.state, "user_id", "-")
+    client = f"user_id={user_id} {current_client_ip.get()}"
     # **不要**加上 query string: 那會把敏感內容長期留存在 log 裡。
     http_version = request.scope.get("http_version", "1.1")
     level = logging.WARNING if duration_ms > SLOW_REQUEST_MS else logging.INFO
@@ -170,6 +168,8 @@ async def _handle_request(
     # 沿用上游的追蹤識別碼, 三個行程的 log 才串得起來。
     request_id = resolve_request_id(request.headers.get(REQUEST_ID_HEADER))
     current_request_id.set(request_id)
+    # 在 `call_next` 之前設: 路由的 task 會複製這時的 context, AUDIT 才讀得到。
+    current_client_ip.set(_loggable_ip(request))
 
     started = time.perf_counter()
     status_code = 500
