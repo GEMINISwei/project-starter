@@ -7,7 +7,6 @@ import contextvars
 import logging
 
 from shared.audit import audit
-
 from shared.http.context import current_client_ip, current_request_id, current_user_id
 
 
