@@ -10,11 +10,13 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest"
  * build 與 dev 的每個請求都會印 Edge Runtime 警告, 而 build 照樣成功, 所以 `make check` 擋不到。
  */
 
-const { requireActionsEncryptionKey } = vi.hoisted(() => ({
+const { requireActionsEncryptionKey, formatRequestError } = vi.hoisted(() => ({
   requireActionsEncryptionKey: vi.fn(),
+  formatRequestError: vi.fn(() => "formatted line"),
 }))
 
 vi.mock("@/shared/runtime/actions-key", () => ({ requireActionsEncryptionKey }))
+vi.mock("@/shared/runtime/request-error", () => ({ formatRequestError }))
 
 const SOURCE_FILE = path.resolve(import.meta.dirname, "../instrumentation.ts")
 
@@ -53,6 +55,25 @@ it("其他 runtime 不檢查金鑰", async () => {
   await register()
 
   expect(requireActionsEncryptionKey).not.toHaveBeenCalled()
+})
+
+it("伺服器端錯誤經 onRequestError 寫進 log", async () => {
+  const errorLog = vi.spyOn(console, "error").mockImplementation(() => {})
+  const { onRequestError } = await import("@/instrumentation")
+  const error = new Error("boom")
+  const request = { path: "/", method: "GET", headers: {} }
+
+  await onRequestError(error, request, {
+    routerKind: "App Router",
+    routePath: "/",
+    routeType: "render",
+    renderSource: "react-server-components",
+    revalidateReason: undefined,
+  })
+
+  expect(formatRequestError).toHaveBeenCalledWith(error, request)
+  expect(errorLog).toHaveBeenCalledWith("formatted line")
+  errorLog.mockRestore()
 })
 
 it("instrumentation 不直接使用 process.exit", () => {

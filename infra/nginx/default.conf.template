@@ -1,7 +1,9 @@
 include /etc/nginx/snippets/trusted-proxy.conf;
+include /etc/nginx/snippets/access-log-format.conf;
 
 server {
     listen 80;
+    access_log /var/log/nginx/access.log request_id;
 
     resolver 127.0.0.11 valid=10s;
 

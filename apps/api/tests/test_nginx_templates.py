@@ -79,3 +79,28 @@ def test_every_proxy_location_overwrites_client_ip(template: Path) -> None:
 def test_every_template_sends_security_headers(template: Path) -> None:
     # dev 少了這幾個標頭時開發中看不出差別, 等到 prod 才發現兩邊行為不同。
     assert "X-Content-Type-Options" in read_template(template)
+
+
+# ── access log ───────────────────────────────────────────────────────────────
+#
+# 預設的 `combined` 格式沒有 request id: 三層的 log 只有 api 那一層串得起來 (docs/operations.md)。
+# 格式只能定義在 http 層, 所以分兩半: snippet 定義格式 (模板最上面 include), server 區塊選用它。
+# 寫在 http 層的 `access_log` 會跟映像檔 nginx.conf 的那一條並存, 每個請求記兩次。
+
+ACCESS_LOG_FORMAT = SNIPPET_DIR / "access-log-format.conf"
+
+
+@pytest.mark.parametrize("template", TEMPLATES, ids=lambda path: path.name)
+def test_every_template_includes_access_log_format(template: Path) -> None:
+    source = read_template(template)
+    assert "log_format request_id" in source
+    assert re.search(r"^\s+access_log\s+\S+\s+request_id;", source, flags=re.MULTILINE)
+
+
+def test_access_log_format_records_request_id_and_timings() -> None:
+    text = ACCESS_LOG_FORMAT.read_text("utf-8")
+    for variable in ("$request_id", "$time_iso8601", "$request_time", "$upstream_response_time"):
+        assert variable in text, variable
+    # 同後端的請求紀錄: query string 可能帶著敏感內容, 不長期留在 log 裡。
+    assert "$uri" in text
+    assert not re.search(r"\$(request|request_uri|args|query_string)\b", text)

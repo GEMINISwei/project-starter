@@ -4,8 +4,9 @@
 #
 #   backups/<專案>_v<版號>_<日期>_<時間>.dump   資料庫, 例如 backups/my-app_v0.0.1_20261017_083553.dump
 #   backups/<專案>_v<版號>_<日期>_<時間>.tar    上傳檔案 (uploads volume)
+#   backups/<專案>_v<版號>_<日期>_<時間>.logs.tar.gz  各容器的 log, 只給人看, 不是還原的對象
 #
-# 兩份只差副檔名, 同一個主幹就是同一組, 清理時一起刪。
+# 幾份只差副檔名, 同一個主幹就是同一組, 清理時一起刪。
 #
 # 版號是備份當下這份 checkout 的版本, 也就是資料表結構所屬的版本: 回滾到某一版之後只能還原
 # 那一版的備份 (新版 migration 改過的結構, 舊程式讀不了), 所以 restore 只認版號一致的檔案。
@@ -21,7 +22,7 @@ readonly BACKUP_DIR=backups
 # uploads volume 在 api 容器裡的掛載點 (compose 檔), 備份與還原都從這裡打包、解開。
 readonly UPLOADS_DIR=/app/uploads
 # 從檔名尾端比對: 專案名稱本身可以有底線或 `_v`。
-readonly BACKUP_PATTERN='_v([0-9]+\.[0-9]+\.[0-9]+)_([0-9]{8})_([0-9]{6})\.(dump|tar)$'
+readonly BACKUP_PATTERN='_v([0-9]+\.[0-9]+\.[0-9]+)_([0-9]{8})_([0-9]{6})\.(dump|tar|logs\.tar\.gz)$'
 
 # 用法: backup_name <專案> <版號> <YYYYmmdd_HHMMSS> [副檔名, 預設 dump]
 backup_name() {
@@ -82,14 +83,40 @@ backups_to_prune() {
         for file in "${BACKUP_DIR}"/*; do
             [ -f "${file}" ] || continue
             if [[ "$(basename "${file}")" =~ ${BACKUP_PATTERN} ]]; then
-                printf '%s%s\t%s\n' "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}" "${file%.*}"
+                printf '%s%s\t%s\n' "${BASH_REMATCH[2]}" "${BASH_REMATCH[3]}" "${file%."${BASH_REMATCH[4]}"}"
             fi
         done | sort -ru | cut -f2- | tail -n +"$((keep + 1))"
     )
     for stem in ${stems[@]+"${stems[@]}"}; do
-        for file in "${stem}.dump" "${stem}.tar"; do
+        for file in "${stem}.dump" "${stem}.tar" "${stem}.logs.tar.gz"; do
             [ -f "${file}" ] && printf '%s\n' "${file}"
         done
     done
     return 0
+}
+
+# 用法: save_logs <檔名主幹> <容器...>
+#
+# 把每個容器目前留著的 log 打包成 <主幹>.logs.tar.gz, 一個容器一個檔。部署會重建容器, 舊的 log
+# 跟著消失; 部署前本來就會先備份, 順手留一份才查得到部署前的紀錄。停掉的容器也讀得到 log。
+# 任何一個失敗就整份不留 (回傳 1), 由呼叫端決定只是警告: log 不是還原的對象。
+save_logs() {
+    local stem="$1" dir container
+    shift
+    dir="$(mktemp -d)" || return 1
+    for container in "$@"; do
+        if ! docker logs --timestamps "${container}" > "${dir}/${container}.log" 2>&1; then
+            rm -rf "${dir}"
+            return 1
+        fi
+    done
+    # COPYFILE_DISABLE: macOS 的 tar 會替每個檔案多包一份 `._` 開頭的屬性檔。
+    if ! COPYFILE_DISABLE=1 tar -C "${dir}" -czf "${stem}.logs.tar.gz.partial" "${@/%/.log}"; then
+        rm -rf "${dir}" "${stem}.logs.tar.gz.partial"
+        return 1
+    fi
+    rm -rf "${dir}"
+    # 呼叫端以 `||` 接住失敗, 這裡面 `set -e` 不生效, 每一步都要自己回報。
+    mv "${stem}.logs.tar.gz.partial" "${stem}.logs.tar.gz" || return 1
+    echo "已備份：${stem}.logs.tar.gz"
 }

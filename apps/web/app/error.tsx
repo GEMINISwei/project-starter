@@ -11,11 +11,18 @@ type ErrorBoundaryProps = {
   inline?: boolean
 }
 
-export default function ErrorBoundary({ reset, inline = false }: ErrorBoundaryProps) {
+export default function ErrorBoundary({ error, reset, inline = false }: ErrorBoundaryProps) {
   const t = useT(appMessages)
+  // 只有伺服器端的錯誤有 digest; 瀏覽器端的錯誤沒有伺服器 log 可查, 也就不顯示。
+  const reference = error.digest ? t("errorReference", { digest: error.digest }) : undefined
 
   return (
-    <MessagePage inline={inline} title={t("pageErrorTitle")} description={t("pageErrorDescription")}>
+    <MessagePage
+      inline={inline}
+      title={t("pageErrorTitle")}
+      description={t("pageErrorDescription")}
+      reference={reference}
+    >
       <MessagePageButton onClick={reset}>{t("reload")}</MessagePageButton>
       <MessagePageLink href="/">{t("backHome")}</MessagePageLink>
     </MessagePage>

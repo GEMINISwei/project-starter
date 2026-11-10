@@ -8,8 +8,10 @@
 住在 api 底下的理由同 `test_nginx_templates.py`: `make check` 一定會跑到這裡。
 """
 
+import os
 import shutil
 import subprocess
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -18,11 +20,14 @@ from app.config import APP_VERSION
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 LIB = REPO_ROOT / "scripts" / "lib" / "backups.sh"
+BACKUP_SCRIPT = REPO_ROOT / "scripts" / "backup.sh"
 WORKFLOW = REPO_ROOT / ".github" / "workflows" / "deploy.yml"
 BASH = shutil.which("bash") or "/bin/bash"
 
 
-def run(cwd: Path, command: str, *args: str) -> subprocess.CompletedProcess[str]:
+def run(
+    cwd: Path, command: str, *args: str, env: dict[str, str] | None = None
+) -> subprocess.CompletedProcess[str]:
     # 指令是這支測試自己給的固定值, 不是外部輸入。
     return subprocess.run(  # noqa: S603
         [BASH, "-c", f'source "{LIB}"; {command} "$@"', "_", *args],
@@ -30,6 +35,7 @@ def run(cwd: Path, command: str, *args: str) -> subprocess.CompletedProcess[str]
         capture_output=True,
         text=True,
         check=False,
+        env=env,
     )
 
 
@@ -227,3 +233,77 @@ def test_deploy_checks_backup_keep_before_connecting() -> None:
     # 設錯的值要在碰主機之前就擋下, 不要等部署完才在清理那步只留一個警告。
     text = WORKFLOW.read_text()
     assert text.index("name: 檢查 BACKUP_KEEP") < text.index("name: 部署到主機")
+
+
+# ── 一併備份 log ─────────────────────────────────────────────────────────────
+#
+# 部署會重建容器, 舊的 log 跟著消失; 部署前本來就會先備份, 順手留一份才查得到部署前的紀錄。
+
+
+def fake_docker(tmp_path: Path, *, fail: bool = False) -> dict[str, str]:
+    """PATH 最前面放一支假的 docker: `docker logs --timestamps <容器>` 印出 `log of <容器>`。"""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    script = bin_dir / "docker"
+    body = "exit 1" if fail else 'echo "log of ${@: -1}"'
+    script.write_text(f"#!{BASH}\n{body}\n")
+    script.chmod(0o755)
+    return {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+
+
+def test_backup_saves_logs_of_each_service_with_same_stem(tmp_path: Path) -> None:
+    (tmp_path / "backups").mkdir()
+    env = fake_docker(tmp_path)
+    stem = "backups/app_v0.0.1_20261017_083553"
+
+    result = run(tmp_path, "save_logs", stem, "app-api", "app-web", env=env)
+
+    assert result.returncode == 0, result.stderr
+    with tarfile.open(tmp_path / f"{stem}.logs.tar.gz") as archive:
+        assert sorted(archive.getnames()) == ["app-api.log", "app-web.log"]
+        member = archive.extractfile("app-api.log")
+        assert member is not None
+        assert member.read().decode() == "log of app-api\n"
+
+
+def test_log_backup_failure_only_warns(tmp_path: Path) -> None:
+    # 部署前會先備份: log 存不下來不該擋住部署, 資料庫與上傳檔案才是非有不可的。
+    (tmp_path / "backups").mkdir()
+    env = fake_docker(tmp_path, fail=True)
+    stem = "backups/app_v0.0.1_20261017_083553"
+
+    result = run(tmp_path, "save_logs", stem, "app-api", env=env)
+
+    assert result.returncode != 0
+    # 失敗時不留下一份看起來完整的壞檔, 也不留暫存。
+    assert list((tmp_path / "backups").iterdir()) == []
+    line = next(line for line in BACKUP_SCRIPT.read_text().splitlines() if "save_logs " in line)
+    assert "||" in line
+
+
+def test_prune_removes_logs_archive_with_same_stem(tmp_path: Path) -> None:
+    make_backups(
+        tmp_path,
+        "app_v0.0.1_20261017_083553.dump",
+        "app_v0.0.1_20261017_083553.tar",
+        "app_v0.0.1_20261017_083553.logs.tar.gz",
+        "app_v0.0.1_20261101_000000.dump",
+        "app_v0.0.1_20261101_000000.logs.tar.gz",
+    )
+    assert sorted(output(tmp_path, "backups_to_prune", "1")) == [
+        "backups/app_v0.0.1_20261017_083553.dump",
+        "backups/app_v0.0.1_20261017_083553.logs.tar.gz",
+        "backups/app_v0.0.1_20261017_083553.tar",
+    ]
+
+
+def test_restore_lists_ignore_logs_archive(tmp_path: Path) -> None:
+    # log 只給人看, 不是還原的對象。
+    make_backups(
+        tmp_path,
+        "app_v0.0.1_20261017_083553.dump",
+        "app_v0.0.1_20261017_083553.tar",
+        "app_v0.0.1_20261017_083553.logs.tar.gz",
+    )
+    assert output(tmp_path, "list_backups", "0.0.1") == ["backups/app_v0.0.1_20261017_083553.dump"]
+    assert output(tmp_path, "list_uploads_backups") == ["backups/app_v0.0.1_20261017_083553.tar"]

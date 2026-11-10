@@ -511,10 +511,12 @@ def test_backup_stops_and_restarts_nginx(box: Sandbox) -> None:
         box.first(f"start {NGINX}"),
     )
     assert stop < dump < archive < start
-    # 兩份只差副檔名, 才配得成一組。
-    files = list((box.repo / "backups").iterdir())
-    assert sorted(path.suffix for path in files) == [".dump", ".tar"]
-    assert len({path.stem for path in files}) == 1
+    # 幾份只差副檔名, 才配得成一組。log 只給人看, 但跟同一組一起清理。
+    names = sorted(path.name for path in (box.repo / "backups").iterdir())
+    suffixes = (".dump", ".logs.tar.gz", ".tar")
+    assert [next(s for s in suffixes if name.endswith(s)) for name in names] == list(suffixes)
+    stems = {name.removesuffix(suffix) for name, suffix in zip(names, suffixes, strict=True)}
+    assert len(stems) == 1
 
 
 def test_backup_restarts_nginx_on_failure(box: Sandbox) -> None:

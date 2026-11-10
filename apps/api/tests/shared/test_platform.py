@@ -16,6 +16,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
+from shared import platform
 from shared.auth.contracts import CurrentUser
 from shared.auth.tokens import create_token
 from shared.db.table import BaseTable
@@ -170,6 +171,63 @@ async def test_unsafe_request_id_is_replaced(
 
     assert response.headers["X-Request-ID"] != "a b\tc"
     assert "a b" not in records[0].getMessage()
+
+
+def test_request_log_timestamp_is_utc_iso8601():
+    """三層的 log 要對得上時間: 帶時區標記, 一律 UTC, 不跟著容器的時區走。"""
+    handler = logging.getLogger("api.timing").handlers[0]
+    record = logging.LogRecord("api.timing", logging.INFO, __file__, 0, "hello", None, None)
+    record.created = 0
+
+    assert handler.format(record) == "INFO:    [1970-01-01T00:00:00Z] hello"
+
+
+@pytest.mark.asyncio
+async def test_slow_request_is_logged_as_warning(
+    client: AsyncClient, records: list[logging.LogRecord], monkeypatch: pytest.MonkeyPatch
+):
+    """`grep WARNING` 就挑得出慢請求, 不必自己寫 regex 比耗時。"""
+    monkeypatch.setattr(platform, "SLOW_REQUEST_MS", -1)
+
+    await client.get("/definitely-not-a-route")
+
+    assert records[0].levelno == logging.WARNING
+
+
+@pytest.mark.asyncio
+async def test_fast_request_is_logged_as_info(
+    client: AsyncClient, records: list[logging.LogRecord]
+):
+    await client.get("/definitely-not-a-route")
+
+    assert records[0].levelno == logging.INFO
+
+
+@pytest.mark.asyncio
+async def test_unhandled_exception_is_logged_with_request_id(
+    probe_client: AsyncClient, calls: list[str], records: list[logging.LogRecord]
+):
+    """traceback 要帶 request id: 同時有好幾個 500 時, 才分得出哪段 traceback 屬於哪個請求。"""
+    await probe_client.get("/api/probe/boom", headers={"X-Request-ID": "boom123"})
+
+    tracebacks = [record for record in records if record.exc_info]
+    assert len(tracebacks) == 1
+    assert "[boom123]" in tracebacks[0].getMessage()
+    exc_info = tracebacks[0].exc_info
+    assert exc_info is not None
+    assert isinstance(exc_info[1], RuntimeError)
+
+
+@pytest.mark.asyncio
+async def test_unhandled_exception_returns_500_with_request_id_header(
+    probe_client: AsyncClient, calls: list[str], records: list[logging.LogRecord]
+):
+    """請求紀錄那一行也要在: 它是 `grep` 狀態碼時找得到這次請求的地方。"""
+    response = await probe_client.get("/api/probe/boom", headers={"X-Request-ID": "boom123"})
+
+    assert response.status_code == 500
+    assert response.headers["X-Request-ID"] == "boom123"
+    assert any(" 500 " in record.getMessage() for record in records)
 
 # ── 每次請求的資料庫 session 邊界 ─────────────────────────────────────────────
 #
@@ -381,3 +439,26 @@ async def test_api_startup_does_not_write_seed_data():
     with restore_session_factory():
         async with application.router.lifespan_context(application):
             pass
+
+
+@pytest.mark.asyncio
+async def test_startup_logs_version_mode_and_modules(records: list[logging.LogRecord]):
+    """對照「從哪一版開始壞」時, 要看得出那個時間點跑的是哪一版。"""
+    env = MinimalEnv(postgres_url="postgresql+asyncpg://nobody:nothing@127.0.0.1:1/none")
+    application = create_platform_app(
+        env=env,
+        modules=(ModuleManifest("alpha"), ModuleManifest("beta")),
+        permissions=Permission,
+        title="minimal",
+        app_version="1.2.3",
+    )
+
+    with restore_session_factory():
+        async with application.router.lifespan_context(application):
+            pass
+
+    messages = [record.getMessage() for record in records]
+    assert any(
+        "v1.2.3" in message and "mode=development" in message and "modules=alpha,beta" in message
+        for message in messages
+    ), messages
