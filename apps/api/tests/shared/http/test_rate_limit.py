@@ -4,6 +4,7 @@ import pytest
 
 from shared.http.errors import LangException
 from shared.http.rate_limit import RateLimiter, client_ip
+from tests.audit import events
 
 
 def _request(headers: dict[str, str], client_host: str | None = "10.0.0.1"):
@@ -265,3 +266,16 @@ def test_client_ip_falls_back_to_peer_address():
 
 def test_client_ip_without_client_returns_unknown():
     assert client_ip(_request({}, client_host=None)) == "unknown"
+
+
+def test_rate_limited_is_audited_with_limiter_name(audit_records):
+    """被限流的來源與規則: 看得出是不是有人在暴力破解。key 可能含帳號名, 不記。"""
+    limiter = RateLimiter(max_attempts=1, window_seconds=60, name="login")
+    limiter.check("203.0.113.7:viewer")
+
+    with pytest.raises(LangException):
+        limiter.check("203.0.113.7:viewer")
+
+    assert [event for event, fields in events(audit_records)] == ["rate_limited"]
+    assert events(audit_records)[0][1]["limiter"] == "login"
+    assert "viewer" not in audit_records[0].getMessage()

@@ -34,3 +34,27 @@ def _default_session_factory():
     from shared.db.session import configure_session_factory, create_engine
 
     configure_session_factory(create_engine(os.environ["POSTGRES_URL"]))
+
+
+@pytest.fixture
+def audit_records():
+    """收集 `api.audit` 的紀錄 (`shared/audit.py`)。
+
+    不能用 `caplog`: 那個 logger 是 `propagate = False`, 紀錄不會往 root 傳, caplog 會一直是空的 ——
+    「不該記的事件沒有記」這類斷言就會永遠通過。
+    """
+    import logging
+
+    collected: list[logging.LogRecord] = []
+
+    class _Collector(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            collected.append(record)
+
+    logger = logging.getLogger("api.audit")
+    handler = _Collector()
+    logger.addHandler(handler)
+    try:
+        yield collected
+    finally:
+        logger.removeHandler(handler)

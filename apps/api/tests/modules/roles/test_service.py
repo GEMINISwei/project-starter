@@ -13,6 +13,7 @@ from modules.roles.model import RoleTable
 from modules.roles.schema import RoleCreate, RoleUpdate
 from modules.roles.service import RoleError
 from shared.http.errors import LangException
+from tests.audit import acting_as, events
 
 SYSTEM_ROLE = {
     "id": "role-super",
@@ -181,3 +182,51 @@ async def test_system_role_update_without_changes_is_accepted(roles):
     await _update("role-super", name="超級管理者", permissions=[Permission.ALL])
 
     assert roles == [{"id": "role-super", "name": "超級管理者"}]
+
+
+# ── AUDIT 紀錄 ───────────────────────────────────────────────────────────────
+#
+# 「誰改了角色的權限」: 操作者來自這個請求的登入者 (`acting_as`), 不從參數傳。
+
+
+@pytest.mark.asyncio
+async def test_create_role_is_audited_with_actor_and_permissions(roles, audit_records):
+    with acting_as("root"):
+        await _create([])
+
+    assert events(audit_records) == [
+        (
+            "role_created",
+            {
+                "request_id": "-",
+                "actor": "root",
+                "ip": "-",
+                "role_id": "role-new",
+                "permissions": "-",
+            },
+        )
+    ]
+
+
+@pytest.mark.asyncio
+async def test_update_role_is_audited_with_actor_and_permissions(roles, audit_records):
+    with acting_as("root"):
+        await _update("role-reader", name="一般", permissions=[], is_disabled=True)
+
+    [(event, fields)] = events(audit_records)
+    assert event == "role_updated"
+    assert fields["actor"] == "root"
+    assert fields["role_id"] == "role-reader"
+    assert fields["permissions"] == "-"
+    assert fields["is_disabled"] == "True"
+
+
+@pytest.mark.asyncio
+async def test_disable_role_is_audited_with_actor(roles, audit_records):
+    with acting_as("root"):
+        await _disable("role-reader")
+
+    audited = [
+        (event, fields["actor"], fields["role_id"]) for event, fields in events(audit_records)
+    ]
+    assert audited == [("role_disabled", "root", "role-reader")]
