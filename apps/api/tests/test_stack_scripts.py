@@ -515,7 +515,8 @@ def test_backup_stops_and_restarts_nginx(box: Sandbox) -> None:
     names = sorted(path.name for path in (box.repo / "backups").iterdir())
     suffixes = (".dump", ".logs.tar.gz", ".tar")
     assert [next(s for s in suffixes if name.endswith(s)) for name in names] == list(suffixes)
-    assert len({name.removesuffix(suffix) for name, suffix in zip(names, suffixes, strict=True)}) == 1
+    stems = {name.removesuffix(suffix) for name, suffix in zip(names, suffixes, strict=True)}
+    assert len(stems) == 1
 
 
 def test_backup_restarts_nginx_on_failure(box: Sandbox) -> None:
