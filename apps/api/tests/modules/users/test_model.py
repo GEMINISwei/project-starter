@@ -230,3 +230,12 @@ async def test_update_unknown_user_returns_none(db):
     """查無此人回 None, 由 service 轉成 404; 格式不合法的 id 也一樣, 不能變成 500。"""
     assert await UserTable.update_by_id(id="0123abcd-4567-89ab-cdef-0123456789ab", data={}) is None
     assert await UserTable.update_by_id(id="not-a-uuid", data={"nickname": "x"}) is None
+
+
+async def test_create_user_with_existing_nickname_is_accepted(db):
+    """暱稱相同很常見, 唯一的只有帳號。"""
+    await UserTable.create(data={"username": "ming-1", "password": "hashed", "nickname": "小明"})
+    await UserTable.create(data={"username": "ming-2", "password": "hashed", "nickname": "小明"})
+
+    users = await UserTable.find_list(limit=20, name="小明")
+    assert len(users["list_data"]) == 2

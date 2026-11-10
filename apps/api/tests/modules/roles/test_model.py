@@ -5,9 +5,10 @@
 """
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from modules.roles.model import RoleDetail, RoleTable
-from shared.db.table import PagedResult, SimpleListResult
+from shared.db.table import PagedResult, SimpleListResult, is_unique_violation
 
 from ..helpers import assert_covers
 
@@ -24,6 +25,20 @@ async def test_role_detail_matches_both_finders(db):
     assert_covers(RoleDetail, by_id, "RoleDetail（find_detail_by_id）")
     assert len(by_ids) == 1
     assert_covers(RoleDetail, by_ids[0], "RoleDetail（find_details_by_ids）")
+
+
+async def test_role_name_is_unique(db):
+    """service 的先查只擋得住依序來的請求, 同時到的兩個要靠資料庫的唯一約束。"""
+    created = await RoleTable.create(data={"name": "重複角色", "permissions": []})
+
+    found = await RoleTable.find_detail_by_name("重複角色")
+    assert found is not None
+    assert found["id"] == created["id"]
+    assert_covers(RoleDetail, found, "RoleDetail（find_detail_by_name）")
+
+    with pytest.raises(IntegrityError) as exc_info:
+        await RoleTable.create(data={"name": "重複角色", "permissions": [], "is_disabled": True})
+    assert is_unique_violation(exc_info.value)
 
 
 def _names(result: PagedResult | SimpleListResult) -> list[str]:
