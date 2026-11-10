@@ -27,6 +27,19 @@ describe("App Router 特殊頁面", () => {
     expect(protectedReset).toHaveBeenCalledOnce()
   })
 
+  it("伺服器端的錯誤顯示錯誤代碼，使用者回報時才查得到 log", () => {
+    const error = Object.assign(new Error("test"), { digest: "3847261950" })
+    render(<ErrorBoundary error={error} reset={vi.fn()} />)
+
+    expect(screen.getByText("錯誤代碼：3847261950")).toBeInTheDocument()
+  })
+
+  it("沒有錯誤代碼時不顯示代碼列", () => {
+    render(<ErrorBoundary error={new Error("test")} reset={vi.fn()} />)
+
+    expect(screen.queryByText(/錯誤代碼/)).toBeNull()
+  })
+
   // not-found.tsx 是 Server Component (要有 generateMetadata), 畫面本體拆在
   // not-found-view.tsx, 所以這裡測的是後者。
   it("not-found 保留自訂訊息與首頁連結", () => {

@@ -23,6 +23,7 @@ class MinimalEnv:
     jwt_secret_key: str = "minimal_app_secret_key_at_least_32_chars"
     jwt_algorithm: Literal["HS256"] = "HS256"
     expire_hours: int = 1
+    mode: Literal["development", "production"] = "development"
 
 
 class Permission(BasePermission):
