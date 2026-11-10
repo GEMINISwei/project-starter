@@ -8,6 +8,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from modules.roles.model import RoleDetail, RoleTable
+from shared.db.session import active_session
 from shared.db.table import PagedResult, SimpleListResult, is_unique_violation
 
 from ..helpers import assert_covers
@@ -39,6 +40,8 @@ async def test_role_name_is_unique(db):
     with pytest.raises(IntegrityError) as exc_info:
         await RoleTable.create(data={"name": "重複角色", "permissions": [], "is_disabled": True})
     assert is_unique_violation(exc_info.value)
+    # 違反約束後 session 停在失敗狀態, 不先回滾的話 fixture 清資料時會拋 PendingRollbackError。
+    await active_session().rollback()
 
 
 def _names(result: PagedResult | SimpleListResult) -> list[str]:
