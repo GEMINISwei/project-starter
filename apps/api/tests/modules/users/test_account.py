@@ -12,6 +12,7 @@ from modules.users.errors import UserError
 from modules.users.model import UserTable
 from modules.users.schema import PasswordChange, UserLogin
 from shared.auth import passwords
+from shared.auth.contracts import CurrentUser
 from shared.auth.tokens import parse_token
 from shared.http.errors import LangException
 from tests.audit import events
@@ -138,7 +139,7 @@ async def test_login_success_is_audited_with_user_id(stored_user, audit_records)
     ]
 
 
-CURRENT_USER = {
+CURRENT_USER: CurrentUser = {
     "id": "user-1",
     "username": "viewer",
     "auth_version": 3,
