@@ -311,10 +311,29 @@ gh workflow run deploy.yml --ref main -f tag=v0.1.0 -f target="production stagin
 - **有**：寫到 stdout 的請求紀錄，以及 web、api、postgres 的 Docker healthcheck。
   - nginx：時間、request id、用戶端 IP、方法、路徑、狀態碼、`rt`（整個請求的耗時）與 `upstream`（web 花的時間）。
     兩者差很多代表慢在 nginx 或網路這一段。
-  - api：時間（UTC）、request id、方法、路徑、狀態碼、耗時。超過 1 秒的記成 `WARNING`，`grep WARNING` 就挑得出慢請求；
+  - api：時間（UTC）、request id、`user_id`（未登入是 `-`，只放 id 不放帳號）、用戶端 IP、方法、路徑、狀態碼、耗時。
+    超過 1 秒的記成 `WARNING`，`grep WARNING` 就挑得出慢請求；
     未處理的例外由平台印出 traceback，同樣帶 request id。啟動時印一行版號、mode 與啟用的模組。
   - web：伺服器端的錯誤（Server Component、Server Action）印一行，帶 request id 與 digest。
   - 三層的路徑都**不含 query string**：它可能帶著敏感內容，不長期留在 log 裡。
+- **有** 安全事件紀錄：api 把下表的事件寫成一行 `AUDIT [request id] 事件 actor=<操作者 id> ip=<IP> 欄位=…`，
+  `make services logs api | grep AUDIT` 就挑得出來。只記 id 與固定的代碼，不記帳號、暱稱或使用者輸入的內容
+  （登入失敗**不記輸入的帳號**：使用者偶爾會把密碼打進帳號欄）。CLI 的操作沒有請求，`actor`、`ip` 是 `-`。
+
+  | 事件 | 欄位 |
+  |---|---|
+  | `login_succeeded`／`login_failed` | `user_id`（帳號存在時）、`reason`：`bad_password`、`disabled`、`unknown_account` |
+  | `password_changed`／`password_change_failed` | `user_id`、`reason`：`current_password_mismatch` |
+  | `rate_limited` | `limiter`：`login`、`login_ip`、`password_change` |
+  | `permission_denied` | `required`（缺的權限）、`path` |
+  | `user_created`／`user_roles_changed` | `user_id`、`role_ids` |
+  | `user_disabled`／`user_password_reset` | `user_id` |
+  | `role_created`／`role_updated`／`role_disabled` | `role_id`、`permissions`、`is_disabled` |
+  | `superuser_created`／`sessions_revoked_all` | `user_id`／`affected`（撤銷了幾個帳號） |
+
+  例：`grep "AUDIT.*login_failed" | grep -o "ip=[^ ]*" | sort | uniq -c` 看哪個 IP 在大量試密碼；
+  `grep "AUDIT.*actor=<id>"` 看某位管理者做過哪些操作。新增會改到權限或登入能力的操作時，在 service 寫入成功之後
+  呼叫 `shared/audit.py` 的 `audit()`。
 - **healthcheck 只管啟動**：決定啟動順序、是接回流量前的閘門；執行期 unhealthy **不會重啟容器**（單機 compose 沒有
   這機制），只顯示在 `docker ps`。啟動期每秒、之後每 30 秒探測一次，用 bash 不用 python／node（每次探測都起一個行程，
   直譯器會造成週期性 CPU 尖峰，`tests/test_compose_healthchecks.py` 擋）。執行期可用性要從外部定期打 `https://<網域>/healthz`。
