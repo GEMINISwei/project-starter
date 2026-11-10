@@ -213,7 +213,9 @@ async def test_unhandled_exception_is_logged_with_request_id(
     tracebacks = [record for record in records if record.exc_info]
     assert len(tracebacks) == 1
     assert "[boom123]" in tracebacks[0].getMessage()
-    assert isinstance(tracebacks[0].exc_info[1], RuntimeError)
+    exc_info = tracebacks[0].exc_info
+    assert exc_info is not None
+    assert isinstance(exc_info[1], RuntimeError)
 
 
 @pytest.mark.asyncio
