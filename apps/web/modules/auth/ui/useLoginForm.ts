@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useTransition } from "react"
+import { useEffect, useRef, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { getApiResponseErrorMessage } from "@/shared/api/error"
 import { createActionFormData } from "@/shared/api/action-form-data"
@@ -31,6 +31,8 @@ export function useLoginForm({ reason }: UseLoginFormParams) {
   const [isSubmit, setIsSubmit] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [isPending, startTransition] = useTransition()
+  // 同 shared/ui 的 useActionSubmit: isPending 要等重新渲染才生效, 連按 Enter 要另外同步擋。
+  const inFlight = useRef(false)
   // 登入與註冊共用通知狀態管理。
   const { notify, notifyError, closeNotify } = useNotify()
 
@@ -71,9 +73,16 @@ export function useLoginForm({ reason }: UseLoginFormParams) {
       setIsSubmit(true)
 
       if (Object.values(nextErrors).some(Boolean)) return
+      if (inFlight.current) return
+      inFlight.current = true
 
       startTransition(async () => {
-        const res = await loginUser(createActionFormData(values))
+        let res: Awaited<ReturnType<typeof loginUser>>
+        try {
+          res = await loginUser(createActionFormData(values))
+        } finally {
+          inFlight.current = false
+        }
 
         if (res.status === "success") {
           router.push("/")

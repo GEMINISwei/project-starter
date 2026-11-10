@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useRef, useState, useTransition } from "react"
 import { getApiFieldErrors, getApiResponseErrorMessage } from "@/shared/api/error"
 import { useT } from "@/shared/i18n/context"
 import type { ApiResponse } from "@/shared/api/contract"
@@ -10,6 +10,9 @@ export function useActionSubmit() {
   const t = useT(uiMessages)
   const [isPending, startTransition] = useTransition()
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  // isPending 要等重新渲染才生效, 連按 Enter 或連點的第二個事件可能在那之前就到了,
+  // 所以另外用 ref 同步擋。
+  const inFlight = useRef(false)
 
   function submit(
     run: () => Promise<ApiResponse>,
@@ -19,9 +22,16 @@ export function useActionSubmit() {
       errorFallback?: string
     }
   ) {
+    if (inFlight.current) return
+    inFlight.current = true
     setFieldErrors({})
     startTransition(async () => {
-      const res = await run()
+      let res: ApiResponse
+      try {
+        res = await run()
+      } finally {
+        inFlight.current = false
+      }
 
       if (res.status === "success" || res.status === "info") {
         options.onSuccess()
