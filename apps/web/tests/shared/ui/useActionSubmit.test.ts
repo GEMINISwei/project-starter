@@ -150,4 +150,34 @@ describe("useActionSubmit", () => {
 
     await waitFor(() => expect(result.current.isPending).toBe(false))
   })
+  // 連按 Enter 或連點時, 第二個事件可能在畫面變成「處理中」之前就到了,
+  // 所以不能只靠按鈕的 disabled 擋。
+  it("送出中再次呼叫 submit 不會再執行第二次請求", async () => {
+    const { promise, resolve } = Promise.withResolvers<ApiResponse>()
+    const run = vi.fn(() => promise)
+    const onSuccess = vi.fn()
+    const { result } = renderHook(() => useActionSubmit())
+
+    act(() => {
+      result.current.submit(run, { onSuccess, onError: vi.fn() })
+      result.current.submit(run, { onSuccess, onError: vi.fn() })
+    })
+    await act(async () => resolve({ status: "success", code: 200, data: {}, message: "ok" }))
+
+    expect(run).toHaveBeenCalledTimes(1)
+    expect(onSuccess).toHaveBeenCalledTimes(1)
+  })
+
+  it("送出失敗後可以再次送出", async () => {
+    const onError = vi.fn()
+    const run = vi.fn(response({ status: "failure", code: 400, data: { detail: "失敗" }, message: "failed" }))
+    const { result } = renderHook(() => useActionSubmit())
+
+    act(() => result.current.submit(run, { onSuccess: vi.fn(), onError }))
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1))
+    act(() => result.current.submit(run, { onSuccess: vi.fn(), onError }))
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(2))
+
+    expect(run).toHaveBeenCalledTimes(2)
+  })
 })
