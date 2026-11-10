@@ -16,12 +16,12 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
+from shared import platform
 from shared.auth.contracts import CurrentUser
 from shared.auth.tokens import create_token
 from shared.db.table import BaseTable
 from shared.http.errors import BaseError, LangException, LangText, NoChangeError
 from shared.module import ModuleManifest
-from shared import platform
 from shared.platform import create_platform_app
 from tests.integration import restore_session_factory
 from tests.shared.minimal_app import (
