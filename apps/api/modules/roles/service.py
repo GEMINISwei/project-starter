@@ -1,6 +1,7 @@
 from typing import Any, Literal
 
 from app.permissions import Permission
+from shared.audit import audit
 from shared.auth.catalog import PermissionCatalog
 from shared.http.errors import BaseError, LangException, LangText, ensure_found
 
@@ -33,7 +34,7 @@ class RoleError(BaseError):
 
 async def create_role(form_data: RoleCreate) -> RoleOperate:
     validate_regular_permissions(form_data.permissions)
-    return RoleOperate.model_validate(
+    result = RoleOperate.model_validate(
         await RoleTable.create(
             data={
                 # 逐欄列出而不是 `**model_dump()`: 日後往 RoleCreate 加的欄位才不會沒經處理就落地。
@@ -44,6 +45,8 @@ async def create_role(form_data: RoleCreate) -> RoleOperate:
             }
         )
     )
+    audit("role_created", role_id=result.id, permissions=form_data.permissions)
+    return result
 
 
 async def get_role(id: str) -> RoleInfo:
@@ -108,9 +111,16 @@ async def update_role(id: str, form_data: RoleUpdate) -> RoleOperate:
         update_data["is_disabled"] = form_data.is_disabled
 
     # 再包一次 ensure_found: 查到之後、更新之前文件仍可能被刪掉。
-    return RoleOperate.model_validate(
+    result = RoleOperate.model_validate(
         ensure_found(await RoleTable.update_by_id(id=id, data=update_data), RoleError.NOT_FOUND)
     )
+    audit(
+        "role_updated",
+        role_id=id,
+        permissions=form_data.permissions,
+        is_disabled=form_data.is_disabled,
+    )
+    return result
 
 
 async def disable_role(id: str) -> RoleOperate:
@@ -118,12 +128,14 @@ async def disable_role(id: str) -> RoleOperate:
     if RoleTable.is_system_role(role):
         raise LangException(403, RoleError.CANNOT_DISABLE_DEFAULT)
 
-    return RoleOperate.model_validate(
+    result = RoleOperate.model_validate(
         ensure_found(
             await RoleTable.update_by_id(id=id, data={"is_disabled": True}),
             RoleError.NOT_FOUND,
         )
     )
+    audit("role_disabled", role_id=id)
+    return result
 
 
 def validate_regular_permissions(permissions: list[Permission]) -> None:

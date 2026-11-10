@@ -2,6 +2,8 @@ from collections.abc import Awaitable, Callable
 
 from fastapi import Request
 
+from shared.audit import audit
+from shared.http.context import current_user_id
 from shared.http.errors import BaseError, LangException, LangText
 
 from .contracts import CurrentUser, CurrentUserResolver, PermissionResolverProtocol
@@ -61,6 +63,11 @@ def check_user_permission(
         if not is_current_auth_version(token_data, current_user):
             raise LangException(401, TokenError.TOKEN_REVOKED)
 
+        # 兩處都要寫: 請求紀錄在 middleware 印, 讀不到路由 task 裡設的 ContextVar;
+        # AUDIT 在 service 裡記, 拿不到 request。
+        request.state.user_id = current_user["id"]
+        current_user_id.set(current_user["id"])
+
         final_permissions = resolver.expand(set(current_user["permissions"]))
         if permissions:
             required_permissions = (
@@ -72,6 +79,11 @@ def check_user_permission(
                     permission in final_permissions for permission in required_permissions
                 )
                 if not allowed:
+                    audit(
+                        "permission_denied",
+                        required=sorted(str(permission) for permission in required_permissions),
+                        path=request.url.path,
+                    )
                     raise LangException(403, DependencyError.OPERATOR_NO_PERMISSION)
 
         return current_user
